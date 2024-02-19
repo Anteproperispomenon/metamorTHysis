@@ -2,6 +2,7 @@
 module Metamorth.Interpretation.Phonemes.Types
   -- * Types
   ( PhonemeParsingStructure(..)
+  , defaultPhonemeStructure
   , PhonemeInventory(..)
   , PhonemeProperties(..)
   , PhonemePropertiesRaw(..)
@@ -50,6 +51,13 @@ data PhonemeParsingStructure
       , ppsPhonemeAspects   :: M.Map String [String]
       , ppsPhonemeTraits    :: M.Map String [String]
       } deriving (Show, Eq)
+
+defaultPhonemeStructure :: PhonemeParsingStructure
+defaultPhonemeStructure
+  = PhonemeParsingStructure
+      (PhonemeSet M.empty)
+      M.empty
+      M.empty
 
 -- | The set of phonemes, sorted into groups, along with
 --   their properties.

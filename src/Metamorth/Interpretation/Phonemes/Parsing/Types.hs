@@ -17,15 +17,21 @@ module Metamorth.Interpretation.Phonemes.Parsing.Types
   ( PhonemeParsingState(..)
   , Property(..)
   , PhonemeParser
-
+  , runPhonemeParser
+  , execPhonemeParser
+  , modifyStructure
   ) where
 
 import Metamorth.Interpretation.Phonemes.Types
+
+import Data.List (intercalate)
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
 import Data.Attoparsec.Text qualified as AT
+
+import Data.Text qualified as T
 
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.RWS.CPS
@@ -45,6 +51,14 @@ data PhonemeParsingState
       , psDepth         :: Int
       } deriving (Show, Eq)
 
+defaultParsingState :: PhonemeParsingState
+defaultParsingState
+  = PhonemeParsingState
+      defaultPhonemeStructure
+      S.empty
+      S.empty
+      0
+
 --------------------------------
 -- Types for Parsing
 
@@ -53,6 +67,26 @@ data PhonemeParsingState
 --   * The writer is used to collect error messages
 --   * The state holds all the important info.
 type PhonemeParser a = RWST () [String] PhonemeParsingState AT.Parser a
+
+forParseOnly :: T.Text -> AT.Parser a -> Either String a
+forParseOnly txt prs = AT.parseOnly prs txt
+
+-- | Run a `PhonemeParser`, returning the result if
+--   no errors occurred, and failing with a list of
+--   errors if any occurred.
+runPhonemeParser :: PhonemeParser a -> T.Text -> Either String a
+runPhonemeParser prs txt = forParseOnly txt $ do
+  (rslt, _stt, errs) <- runRWST prs () defaultParsingState
+  case errs of
+    [] -> return rslt
+    xs -> fail $ intercalate "\n" xs
+
+execPhonemeParser :: PhonemeParser a -> T.Text -> Either String PhonemeParsingStructure
+execPhonemeParser prs txt = forParseOnly txt $ do
+  (_rslt, stt, errs) <- runRWST prs () defaultParsingState
+  case errs of
+    [] -> return (psStructure stt)
+    xs -> fail $ intercalate "\n" xs
 
 -- Consonants that take 'an' when
 -- used in an (English) acronym:

@@ -1,6 +1,9 @@
 module Metamorth.Interpretation.Phonemes.Parsing
   ( parsePhoneme
   , stParseGroup
+  , stParseGroups
+  , stParseGroups'
+  , stParseGroupsB
   ) where
 
 
@@ -62,7 +65,118 @@ stParseGroup = do
   uh <- lift $ (many ((stParsePhoneme <* stParseBlankLine) <|> stParseBlankLine))
      <|> ()
 
+example groups
+
+:m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types 
+
+"* vowel\na\ne\ni\no\nu\n* consonant\nb\nd\ng\nk\nl\nm\nn\ns\nt\nw\n"
+
+* vowel
+  a
+  e
+  i
+  o
+  u
+* consonant
+  b
+  d
+  g
+  k
+  l
+  m
+  n
+  s
+  t
+  w
+
+-- another
+
+"* consonant\n** velar\nk\ng\nw\n** alveolar\nd\nt\ns\nts\n** labial\nb\np\nf\n* vowel\na\ne\ni\no\nu\n"
+
+
+* consonant
+** velar
+k
+g
+w
+** alveolar
+d
+t
+s
+ts
+** labial
+b
+p
+f
+* vowel
+a
+e
+i
+o
+u
+
 -}
+
+-- | The top-level parser for parsing (groups of) phonemes.
+--   This version modifies the state, but doesn't return
+--   the `PhonemeInventory`.
+stParseGroups :: PhonemeParser ()
+stParseGroups = do
+  many stParseBlankLine -- Parse any blank lines first.
+  lift skipHoriz        -- Parse any leading spaces
+
+  -- Peek the next char to see whether we're
+  -- parsing groups or morphemes.
+  x <- lift AT.peekChar
+  case x of
+    Nothing -> tell ["No phonemes listed."]
+    (Just '*') -> do
+      grps <- some (stParseGroup 1)
+      let inv = PhonemeGroup $ M.fromList grps
+      modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
+
+-- | The top-level parser for parsing (groups of) phonemes.
+--   This version doesn't modify the state, but *does*
+--   return the `PhonemeInventory`.
+stParseGroups' :: PhonemeParser PhonemeInventory
+stParseGroups' = do
+  many stParseBlankLine -- Parse any blank lines first.
+  lift skipHoriz        -- Parse any leading spaces
+
+  -- Peek the next char to see whether we're
+  -- parsing groups or morphemes.
+  x <- lift AT.peekChar
+  case x of
+    Nothing -> do 
+      tell ["No phonemes listed."]
+      return $ PhonemeSet M.empty
+    (Just '*') -> do
+      grps <- some (stParseGroup 1)
+      let inv = PhonemeGroup $ M.fromList grps
+      return inv
+
+-- | The top-level parser for parsing (groups of) phonemes.
+--   This version modifies the state *and returns
+--   the `PhonemeInventory`.
+stParseGroupsB :: PhonemeParser PhonemeInventory
+stParseGroupsB = do
+  many stParseBlankLine -- Parse any blank lines first.
+  lift skipHoriz        -- Parse any leading spaces
+
+  -- Peek the next char to see whether we're
+  -- parsing groups or morphemes.
+  x <- lift AT.peekChar
+  case x of
+    Nothing -> do 
+      tell ["No phonemes listed."]
+      return $ PhonemeSet M.empty
+    (Just '*') -> do
+      grps <- some (stParseGroup 1)
+      let inv = PhonemeGroup $ M.fromList grps
+      modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
+      return inv
+
+
 
 stParseGroup :: Int -> PhonemeParser (String, PhonemeInventory)
 stParseGroup dp = do
@@ -86,9 +200,10 @@ stParseGroup dp = do
   -- decide on the first branch prematurely 
   -- if the first line was empty/comments.
   phi <-  (PhonemeSet   . M.fromList . catMaybes <$> some (stParsePhoneme <* (many stParseBlankLine)) )
-      <|> (PhonemeGroup . M.fromList . catMaybes <$> some ((Just <$> stParseGroup (dp+1)) <* (many (stParseBlankLine $> Nothing) )) )
+      <|> (PhonemeGroup . M.fromList . catMaybes <$> some ((Just <$> stParseGroup (dp+1)) <* (many stParseBlankLine )) )
   
   pure (groupName, phi)  
+
 
 
 
