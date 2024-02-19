@@ -31,6 +31,7 @@ dependencies:
 - containers
 - template-haskell
 - text
+- th-lego
 - transformers
 
 ghc-options:
