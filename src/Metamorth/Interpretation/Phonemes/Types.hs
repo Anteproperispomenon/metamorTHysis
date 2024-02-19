@@ -13,6 +13,7 @@ module Metamorth.Interpretation.Phonemes.Types
   -- * Helpers
   , validateProperties
   , validateRawProperty
+  , validateRawProperties
   , lookupPhone
   , findProperty
   ) where
@@ -20,15 +21,28 @@ module Metamorth.Interpretation.Phonemes.Types
 import Control.Applicative ((<|>), asum)
 
 import Data.Either
-import Data.List (find, null)
+import Data.List (find, null, partition)
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
+
+
 
 data PropertyOption
   = AspectOption String String
   | TraitOption  String (Maybe String)
   deriving (Show, Eq)
+
+isAspectOption :: PropertyOption -> Bool
+isAspectOption (AspectOption _ _) = True
+isAspectOption _ = False
+
+groupProperties :: [PropertyOption] -> PhonemeProperties
+groupProperties props
+  | (xs,ys) <- partition isAspectOption props
+  = PhonemeProperties
+      (map (\(AspectOption x y) -> (x,y)) xs)
+      (map (\(TraitOption  x y) -> (x,y)) ys)
 
 data PhonemeParsingStructure
    = PhonemeParsingStructure
@@ -124,6 +138,14 @@ validateRawProperty pps phoneName (prop, valx)
   
   | otherwise = Left (("Phoneme \'" <> phoneName <> "\' has unknown property \'" <> prop <> "\'."))
 
+validateRawProperties :: PhonemeParsingStructure -> String -> PhonemePropertiesRaw -> Either [String] PhonemeProperties
+validateRawProperties pps phoneName (PhonemePropertiesRaw props)
+  | null errs = Right (groupProperties rslts)
+  | otherwise = Left errs
+  where
+    eiths = map (validateRawProperty pps phoneName) props
+    errs  = lefts eiths
+    rslts = rights eiths
 
 
 --------------------------------

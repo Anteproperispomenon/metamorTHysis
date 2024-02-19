@@ -16,6 +16,7 @@ Template Haskell.
 module Metamorth.Interpretation.Phonemes.Parsing.Types 
   ( PhonemeParsingState(..)
   , Property(..)
+  , PhonemeParser
 
   ) where
 
@@ -23,6 +24,11 @@ import Metamorth.Interpretation.Phonemes.Types
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
+
+import Data.Attoparsec.Text qualified as AT
+
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.RWS.CPS
 
 -- | Type to be used when parsing, to show
 --   what type of property was parsed.
@@ -39,6 +45,30 @@ data PhonemeParsingState
       , psDepth         :: Int
       } deriving (Show, Eq)
 
+--------------------------------
+-- Types for Parsing
 
+-- | A `AT.Parser` wrapped in an `RWST`.
+-- 
+--   * The writer is used to collect error messages
+--   * The state holds all the important info.
+type PhonemeParser a = RWST () [String] PhonemeParsingState AT.Parser a
 
+-- Consonants that take 'an' when
+-- used in an (English) acronym:
+-- FHLMNRSX
+
+modifyStructure :: (PhonemeParsingStructure -> Either String PhonemeParsingStructure) -> PhonemeParser ()
+modifyStructure act = do
+  rslt <- gets (act . psStructure)
+  case rslt of
+    (Left msg) -> tell [msg]
+    (Right ps) -> modify (\pss -> pss {psStructure = ps})
+
+modifyStructure' :: (PhonemeParsingStructure -> Either [String] PhonemeParsingStructure) -> PhonemeParser ()
+modifyStructure' act = do
+  rslt <- gets (act . psStructure)
+  case rslt of
+    (Left msgs) -> tell msgs
+    (Right  ps) -> modify (\pss -> pss {psStructure = ps})
 
