@@ -36,6 +36,7 @@ library
       src
   default-extensions:
       ImportQualifiedPost
+      LambdaCase
       OverloadedStrings
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
@@ -56,6 +57,7 @@ executable metamorTHysis-exe
       app
   default-extensions:
       ImportQualifiedPost
+      LambdaCase
       OverloadedStrings
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
@@ -78,6 +80,7 @@ test-suite metamorTHysis-test
       test
   default-extensions:
       ImportQualifiedPost
+      LambdaCase
       OverloadedStrings
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N

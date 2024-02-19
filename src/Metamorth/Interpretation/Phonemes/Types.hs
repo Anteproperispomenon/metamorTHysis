@@ -30,19 +30,19 @@ import Data.Set        qualified as S
 
 
 data PropertyOption
-  = AspectOption String String
+  = AspectOption String
   | TraitOption  String (Maybe String)
   deriving (Show, Eq)
 
 isAspectOption :: PropertyOption -> Bool
-isAspectOption (AspectOption _ _) = True
+isAspectOption (AspectOption _) = True
 isAspectOption _ = False
 
 groupProperties :: [PropertyOption] -> PhonemeProperties
 groupProperties props
   | (xs,ys) <- partition isAspectOption props
   = PhonemeProperties
-      (map (\(AspectOption x y) -> (x,y)) xs)
+      (map (\(AspectOption x  ) ->  x   ) xs)
       (map (\(TraitOption  x y) -> (x,y)) ys)
 
 data PhonemeParsingStructure
@@ -72,7 +72,7 @@ lookupPhone (PhonemeGroup ps) phone = asum $ M.map (`lookupPhone` phone) ps
 
 data PhonemeProperties
    = PhonemeProperties 
-       { phAspects :: [(String, String)]
+       { phAspects :: [String]
        , phTraits  :: [(String, Maybe String)]
        } deriving (Show, Eq)
 
@@ -95,12 +95,13 @@ validateProperties pps phoneName props
     aspects = ppsPhonemeAspects pps
     traits  = ppsPhonemeAspects pps
 
-validateAspect :: M.Map String [String] -> String -> (String,String) -> Either String ()
-validateAspect mp nom (aspct, val)
+validateAspect :: M.Map String [String] -> String -> String -> Either String ()
+validateAspect mp nom aspct
   | (Just options) <- M.lookup aspct mp
-  =  if (val `elem` options)
-       then (Right ())
-       else (Left ("Phoneme \'" <> nom <> "\' has aspect \'" <> aspct <> "\' with unknown value \'" <> val <> "\'."))
+  = Right ()
+  -- =  if (val `elem` options)
+  --      then (Right ())
+  --      else (Left ("Phoneme \'" <> nom <> "\' has aspect \'" <> aspct <> "\' with unknown value \'" <> val <> "\'."))
   | otherwise = Left (("Phoneme \'" <> nom <> "\' has unknown aspect \'" <> aspct <> "\'."))
 
 validateTrait :: M.Map String [String] -> String -> (String, Maybe String) -> Either String ()
@@ -129,11 +130,13 @@ validateRawProperty pps phoneName (prop, valx)
   -- options shouldn't be empty if validated earlier on.
   | (Just options) <- M.lookup prop (ppsPhonemeAspects pps)
   = case valx of
-      Nothing -> (Left $ "Phoneme \'" <> phoneName <> "\' has no specified option for aspect \'" <> prop <> "\', which requires that an option be given.")
-      (Just val) -> if (val `elem` options)
-        then Right (AspectOption prop val)
-        else Left  ("Phoneme \'" <> phoneName <> "\' has aspect \'" <> prop <> "\' with unknown value \'" <> val <> "\'.")
-  | (Just options) <- M.lookup prop (ppsPhonemeAspects pps)
+      -- Nothing -> (Left $ "Phoneme \'" <> phoneName <> "\' has no specified option for aspect \'" <> prop <> "\', which requires that an option be given.")
+      Nothing -> Right (AspectOption prop)
+      (Just val)
+        -> Left ("Phoneme \'" <> phoneName <> "\' has aspect \'" <> prop <> "\' with value \'" <> val 
+                   <> "\'; however, phonemes\nshould not be tied to specific values of aspects.\nRemove \"=" <> val <> "\" after "
+                   <> "\"" <> prop <> "\" to fix it.")
+  | (Just options) <- M.lookup prop (ppsPhonemeTraits pps)
   = case valx of
       Nothing -> if (null options)
         then (Right (TraitOption prop Nothing))

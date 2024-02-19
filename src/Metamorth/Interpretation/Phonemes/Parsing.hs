@@ -1,9 +1,15 @@
 module Metamorth.Interpretation.Phonemes.Parsing
-  ( parsePhoneme
+  ( parsePhonemeFile
+  , parsePhoneme
   , stParseGroup
   , stParseGroups
   , stParseGroups'
   , stParseGroupsB
+  , stParseProperty
+  , stParseProperty'
+  , stParseProperties
+  , parsePropertyLine
+  , parseSeparator
   ) where
 
 
@@ -33,6 +39,83 @@ import Metamorth.Helpers.Parsing
 ----------------------------------------------------------------
 -- Stateful Parsers
 ----------------------------------------------------------------
+
+--------------------------------
+-- Overall Parser
+
+parsePhonemeFile :: PhonemeParser ()
+parsePhonemeFile = do
+  -- Skip the blank lines (better to consume
+  -- them here than after the branch point).
+  many stParseBlankLine
+  -- Parse Properties (which are optional)
+  AT.option () $ do
+    stParseProperties
+    lift skipHoriz
+    -- Parse the separator
+    _ <- lift "===="
+    lift $ AT.skipWhile (== '=')
+    stParseBlankLine
+  -- Now, actually parsing the groups
+  -- (Note: maybe add a restriction that you
+  --  can't name a morpheme "aspect" or "trait")
+  stParseGroups
+
+  -- Check on the remaining stuff
+  many stParseBlankLine
+  -- To get to the start of the next
+  -- line, if it exists
+  lift $ AT.skipSpace
+  x <- lift $ AT.peekChar
+
+  case x of
+    -- Reached the end of the file.
+    Nothing -> pure ()
+    (Just '*') -> do
+      grp <- AT.option (Nothing) (Just <$> lift parseGroup)
+      case grp of
+        -- Make this a warning, not an error once
+        -- that distinction is implemented.
+        Nothing -> do
+          txt <- T.map (\case {'\n' -> ' '; x -> x}) . T.take 20 <$> lift AT.takeText
+          tell ["Extra text found at end of source file: " <> T.unpack txt]
+        (Just (depth, groupName)) -> do
+          tell ["Could not parse group of incorrect depth: " <> (replicate depth '*') <> " " <> groupName]
+    (Just _) -> do
+      txt <- T.map (\case {'\n' -> ' '; x -> x}) . T.take 20 <$> lift AT.takeText
+      tell ["Extra text found at end of source file: " <> T.unpack txt]
+
+
+--------------------------------
+-- Parsing Properties
+
+-- parsePropertyLine :: AT.Parser Property
+-- parsePropertyLine = parseAspect <|> parseTrait
+
+stParseProperty :: PhonemeParser ()
+stParseProperty = do
+  prop <- lift parsePropertyLine
+  case prop of
+    (Aspect asp ops) -> modifyStructure (addAspect asp ops)
+    (Trait  trt ops) -> modifyStructure (addTrait  trt ops)
+
+stParseProperty' :: PhonemeParser Property
+stParseProperty' = do
+  prop <- lift parsePropertyLine
+  case prop of
+    (Aspect asp ops) -> modifyStructure (addAspect asp ops)
+    (Trait  trt ops) -> modifyStructure (addTrait  trt ops)
+  return prop
+
+
+stParseProperties :: PhonemeParser ()
+stParseProperties = do
+  many stParseBlankLine -- parse empty lines
+  -- For each property...
+  void $ many $ do
+    lift skipHoriz        -- skip horizontal whitespace
+    stParseProperty       -- read the property
+    some stParseBlankLine -- parse the end of line + more blank lines
 
 --------------------------------
 -- Parsing (Sub-)Groups
@@ -134,6 +217,10 @@ stParseGroups = do
       grps <- some (stParseGroup 1)
       let inv = PhonemeGroup $ M.fromList grps
       modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
+    (Just _) -> do
+      phons <- catMaybes <$> some stParsePhoneme
+      let inv = PhonemeSet $ M.fromList phons
+      modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
 
 -- | The top-level parser for parsing (groups of) phonemes.
 --   This version doesn't modify the state, but *does*
@@ -153,6 +240,10 @@ stParseGroups' = do
     (Just '*') -> do
       grps <- some (stParseGroup 1)
       let inv = PhonemeGroup $ M.fromList grps
+      return inv
+    (Just _) -> do
+      phons <- catMaybes <$> some stParsePhoneme
+      let inv = PhonemeSet $ M.fromList phons
       return inv
 
 -- | The top-level parser for parsing (groups of) phonemes.
@@ -175,6 +266,11 @@ stParseGroupsB = do
       let inv = PhonemeGroup $ M.fromList grps
       modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
       return inv
+    (Just _) -> do
+      phons <- catMaybes <$> some stParsePhoneme
+      let inv = PhonemeSet $ M.fromList phons
+      modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
+      return inv
 
 
 
@@ -192,6 +288,8 @@ stParseGroup dp = do
     tell ["Group name \'" <> groupName <> "\' is already in use."]
   let newGNs = S.insert groupName (psUsedGroups pss)
   
+  modify $ \ps -> ps { psUsedGroups = newGNs}
+
   -- Parse all blank/comment lines.
   many stParseBlankLine
 
@@ -216,6 +314,9 @@ stParsePhoneme = do
   when (phoneName `elem` (psUsedPhones pss)) $ do
     tell ["Phoneme name \'" <> phoneName <> "\' is already in use."]
   
+  let newPhs = S.insert phoneName (psUsedPhones pss)
+  modify $ \ps -> ps { psUsedPhones = newPhs}
+
   let eprops = validateRawProperties (psStructure pss) phoneName props
 
   case eprops of
@@ -274,6 +375,7 @@ parseAspect = do
   skipHoriz1
   aspName <- takeIdentifier isAlpha isFollowId
   skipHoriz
+  AT.char ':' *> skipHoriz
 
   ops <- AT.sepBy (takeIdentifier isAlpha isFollowId) parseSeparator
   pure $ Aspect (T.unpack aspName) (map T.unpack ops)
@@ -285,7 +387,9 @@ parseTrait = do
   aspName <- takeIdentifier isAlpha isFollowId
   skipHoriz
 
-  ops <- AT.sepBy (takeIdentifier isAlpha isFollowId) parseSeparator
+  ops <- AT.option [] $ do
+    AT.char ':' *> skipHoriz
+    AT.sepBy (takeIdentifier isAlpha isFollowId) parseSeparator
   pure $ Trait  (T.unpack aspName) (map T.unpack ops)
 
   
@@ -298,7 +402,7 @@ parsePhoneme = do
   skipHoriz
   phoneme <- takeIdentifier isAlpha isFollowId
   skipHoriz
-  props <- parseProperties <|> (pure $ PhonemePropertiesRaw [])
+  props <- AT.option (PhonemePropertiesRaw []) parseProperties
   pure (T.unpack phoneme, props)
 
 parseProperties :: AT.Parser PhonemePropertiesRaw
@@ -311,7 +415,8 @@ parseProperty :: AT.Parser (String, Maybe String)
 parseProperty = do
   prop <- T.unpack <$> takeIdentifier isAlpha isFollowId
   skipHoriz
-  (prop,) <$> ((Just <$> parseOption) <|> (pure Nothing))
+  (prop,) <$> AT.option Nothing (Just <$> parseOption)
+  -- (prop,) <$> ((Just <$> parseOption) <|> (pure Nothing))
   
 
 parseOption :: AT.Parser String
