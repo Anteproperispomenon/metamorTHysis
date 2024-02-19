@@ -1,8 +1,18 @@
 
 module Metamorth.Interpretation.Phonemes.Types
-  ( PhonemeParsingState(..)
+  -- * Types
+  ( PhonemeParsingStructure(..)
   , PhonemeInventory(..)
+  , PhonemeProperties(..)
+  , PhonemePropertiesRaw(..)
+  -- , Property(..)
+  , emptyPhonemeProps
+  -- * State Modifiers
+  , addAspect
+  , addTrait
+  -- * Helpers
   , validateProperties
+  , validateRawProperty
   , lookupPhone
   , findProperty
   ) where
@@ -15,12 +25,16 @@ import Data.List (find, null)
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
-data PhonemeParsingState
-   = PhonemeParsingState
+data PropertyOption
+  = AspectOption String String
+  | TraitOption  String (Maybe String)
+  deriving (Show, Eq)
+
+data PhonemeParsingStructure
+   = PhonemeParsingStructure
       { ppsPhonemeInventory :: PhonemeInventory
       , ppsPhonemeAspects   :: M.Map String [String]
       , ppsPhonemeTraits    :: M.Map String [String]
-
       } deriving (Show, Eq)
 
 -- | The set of phonemes, sorted into groups, along with
@@ -40,9 +54,16 @@ data PhonemeProperties
        , phTraits  :: [(String, Maybe String)]
        } deriving (Show, Eq)
 
+emptyPhonemeProps :: PhonemeProperties
+emptyPhonemeProps = PhonemeProperties { phAspects = [], phTraits = [] }
+
+newtype PhonemePropertiesRaw
+   = PhonemePropertiesRaw [(String, Maybe String)]
+   deriving (Show, Eq)
+
 -- | Validate that the properties of a specific phoneme
 --   are valid with the property set of these phonemes.
-validateProperties :: PhonemeParsingState -> String -> PhonemeProperties -> Either [String] ()
+validateProperties :: PhonemeParsingStructure -> String -> PhonemeProperties -> Either [String] ()
 validateProperties pps phoneName props
   | aspctErrs <- lefts $ map (\pr -> validateAspect aspects phoneName pr) (phAspects props)
   , traitErrs <- lefts $ map (\pr -> validateTrait  traits  phoneName pr) (phTraits  props)
@@ -76,9 +97,58 @@ validateTrait mp nom (trt, valx)
 
 -- | Left  : aspect
 --   Right : trait
-findProperty :: PhonemeParsingState -> String -> Maybe (Either [String] [String])
+findProperty :: PhonemeParsingStructure -> String -> Maybe (Either [String] [String])
 findProperty pps prop 
   = (Left      <$> (M.lookup prop $ ppsPhonemeAspects pps))
     <|> (Right <$> (M.lookup prop $ ppsPhonemeTraits  pps))
 
+validateRawProperty :: PhonemeParsingStructure -> String -> (String, Maybe String) -> Either String PropertyOption
+validateRawProperty pps phoneName (prop, valx)
+  -- options shouldn't be empty if validated earlier on.
+  | (Just options) <- M.lookup prop (ppsPhonemeAspects pps)
+  = case valx of
+      Nothing -> (Left $ "Phoneme \'" <> phoneName <> "\' has no specified option for aspect \'" <> prop <> "\', which requires that an option be given.")
+      (Just val) -> if (val `elem` options)
+        then Right (AspectOption prop val)
+        else Left  ("Phoneme \'" <> phoneName <> "\' has aspect \'" <> prop <> "\' with unknown value \'" <> val <> "\'.")
+  | (Just options) <- M.lookup prop (ppsPhonemeAspects pps)
+  = case valx of
+      Nothing -> if (null options)
+        then (Right (TraitOption prop Nothing))
+        else (Left $ "Phoneme \'" <> phoneName <> "\' has no specified option for trait \'" <> prop <> "\', which requires that an option be given.")
+      (Just val) -> if (null options)
+        then (Left $ "Phoneme \'" <> phoneName <> "\' specified an option for trait \'" <> prop <> "\' even though that trait does not take options.")
+        else if (val `elem` options)
+            then (Right (TraitOption prop valx))
+            else (Left  ("Phoneme \'" <> phoneName <> "\' has trait \'" <> prop <> "\' with unknown option \'" <> val <> "\'."))
+  
+  | otherwise = Left (("Phoneme \'" <> phoneName <> "\' has unknown property \'" <> prop <> "\'."))
 
+
+
+--------------------------------
+-- Updating the State
+
+-- | Add an aspect to the phoneme state, giving an
+--   error if there is already an aspect or trait
+--   of the same name.
+addAspect :: String -> [String] -> PhonemeParsingStructure -> Either String PhonemeParsingStructure
+addAspect prop options pps
+  | (Just x) <- findProperty pps prop
+  = case x of
+      (Left  _) -> Left $ "The aspect \'" <> prop <> "\' is declared more than once."
+      (Right _) -> Left $ "Can't declare aspect \'" <> prop <> "\'; there is already a trait with that name." 
+  | otherwise = Right $ pps {ppsPhonemeAspects = aspectMap'}
+    where aspectMap' = M.insert prop options (ppsPhonemeAspects pps)
+
+-- | Add an aspect to the phoneme state, giving an
+--   error if there is already a trait or aspect
+--   of the same name.
+addTrait :: String -> [String] -> PhonemeParsingStructure -> Either String PhonemeParsingStructure
+addTrait prop options pps
+  | (Just x) <- findProperty pps prop
+  = case x of
+      (Left  _) -> Left $ "Can't declare trait \'" <> prop <> "\'; there is already an aspect with that name." 
+      (Right _) -> Left $ "The trait \'" <> prop <> "\' is declared more than once."
+  | otherwise = Right $ pps {ppsPhonemeTraits = traitMap'}
+    where traitMap' = M.insert prop options (ppsPhonemeTraits pps)

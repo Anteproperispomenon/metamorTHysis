@@ -21,12 +21,16 @@ description:         Please see the README on GitHub at <https://github.com/Ante
 
 default-extensions:
 - ImportQualifiedPost
+- OverloadedStrings
+- TupleSections
 
 dependencies:
 - base >= 4.7 && < 5
 - attoparsec
 - containers
 - template-haskell
+- text
+- transformers
 
 ghc-options:
 - -Wall
