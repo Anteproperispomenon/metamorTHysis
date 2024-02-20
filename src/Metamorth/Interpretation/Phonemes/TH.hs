@@ -9,6 +9,7 @@ import Control.Monad
 
 import Data.Functor
 import Data.Maybe
+import Data.Tuple
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
@@ -27,7 +28,7 @@ import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
 
 
-producePropertyData :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), [Dec])
+producePropertyData :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, [(Name, Name)]), [Dec])
 producePropertyData pps = do
   let aspects = ppsPhonemeAspects pps
       traits  = ppsPhonemeTraits  pps
@@ -41,20 +42,32 @@ producePropertyData pps = do
   -- use the same name for some of their options,
   -- since `newName` ensures that a new, unique
   -- name is generated
+  -- aspMap :: Map String ((Name, Map String Name), [Dec])
   aspMap <- forWithKey aspects $ \asp ops -> do
     aspName <- newName (dataName asp)
-    opNames <- mapM (newName . dataName) $ fromSelfList ops
+    opNames <- mapM (newName . dataName) $ fromSelfList ops -- :: Map String Name
 
+    -- == data AspectName = Option1 | Option2 | Option3 ... deriving (Show, Eq)
     let aspDec = sumAdtDecDeriv aspName (map (,[]) $ M.elems opNames) [eqClass, ordClass]
+
+    -- == instance Show AspectName where
+    --      show Option1 = "option1"
+    --      show Option2 = "option2"
+    --      show Option3 = "option3"
+    --      ...
+    let aspShw = showSumInstance aspName (map swap $ M.toList opNames)
     -- aspShow <- [d| instance Show $(aspName) where show  |]
 
-    return ((aspName, opNames), aspDec)
+    return ((aspName, opNames), (aspDec : aspShw))
   
-  let aspMap1 = fmap fst aspMap
-      aspMap2 = fmap snd aspMap
+  let aspMap1 = fmap fst aspMap -- :: Map String (Name, Map String Name)
+      aspMap2 = fmap snd aspMap -- :: Map String [Dec]
+      aspDecs = concat $ M.elems aspMap2
   
+  -- trtMap :: Map String ((Name, Maybe (Name, Map String Name)), Maybe [Dec] )
   trtMap <- forWithKey traits $ \trt ops -> do
     trtRecName <- newName trt
+    -- trtTypeNames :: Maybe (Name, Map String Name)
     trtTypeNames <- case ops of
       [] -> return Nothing
       xs -> do
@@ -64,17 +77,36 @@ producePropertyData pps = do
     
     umOkay <- case trtTypeNames of
       Nothing    -> return $ Nothing
-      (Just mps) -> return $ Just $ sumAdtDecDeriv (fst mps) (map (,[]) $ M.elems (snd mps)) [eqClass, ordClass] 
+      (Just mps) -> return $ Just $ 
+        (sumAdtDecDeriv (fst mps) (map (,[]) $ M.elems (snd mps)) [eqClass, ordClass])
+        : (showSumInstance (fst mps) (map swap $ M.toList $ snd mps))
     return ((trtRecName,trtTypeNames), umOkay)
   
-  let trtMap1 = fmap fst trtMap
-      trtMap2 = fmap snd trtMap
-      trtLst1 = catMaybes $ M.elems trtMap2
+  -- To make the record type for Phoneme Traits...
+  -- traitFields = M.map (fst . fst) trtMap
+  traitRecTypeName <- newName "PhonemeTraits"
+  let traitRecTypes = forMap trtMap $ \((trtRecName, mTrtInfo), _) -> case mTrtInfo of
+        Nothing -> (trtRecName, ''Bool)
+        (Just (typeNom,_)) -> (trtRecName, typeNom)
+  
+  -- Return the Type name of the Trait record type, along
+  -- with the names of the fields.
+  let trtRecOutput = case (M.elems traitRecTypes) of
+        [] -> Nothing
+        xs -> Just (traitRecTypeName, xs)
+
+  let trtRecordDec = case trtRecOutput of
+        Nothing -> []
+        (Just (_,prs)) -> [recordAdtDecDeriv traitRecTypeName (map (second ConT) prs) [eqClass, ordClass, showClass] ]
   
 
-
-
-  return (aspMap1, trtMap1, M.elems aspMap2)
+  -- trtMap :: Map String ((Name, Maybe (Name, Map String Name)), Maybe [Dec] )
+  let trtMap1 = fmap fst trtMap
+      trtMap2 = fmap snd trtMap
+      trtDecs = concat $ catMaybes $ M.elems trtMap2
+  
+  
+  return (aspMap1, trtMap1, trtRecOutput, aspDecs <> trtDecs <> trtRecordDec)
   
 
 -- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either
@@ -90,4 +122,29 @@ producePhonemeInventory asps traits phi = do
 -- producePhonemeData :: PhonemeParsingStructure -> Q ([Dec], M.Map String Name)
 -- producePhonemeData pss = do
   
+
+{-
+[("harmony",(Harmony_0,fromList [("back",Back_1),("front",Front_2)]))]
+,fromList 
+  [("articulation",(articulation_3,Just (Articulation_4,fromList [("alveolar",Alveolar_5),("labial",Labial_6),("velar",Velar_7)])))
+  ,("neutral",(neutral_8,Nothing))
+  ]
+,Just (PhonemeTraits_9, [(articulation_3,Articulation_4),(neutral_8,GHC.Types.Bool)])
+, [DataD [] Harmony_0 [] Nothing [NormalC Back_1 [],NormalC Front_2 []] 
+    [DerivClause Nothing [ConT GHC.Classes.Eq],DerivClause Nothing [ConT GHC.Classes.Ord]]
+  , InstanceD Nothing [] (AppT (ConT GHC.Show.Show) (ConT Harmony_0)) 
+      [FunD GHC.Show.show 
+        [ Clause [ConP Back_1 [] []] (NormalB (LitE (StringL "back"))) []
+        , Clause [ConP Front_2 [] []] (NormalB (LitE (StringL "front"))) []
+        ]
+      ]
+  , DataD [] Articulation_4 [] Nothing [NormalC Alveolar_5 [],NormalC Labial_6 [],NormalC Velar_7 []] 
+    [ DerivClause Nothing [ConT GHC.Classes.Eq],DerivClause Nothing [ConT GHC.Classes.Ord]]
+    , InstanceD Nothing [] (AppT (ConT GHC.Show.Show) (ConT Articulation_4)) 
+       [FunD GHC.Show.show 
+         [Clause [ConP Alveolar_5 [] []] (NormalB (LitE (StringL "alveolar"))) []
+         ,Clause [ConP Labial_6 [] []] (NormalB (LitE (StringL "labial"))) []
+         ,Clause [ConP Velar_7 [] []] (NormalB (LitE (StringL "velar"))) []]]]
+-}
+
 
