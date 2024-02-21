@@ -28,8 +28,31 @@ import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
 
 
-producePropertyData :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, [(Name, Type)], Name), [Dec])
+-- | A type to make understanding the output
+--   of `producePropertyData` easier.
+data PropertyData = PropertyData
+  { aspectTable  :: M.Map String (Name, M.Map String Name)
+  , traitTable   :: M.Map String (Name, Maybe (Name, M.Map String Name))
+  , traitData    :: Maybe TraitData
+  , propertyDecs :: [Dec]
+  } deriving (Show, Eq)
+
+data TraitData = TraitData
+  { traitInfoName  :: Name
+  , traitTypeTable :: M.Map String (Name, Type)
+  , traitDefName   :: Name
+  } deriving (Show, Eq)
+
+producePropertyData :: PhonemeParsingStructure -> Q PropertyData
 producePropertyData pps = do
+  (aspTab, trtTab, mtData, theDecs) <- producePropertyData' pps
+  let trtData = forMap mtData $ \(nm, typs, defName) ->
+        (TraitData nm typs defName)
+  return $ PropertyData aspTab trtTab trtData theDecs
+
+
+producePropertyData' :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, M.Map String (Name, Type), Name), [Dec])
+producePropertyData' pps = do
   let aspects = ppsPhonemeAspects pps
       traits  = ppsPhonemeTraits  pps
   
@@ -94,14 +117,14 @@ producePropertyData pps = do
 
   -- Return the Type name of the Trait record type, along
   -- with the names of the fields.
-  let trtRecOutput = case (M.elems traitRecTypes) of
-        [] -> Nothing
-        xs -> Just (traitRecTypeName, xs, defRecordName)
+  let trtRecOutput = if (M.null traitRecTypes)
+        then Nothing
+        else Just (traitRecTypeName, traitRecTypes, defRecordName)
 
   -- Create the record type declaration.
   let trtRecordDec = case trtRecOutput of
         Nothing -> []
-        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeName prs [eqClass, showClass] ]
+        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeName (M.elems prs) [eqClass, showClass] ]
   
 
   -- (The type on the next line may be out of date)
@@ -118,11 +141,12 @@ producePropertyData pps = do
   
   let defRecordDec = case trtRecOutput of
         Nothing  -> []
-        (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeName) (map (produceDefaultRecV . snd) xs) ) []]
+        (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeName) (map (produceDefaultRecV . snd) $ M.elems xs) ) []]
   
   return (aspMap1, trtMap1, trtRecOutput, aspDecs <> trtDecs <> trtRecordDec <> defRecordSig <> defRecordDec)
 
--- | Should only be used for a VERY specific purpose.
+-- | Should only be used for mapping from Types of the fields
+--   of `defaultPhonemeTraits` to expressions.
 produceDefaultRecV :: Type -> Exp
 produceDefaultRecV (ConT x)
   | (x == ''Bool) = ConE 'False
@@ -143,6 +167,46 @@ producePhonemeInventory :: M.Map String Name -> M.Map String Name -> PhonemeInve
 producePhonemeInventory asps traits phi = do
   return ()
 
+
+producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q ()
+producePhonemeSet propData subName phoneSet = do
+  -- The name to map from phonemes to traits
+  funcName <- newName ((nameBase subName) <> "_traits")
+  
+
+  phoneMap <- forWithKey phoneSet $ \phone props -> do
+    phoneName <- newName $ dataName phone
+
+    return (phoneName) -- temp
+
+  return ()
+
+-- | Make a record update expression, to be used
+--   when making the `phonemeProperties` function.
+--   Note that this returns an `Exp`ression, *not* a
+--   function declaration or clause.
+makeRecordUpdate :: Name -> M.Map String (Name, Maybe (Name, M.Map String Name)) -> M.Map String (Name,Type) -> PhonemeProperties -> Exp
+makeRecordUpdate defPropName traitsInfo traitFields phoneProps
+  = RecUpdE (VarE defPropName) phoneStuff'
+  -- = forMap phone
+
+  where
+    -- phoneTraits :: [(String, Maybe String)] 
+    -- phoneTraits = phTraits phoneProps
+    phoneStuff :: [Maybe (Name, Exp)]
+    phoneStuff = forMap (phTraits phoneProps) $ \(trtStr, trtOption) -> do
+      (trtName, mtrtOps) <- M.lookup trtStr traitsInfo
+      let mtrtOps' = snd <$> mtrtOps
+      trtValue <- case trtOption of
+        Nothing    -> Just $ ConE 'True
+        (Just opn) -> AppE (ConE 'Just) <$> (ConE <$> (M.lookup opn =<< mtrtOps'))
+      trtField <- fst <$> M.lookup trtStr traitFields
+      return (trtField, trtValue)
+    phoneStuff' :: [(Name, Exp)]
+    phoneStuff' = catMaybes phoneStuff
+
+
+
 -- producePhonemeData :: PhonemeParsingStructure -> Q ([Dec], M.Map String Name)
 -- producePhonemeData pss = do
 
@@ -151,6 +215,9 @@ producePhonemeInventory asps traits phi = do
 ghci> data ExampleRec = ExampleRec { recField1 :: Bool, recField2 :: Int, recField3 :: Maybe Word}
 ghci> [d| {exampleRec :: ExampleRec ; exampleRec = (ExampleRec False 0 Nothing)} |]
 [SigD exampleRec_16 (ConT Ghci23.ExampleRec),ValD (VarP exampleRec_16) (NormalB (AppE (AppE (AppE (ConE Ghci23.ExampleRec) (ConE GHC.Types.False)) (LitE (IntegerL 0))) (ConE GHC.Maybe.Nothing))) []]
+
+[| \x -> x {recField2 = 10} |]
+LamE [VarP x_11] (RecUpdE (VarE x_11) [(Ghci2.recField2,LitE (IntegerL 10))])
 
 -}
 

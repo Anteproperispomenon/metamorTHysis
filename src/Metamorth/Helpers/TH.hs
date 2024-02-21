@@ -1,5 +1,6 @@
 module Metamorth.Helpers.TH
   ( dataName
+  , varName
   , maybeType
   , sumAdtDecDeriv
   , recordAdtDecDeriv
@@ -45,6 +46,10 @@ second f (x,y) = (x, f y)
 dataName :: String -> String
 dataName "" = ""
 dataName (x:xs) = (toUpper x : xs)
+
+varName :: String -> String
+varName "" = ""
+varName (x:xs) = (toLower x : xs)
 
 sumAdtDecDeriv :: Name -> [(Name, [Type])] -> [Type] -> Dec
 sumAdtDecDeriv a b ders =
