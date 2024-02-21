@@ -173,11 +173,21 @@ producePhonemeSet propData subName phoneSet = do
   -- The name to map from phonemes to traits
   funcName <- newName ((nameBase subName) <> "_traits")
   
+  let aspTable = aspectTable propData
+      aspTableNames = M.map fst aspTable
 
+  -- The name of the data type for this set of phonemes.
+  -- (Unneeded; `subName` is already the right name.)
+  -- phonemeSetName <- newName ((nameBase subName) <> (dataName subName))
+
+  -- phoneMap :: M.Map String (Name,[Type])
   phoneMap <- forWithKey phoneSet $ \phone props -> do
     phoneName <- newName $ dataName phone
-
-    return (phoneName) -- temp
+    let phoneAsps     = phAspects props -- :: [String]
+        phoneAspTypes = mapMaybe (\str -> ConT <$> M.lookup str aspTableNames) phoneAsps
+    return (phoneName, phoneAspTypes) -- temp
+  
+  let phoneDecs = sumAdtDecDeriv subName (M.elems phoneMap) [(ConT ''Eq), (ConT ''Ord)]
 
   return ()
 
