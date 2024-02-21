@@ -28,7 +28,7 @@ import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
 
 
-producePropertyData :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, [(Name, Type)]), [Dec])
+producePropertyData :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, [(Name, Type)], Name), [Dec])
 producePropertyData pps = do
   let aspects = ppsPhonemeAspects pps
       traits  = ppsPhonemeTraits  pps
@@ -88,26 +88,50 @@ producePropertyData pps = do
   let traitRecTypes = forMap trtMap $ \((trtRecName, mTrtInfo), _) -> case mTrtInfo of
         Nothing -> (trtRecName, ConT ''Bool)
         (Just (typeNom,_)) -> (trtRecName, maybeType $ ConT typeNom)
-  
+
+  -- To be used later on...
+  defRecordName <- newName "defaultPhonemeTraits"
+
   -- Return the Type name of the Trait record type, along
   -- with the names of the fields.
   let trtRecOutput = case (M.elems traitRecTypes) of
         [] -> Nothing
-        xs -> Just (traitRecTypeName, xs)
+        xs -> Just (traitRecTypeName, xs, defRecordName)
 
+  -- Create the record type declaration.
   let trtRecordDec = case trtRecOutput of
         Nothing -> []
-        (Just (_,prs)) -> [recordAdtDecDeriv traitRecTypeName prs [eqClass, ordClass, showClass] ]
+        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeName prs [eqClass, showClass] ]
   
 
+  -- (The type on the next line may be out of date)
   -- trtMap :: Map String ((Name, Maybe (Name, Map String Name)), Maybe [Dec] )
   let trtMap1 = fmap fst trtMap
       trtMap2 = fmap snd trtMap
       trtDecs = concat $ catMaybes $ M.elems trtMap2
   
+  -- Making the "default" trait type.
+  -- defRecordName <- newName "defaultPhonemeTraits"
+  let defRecordSig = case trtRecOutput of
+        Nothing  -> []
+        (Just _) -> [SigD defRecordName (ConT traitRecTypeName)]
   
-  return (aspMap1, trtMap1, trtRecOutput, aspDecs <> trtDecs <> trtRecordDec)
+  let defRecordDec = case trtRecOutput of
+        Nothing  -> []
+        (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeName) (map (produceDefaultRecV . snd) xs) ) []]
   
+  return (aspMap1, trtMap1, trtRecOutput, aspDecs <> trtDecs <> trtRecordDec <> defRecordSig <> defRecordDec)
+
+-- | Should only be used for a VERY specific purpose.
+produceDefaultRecV :: Type -> Exp
+produceDefaultRecV (ConT x)
+  | (x == ''Bool) = ConE 'False
+  | otherwise     = error "Encountered a type that isn't Bool or (Maybe ...)"
+produceDefaultRecV (AppT (ConT x) _) 
+  | (x == ''Maybe) = ConE 'Nothing
+  | otherwise      = error "Encountered a type that isn't Bool or (Maybe ...)"
+produceDefaultRecV _ = error "Encountered a type that isn't Bool or (Maybe ...)"
+
 
 -- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either
 -- import Data.Text.IO qualified as TIO
@@ -121,7 +145,15 @@ producePhonemeInventory asps traits phi = do
 
 -- producePhonemeData :: PhonemeParsingStructure -> Q ([Dec], M.Map String Name)
 -- producePhonemeData pss = do
-  
+
+{-
+
+ghci> data ExampleRec = ExampleRec { recField1 :: Bool, recField2 :: Int, recField3 :: Maybe Word}
+ghci> [d| {exampleRec :: ExampleRec ; exampleRec = (ExampleRec False 0 Nothing)} |]
+[SigD exampleRec_16 (ConT Ghci23.ExampleRec),ValD (VarP exampleRec_16) (NormalB (AppE (AppE (AppE (ConE Ghci23.ExampleRec) (ConE GHC.Types.False)) (LitE (IntegerL 0))) (ConE GHC.Maybe.Nothing))) []]
+
+-}
+
 
 {-
 [("harmony",(Harmony_0,fromList [("back",Back_1),("front",Front_2)]))]
