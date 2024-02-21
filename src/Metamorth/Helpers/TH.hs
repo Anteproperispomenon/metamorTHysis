@@ -1,5 +1,6 @@
 module Metamorth.Helpers.TH
   ( dataName
+  , maybeType
   , sumAdtDecDeriv
   , recordAdtDecDeriv
   , stringExp
@@ -16,6 +17,9 @@ import Language.Haskell.TH.Syntax
 import THLego.Helpers (sumCon, fieldBang)
 
 import GHC.Show qualified as GHCShow
+
+maybeType :: Type -> Type
+maybeType typ = AppT (ConT ''Maybe) typ
 
 -- | Variant of `fmap` but with the arguments
 --   flipped. Meant for use in code such as

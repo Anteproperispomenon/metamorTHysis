@@ -28,7 +28,7 @@ import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
 
 
-producePropertyData :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, [(Name, Name)]), [Dec])
+producePropertyData :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, [(Name, Type)]), [Dec])
 producePropertyData pps = do
   let aspects = ppsPhonemeAspects pps
       traits  = ppsPhonemeTraits  pps
@@ -86,8 +86,8 @@ producePropertyData pps = do
   -- traitFields = M.map (fst . fst) trtMap
   traitRecTypeName <- newName "PhonemeTraits"
   let traitRecTypes = forMap trtMap $ \((trtRecName, mTrtInfo), _) -> case mTrtInfo of
-        Nothing -> (trtRecName, ''Bool)
-        (Just (typeNom,_)) -> (trtRecName, typeNom)
+        Nothing -> (trtRecName, ConT ''Bool)
+        (Just (typeNom,_)) -> (trtRecName, maybeType $ ConT typeNom)
   
   -- Return the Type name of the Trait record type, along
   -- with the names of the fields.
@@ -97,7 +97,7 @@ producePropertyData pps = do
 
   let trtRecordDec = case trtRecOutput of
         Nothing -> []
-        (Just (_,prs)) -> [recordAdtDecDeriv traitRecTypeName (map (second ConT) prs) [eqClass, ordClass, showClass] ]
+        (Just (_,prs)) -> [recordAdtDecDeriv traitRecTypeName prs [eqClass, ordClass, showClass] ]
   
 
   -- trtMap :: Map String ((Name, Maybe (Name, Map String Name)), Maybe [Dec] )
