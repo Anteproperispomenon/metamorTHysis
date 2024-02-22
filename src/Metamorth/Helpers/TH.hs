@@ -1,3 +1,5 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Metamorth.Helpers.TH
   ( dataName
   , varName
@@ -6,16 +8,23 @@ module Metamorth.Helpers.TH
   , recordAdtDecDeriv
   , stringExp
   , showSumInstance
+  , showSumProdInstance
   , forMap
   , first
   , second
   ) where
 
+import Control.Monad
+
 import Data.Char
+import Data.List.NonEmpty qualified as NE
+import Data.List.NonEmpty (NonEmpty(..))
+
+import Data.List (intersperse)
 
 import Language.Haskell.TH.Syntax
 
-import THLego.Helpers (sumCon, fieldBang)
+import THLego.Helpers (sumCon, fieldBang, intersperseInfixE)
 
 import GHC.Show qualified as GHCShow
 
@@ -73,14 +82,48 @@ showSumInstance typeName prs =
     [ FunD 'show $ map (\(nm,str) -> Clause [ConP nm [] []] (NormalB (LitE (StringL str))) []) prs]
   ]
 
+-- | Create `Show` instances for a "sum of products" type.
+--   i.e. types that look like:
+-- 
+--   > data Example = Ex1 Int Bool String | Ex2 Bool Word8 | Ex3 Int Int
+-- 
+showSumProdInstance :: Name -> [(Name, String, Int)] -> Q [Dec]
+showSumProdInstance typeName prs = do
+  clauses <- mapM showSumProdClause prs
+  return 
+    [ InstanceD Nothing [] (AppT (ConT ''Show) (ConT typeName))
+        [ FunD 'show clauses ]
+    ]
+
+showSumProdClause :: (Name, String, Int) -> Q Clause
+showSumProdClause (phoneName, phoneString, n) 
+  | (n <= 0) = return $ Clause [ConP (phoneName) [] []] (NormalB (LitE (StringL phoneString))) []
+  | otherwise = do
+      -- Generate the variable names
+      phoneVars <- replicateM n (newName "x")
+      let varps   = map VarP phoneVars
+          vares   = map VarE phoneVars
+          clauseP = [ConP phoneName [] varps]
+          spc = LitE (StringL " ")
+      return $ Clause clauseP 
+        (NormalB (intersperseInfixE (VarE '(<>)) ((LitE (StringL (phoneString <> " "))) :| (intersperse spc vares)  )  )) []
+
+-- [ConP Data.Either.Right [] [VarP x_1]]
+
+-- [d| {asdf :: Either () Int -> Maybe Int ; asdf (Left _) = Nothing ; asdf (Right x) = Just x } |]
+
+-- 
+
 {-
 [InstanceD Nothing [] (AppT (ConT GHC.Show.Show) (ConT Ghci4.ABC)) 
   [FunD GHC.Show.show 
-    [Clause [ConP Ghci4.XYZ [] []] (NormalB (LitE (StringL "xyz"))) []
+    [Clause [ConP Ghci4.XYZ  [] []] (NormalB (LitE (StringL "xyz" ))) []
     ,Clause [ConP Ghci4.ZXCV [] []] (NormalB (LitE (StringL "zxcv"))) []
-    ,Clause [ConP Ghci4.TPT [] []] (NormalB (LitE (StringL "tpt"))) []
-    ,Clause [ConP Ghci4.A73 [] []] (NormalB (LitE (StringL "a73"))) []]]
+    ,Clause [ConP Ghci4.TPT  [] []] (NormalB (LitE (StringL "tpt" ))) []
+    ,Clause [ConP Ghci4.A73  [] []] (NormalB (LitE (StringL "a73" ))) []
+    ]
   ]
+]
 -}
 
 {-

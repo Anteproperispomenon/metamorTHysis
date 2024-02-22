@@ -168,7 +168,7 @@ producePhonemeInventory asps traits phi = do
   return ()
 
 
-producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q ()
+producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q (M.Map String (Name, [Type]), [Dec])
 producePhonemeSet propData subName phoneSet = do
   -- The name to map from phonemes to traits
   funcName <- newName ((nameBase subName) <> "_traits")
@@ -185,11 +185,14 @@ producePhonemeSet propData subName phoneSet = do
     phoneName <- newName $ dataName phone
     let phoneAsps     = phAspects props -- :: [String]
         phoneAspTypes = mapMaybe (\str -> ConT <$> M.lookup str aspTableNames) phoneAsps
-    return (phoneName, phoneAspTypes) -- temp
+    return (phoneName, phoneAspTypes) 
   
   let phoneDecs = sumAdtDecDeriv subName (M.elems phoneMap) [(ConT ''Eq), (ConT ''Ord)]
+      phoneShowMap  = map (\(str,(nm,typ)) -> (nm,str,length typ)) (M.assocs phoneMap)
+  
+  phoneShowDecs <- showSumProdInstance subName phoneShowMap
 
-  return ()
+  return (phoneMap, phoneDecs : phoneShowDecs)
 
 -- | Make a record update expression, to be used
 --   when making the `phonemeProperties` function.
@@ -220,7 +223,15 @@ makeRecordUpdate defPropName traitsInfo traitFields phoneProps
 -- producePhonemeData :: PhonemeParsingStructure -> Q ([Dec], M.Map String Name)
 -- producePhonemeData pss = do
 
+
+-- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either
+-- import Data.Text.IO qualified as TIO
+-- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
+
+
 {-
+
+
 
 ghci> data ExampleRec = ExampleRec { recField1 :: Bool, recField2 :: Int, recField3 :: Maybe Word}
 ghci> [d| {exampleRec :: ExampleRec ; exampleRec = (ExampleRec False 0 Nothing)} |]
