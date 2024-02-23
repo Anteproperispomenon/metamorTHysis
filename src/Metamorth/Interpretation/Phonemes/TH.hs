@@ -195,43 +195,58 @@ produceDefaultRecV _ = error "Encountered a type that isn't Bool or (Maybe ...)"
 --  fmap ppr $ fmap propertyDecs $ join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 -- fmap ppr $ join $ runQ <$> produceVariousDecs <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 
+data GroupProps = GroupProps
+  { groupStringName :: String
+  -- all the lower-down "is<Subsubgroup>" functions.
+  , isGroupSubFuncs :: M.Map String Name
+  , groupType :: Type
+  -- , isGroupFuncName :: Name
+  -- , isGroupFuncType :: Type
+  } deriving (Show, Eq)
 
 -- | To make phoneme groups work.
 data PhonemeHierarchy
    = PhoneLeaf Name [Type]
-   | PhoneNode Name (M.Map String PhonemeHierarchy)
+   | PhoneNode Name GroupProps (M.Map String PhonemeHierarchy)
    deriving (Show, Eq)
 
 hierarchyName :: PhonemeHierarchy -> Name
 hierarchyName (PhoneLeaf nm _) = nm
-hierarchyName (PhoneNode nm _) = nm
+hierarchyName (PhoneNode nm _ _) = nm
 
 makeLeaves :: (Ord k) => M.Map k (Name, [Type]) -> M.Map k PhonemeHierarchy
 makeLeaves = M.map $ \(nm, typs) -> PhoneLeaf nm typs
 
-makeNodes :: (Ord k) => M.Map k (Name, M.Map String PhonemeHierarchy) -> M.Map k PhonemeHierarchy
-makeNodes  = M.map $ \(nm, nods) -> PhoneNode nm nods
+makeNodes :: (Ord k) => M.Map k (Name, GroupProps, M.Map String (PhonemeHierarchy)) -> M.Map k PhonemeHierarchy
+makeNodes  = M.map $ \(nm, grpProps, nods) -> PhoneNode nm grpProps nods
 
-producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy,[Dec])
+producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, {-GroupProps,-} [Dec])
 producePhonemeInventory propData phi = do
   mainName <- newName "Phoneme"
-  producePhonemeInventory' mainName propData phi
+  (phoneHi, _groupProps, decs) <- producePhonemeInventory' mainName propData phi
+  return (phoneHi, decs)
 
-producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, [Dec])
+producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, Maybe GroupProps, [Dec])
 producePhonemeInventory' nm propData (PhonemeSet mp) = do
   (mpX, decs) <- producePhonemeSet propData nm mp
-  return (makeLeaves mpX, decs)
+  return (makeLeaves mpX, Nothing, decs)
 producePhonemeInventory' nm propData (PhonemeGroup mp) = do
   -- rslts :: M.Map String (Name, ((M.Map String PhonemeHierarchy), [Dec]) )
   rslts <- forWithKey mp $ \str phi -> do
     subName <- newName $ dataName str
-    (mpX, decs) <- producePhonemeInventory' subName propData phi
-    return (subName, (mpX, decs))
+    (mpX, gProps, decs) <- producePhonemeInventory' subName propData phi
+    return (subName, (mpX, gProps, decs))
   
-  let subDecs  = forMap rslts $ \(_,(_,dcls)) -> dcls
+  let subDecs  = forMap rslts $ \(_,(_,_,dcls)) -> dcls
       subDecs' = concat $ M.elems subDecs
       subNoms  = M.map fst rslts
-      subRslts = makeNodes $ forMap rslts $ \(nom,(mpZ,_)) -> (nom,mpZ)
+      -- I'm so confused...
+      -- subRslts = makeNodes $ forMap rslts $ \(nom,(mpZ,gProps,_)) -> (nom,gProps,mpZ)
+      subGrps :: M.Map String (M.Map String GroupProps)
+      subGrps  = forMap rslts $ \(_,(theMap,_,_decs)) -> forMaybeMapWithKey theMap $ \str val -> case val of
+        (PhoneLeaf _ _) -> Nothing
+        (PhoneNode _grpNom grpProps _grpMap) -> Just grpProps
+
   
   -- The value to be passed to `sumAdtDecDeriv`
   -- i.e. M.Map String (Name,[Type])
@@ -239,20 +254,83 @@ producePhonemeInventory' nm propData (PhonemeGroup mp) = do
     -- Adding "Ph" to distinguish it a bit...
     sumName <- newName $ "Ph" <> (dataName str)
     return (sumName, [ConT nom])
-   
+
+{-
+data GroupProps = GroupProps
+  { groupStringName :: String
+  -- all the lower-down "is<Subsubgroup>" functions.
+  , isGroupSubFuncs :: M.Map String Name
+  , groupType :: Type
+
+  , isGroupFuncName :: Name
+  , isGroupFuncType :: Type
+  } deriving (Show, Eq)
+-}
+
+
+  subFuncs <- sequence $ forIntersectionWithKey subPats subGrps $ \str (sumNom,typs) subGroupsMap -> do
+    -- For the top-level stuff...
+    funName <- newName $ "is" <> (dataName str) <> "_" <> (nameBase nm)
+    let funType = THL.arrowChainT [ConT nm] (ConT ''Bool)
+        funSign = SigD funName funType
+        -- funMain = (FunD funName [Clause [ConP sumNom [] [WildP]] (NormalB (ConE 'True)) []])
+        -- funElse = (FunD funName [Clause [WildP] (NormalB (ConE 'False)) []])
+        funMain = Clause [ConP sumNom [] [WildP]] (NormalB (ConE 'True)) []
+        funElse = Clause [WildP] (NormalB (ConE 'False)) []
+        funDefn = (FunD funName [funMain, funElse])
+    -- For the next level down stuff...
+    lowerStuff <- forWithKey subGroupsMap $ \grpString grpProps -> do
+      newVar  <- newName "x"
+      let funTypeZ = THL.arrowChainT [ConT nm] (ConT ''Bool)
+          
+      subsubStuff <- forWithKey (isGroupSubFuncs grpProps) $ \strZ subsubName -> do
+        funNameZ <- newName $ "is" <> (dataName strZ) <> "_" <> (nameBase nm)
+        let funSignZ = SigD funNameZ funTypeZ
+            funMainZ = Clause [ConP sumNom [] [VarP newVar]] (NormalB (AppE (VarE subsubName) (VarE newVar))) []
+            funElseZ = Clause [WildP] (NormalB (ConE 'False)) []
+            funDefnZ = [funSignZ, (FunD funNameZ [funMainZ, funElseZ])]
+        return (funNameZ, funDefnZ)
+      
+      return subsubStuff
+    
+    let lowerStuff' = M.unions lowerStuff
+        -- unsure what to insert... 
+        lowerNames  = M.insert str funName $ M.map fst lowerStuff'
+        lowerDecls  = concat $ M.elems $ M.map snd lowerStuff'
+      
+      -- (FunD nm 
+      --   [ Clause [ConP sumNom [] [VarP newVar]] (NormalB (AppE (VarE funName23) (VarE newVar))) []
+      --   , Clause [WildP] (NormalB (ConE 'False)) []]])
+
+    let rsltGroupProps = GroupProps (nameBase nm) lowerNames funType
+
+    return (rsltGroupProps, ([funSign, funDefn] <> lowerDecls))
+    
+-- 
+
+
   -- Also todo: add the (Phoneme -> PhonemeProps) function
   -- for this level of the code. 
   
+  -- Also todo: add "is<Group>" functions for each level.
+
+  let _help :: M.Map String (GroupProps, [Dec])
+      _help = subFuncs
+      subDecls = concatMap snd $ M.elems subFuncs
+      subGrpProps = M.map fst subFuncs
+      
+
+      
 
   -- Create a data type for this:
   -- (Also: Maybe make a custom `Show` instance
   --  that just shows the underlying value.)
-  let newDecs = sumAdtDecDeriv nm (M.elems subPats) [(ConT ''Eq), (ConT ''Ord), (ConT ''Show)]
-
+  let newDecs  = sumAdtDecDeriv nm (M.elems subPats) [(ConT ''Eq), (ConT ''Ord), (ConT ''Show)]
+      subRslts = makeNodes $ forIntersectionWithKey rslts subGrpProps $ \key (nom,(mpZ,_gProps,_)) grpPropers -> (nom,grpPropers,mpZ)
   
   -- Temporary combining:
 
-  return ((subRslts), [newDecs] <> subDecs')
+  return ((subRslts), Nothing, [newDecs] <> subDecls <> subDecs')
 
 
 producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q (M.Map String (Name, [Type]), [Dec])
