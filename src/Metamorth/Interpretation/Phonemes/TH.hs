@@ -2,7 +2,11 @@
 
 module Metamorth.Interpretation.Phonemes.TH
   ( producePropertyData
-
+  , producePhonemeInventory
+  , produceVariousData
+  , produceVariousDecs
+  , PropertyData(..)
+  , PhonemeHierarchy(..)
   ) where
 
 import Control.Monad
@@ -31,7 +35,7 @@ import Metamorth.Helpers.Map
 -- | A type to make understanding the output
 --   of `producePropertyData` easier.
 data PropertyData = PropertyData
-  { aspectTable  :: M.Map String (Name, M.Map String Name)
+  { aspectTable  :: M.Map String (Name, (Name, M.Map String Name))
   , traitTable   :: M.Map String (Name, Maybe (Name, M.Map String Name))
   , traitData    :: Maybe TraitData
   , propertyDecs :: [Dec]
@@ -43,6 +47,23 @@ data TraitData = TraitData
   , traitDefName   :: Name
   } deriving (Show, Eq)
 
+produceVariousDecs :: PhonemeParsingStructure -> Q [Dec]
+produceVariousDecs pps = do
+  (_,decs) <- produceVariousData pps
+  return decs
+
+produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy), [Dec])
+produceVariousData pps = do
+  propData <- producePropertyData pps
+  let propDecs = propertyDecs propData
+      phoneInv = ppsPhonemeInventory pps
+  phonData <- producePhonemeInventory propData phoneInv
+  let phonDecs = snd phonData
+      phonDats = fst phonData
+  return ((propData, phonDats), (propDecs <> phonDecs))
+
+
+
 producePropertyData :: PhonemeParsingStructure -> Q PropertyData
 producePropertyData pps = do
   (aspTab, trtTab, mtData, theDecs) <- producePropertyData' pps
@@ -51,7 +72,7 @@ producePropertyData pps = do
   return $ PropertyData aspTab trtTab trtData theDecs
 
 
-producePropertyData' :: PhonemeParsingStructure -> Q (M.Map String (Name, M.Map String Name), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, M.Map String (Name, Type), Name), [Dec])
+producePropertyData' :: PhonemeParsingStructure -> Q (M.Map String (Name, (Name, M.Map String Name)), M.Map String (Name, Maybe (Name, M.Map String Name)), Maybe (Name, M.Map String (Name, Type), Name), [Dec])
 producePropertyData' pps = do
   let aspects = ppsPhonemeAspects pps
       traits  = ppsPhonemeTraits  pps
@@ -65,9 +86,10 @@ producePropertyData' pps = do
   -- use the same name for some of their options,
   -- since `newName` ensures that a new, unique
   -- name is generated
-  -- aspMap :: Map String ((Name, Map String Name), [Dec])
+  -- aspMap :: Map String ((Name, (Name, Map String Name)), [Dec])
   aspMap <- forWithKey aspects $ \asp ops -> do
     aspName <- newName (dataName asp)
+    aspRecN <- newName (varName  asp)
     opNames <- mapM (newName . dataName) $ fromSelfList ops -- :: Map String Name
 
     -- == data AspectName = Option1 | Option2 | Option3 ... deriving (Show, Eq)
@@ -81,9 +103,9 @@ producePropertyData' pps = do
     let aspShw = showSumInstance aspName (map swap $ M.toList opNames)
     -- aspShow <- [d| instance Show $(aspName) where show  |]
 
-    return ((aspName, opNames), (aspDec : aspShw))
+    return ((aspName, (aspRecN, opNames)), (aspDec : aspShw))
   
-  let aspMap1 = fmap fst aspMap -- :: Map String (Name, Map String Name)
+  let aspMap1 = fmap fst aspMap -- :: Map String (Name, (Name, Map String Name))
       aspMap2 = fmap snd aspMap -- :: Map String [Dec]
       aspDecs = concat $ M.elems aspMap2
   
@@ -107,19 +129,25 @@ producePropertyData' pps = do
   
   -- To make the record type for Phoneme Traits...
   -- traitFields = M.map (fst . fst) trtMap
-  traitRecTypeName <- newName "PhonemeTraits"
+  traitRecTypeName <- newName "PhonemeProps"
   let traitRecTypes = forMap trtMap $ \((trtRecName, mTrtInfo), _) -> case mTrtInfo of
         Nothing -> (trtRecName, ConT ''Bool)
         (Just (typeNom,_)) -> (trtRecName, maybeType $ ConT typeNom)
+      aspctRecTypes = forMap aspMap1 $ \(aspTypeName, (aspRecName, aspConsNames)) -> 
+        (aspRecName, maybeType $ ConT aspTypeName)
+      -- Since the parser disallows aspects and traits to have the same
+      -- String/Name, the two maps should be disjoint. Thus, this type
+      -- should work fine.
+      propRecTypes = M.union traitRecTypes aspctRecTypes
 
   -- To be used later on...
-  defRecordName <- newName "defaultPhonemeTraits"
+  defRecordName <- newName "defaultPhonemeProps"
 
   -- Return the Type name of the Trait record type, along
   -- with the names of the fields.
   let trtRecOutput = if (M.null traitRecTypes)
         then Nothing
-        else Just (traitRecTypeName, traitRecTypes, defRecordName)
+        else Just (traitRecTypeName, propRecTypes, defRecordName)
 
   -- Create the record type declaration.
   let trtRecordDec = case trtRecOutput of
@@ -139,6 +167,9 @@ producePropertyData' pps = do
         Nothing  -> []
         (Just _) -> [SigD defRecordName (ConT traitRecTypeName)]
   
+  -- A declaration of the default record value/function.
+  -- e.g.
+  --  > defaultPhonemeProps = PhonemeProps False Nothing Nothing False Nothing
   let defRecordDec = case trtRecOutput of
         Nothing  -> []
         (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeName) (map (produceDefaultRecV . snd) $ M.elems xs) ) []]
@@ -157,15 +188,71 @@ produceDefaultRecV (AppT (ConT x) _)
 produceDefaultRecV _ = error "Encountered a type that isn't Bool or (Maybe ...)"
 
 
--- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either
+-- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either Language.Haskell.TH.Ppr
 -- import Data.Text.IO qualified as TIO
 -- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 
+--  fmap ppr $ fmap propertyDecs $ join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
+-- fmap ppr $ join $ runQ <$> produceVariousDecs <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 
 
-producePhonemeInventory :: M.Map String Name -> M.Map String Name -> PhonemeInventory -> Q ()
-producePhonemeInventory asps traits phi = do
-  return ()
+-- | To make phoneme groups work.
+data PhonemeHierarchy
+   = PhoneLeaf Name [Type]
+   | PhoneNode Name (M.Map String PhonemeHierarchy)
+   deriving (Show, Eq)
+
+hierarchyName :: PhonemeHierarchy -> Name
+hierarchyName (PhoneLeaf nm _) = nm
+hierarchyName (PhoneNode nm _) = nm
+
+makeLeaves :: (Ord k) => M.Map k (Name, [Type]) -> M.Map k PhonemeHierarchy
+makeLeaves = M.map $ \(nm, typs) -> PhoneLeaf nm typs
+
+makeNodes :: (Ord k) => M.Map k (Name, M.Map String PhonemeHierarchy) -> M.Map k PhonemeHierarchy
+makeNodes  = M.map $ \(nm, nods) -> PhoneNode nm nods
+
+producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy,[Dec])
+producePhonemeInventory propData phi = do
+  mainName <- newName "Phoneme"
+  producePhonemeInventory' mainName propData phi
+
+producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, [Dec])
+producePhonemeInventory' nm propData (PhonemeSet mp) = do
+  (mpX, decs) <- producePhonemeSet propData nm mp
+  return (makeLeaves mpX, decs)
+producePhonemeInventory' nm propData (PhonemeGroup mp) = do
+  -- rslts :: M.Map String (Name, ((M.Map String PhonemeHierarchy), [Dec]) )
+  rslts <- forWithKey mp $ \str phi -> do
+    subName <- newName $ dataName str
+    (mpX, decs) <- producePhonemeInventory' subName propData phi
+    return (subName, (mpX, decs))
+  
+  let subDecs  = forMap rslts $ \(_,(_,dcls)) -> dcls
+      subDecs' = concat $ M.elems subDecs
+      subNoms  = M.map fst rslts
+      subRslts = makeNodes $ forMap rslts $ \(nom,(mpZ,_)) -> (nom,mpZ)
+  
+  -- The value to be passed to `sumAdtDecDeriv`
+  -- i.e. M.Map String (Name,[Type])
+  subPats <- forWithKey subNoms $ \str nom -> do
+    -- Adding "Ph" to distinguish it a bit...
+    sumName <- newName $ "Ph" <> (dataName str)
+    return (sumName, [ConT nom])
+   
+  -- Also todo: add the (Phoneme -> PhonemeProps) function
+  -- for this level of the code. 
+  
+
+  -- Create a data type for this:
+  -- (Also: Maybe make a custom `Show` instance
+  --  that just shows the underlying value.)
+  let newDecs = sumAdtDecDeriv nm (M.elems subPats) [(ConT ''Eq), (ConT ''Ord), (ConT ''Show)]
+
+  
+  -- Temporary combining:
+
+  return ((subRslts), [newDecs] <> subDecs')
 
 
 producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q (M.Map String (Name, [Type]), [Dec])
@@ -190,7 +277,7 @@ producePhonemeSet propData subName phoneSet = do
   let phoneDecs = sumAdtDecDeriv subName (M.elems phoneMap) [(ConT ''Eq), (ConT ''Ord)]
       phoneShowMap  = map (\(str,(nm,typ)) -> (nm,str,length typ)) (M.assocs phoneMap)
   
-  phoneShowDecs <- showSumProdInstance subName phoneShowMap
+  phoneShowDecs <- showSumProdInstanceAlt subName phoneShowMap
 
   return (phoneMap, phoneDecs : phoneShowDecs)
 
@@ -224,7 +311,7 @@ makeRecordUpdate defPropName traitsInfo traitFields phoneProps
 -- producePhonemeData pss = do
 
 
--- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either
+-- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either Control.Monad
 -- import Data.Text.IO qualified as TIO
 -- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 

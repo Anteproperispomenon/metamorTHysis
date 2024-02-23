@@ -9,6 +9,7 @@ module Metamorth.Helpers.TH
   , stringExp
   , showSumInstance
   , showSumProdInstance
+  , showSumProdInstanceAlt
   , forMap
   , first
   , second
@@ -87,9 +88,37 @@ showSumInstance typeName prs =
 -- 
 --   > data Example = Ex1 Int Bool String | Ex2 Bool Word8 | Ex3 Int Int
 -- 
+--   The resulting `Show` instance will look something like this:
+--   
+--   > instance Show Example where
+--   >   show (Ex1 x1 x2 x3) = "Ex1 " <> (show x1) <> " " <> (show x2) <> " " (show x3)
+--   >   show (Ex2 x1 x2)    = "Ex2 " <> (show x1) <> " " <> (show x2)
+--   >   show (Ex3 x1 x2)    = "Ex3 " <> (show x1) <> " " <> (show x2)
+--
+--   ...but with the value of the first string (i.e. "Ex1" etc...) 
+--   defined by the user (the second value in each triple).
 showSumProdInstance :: Name -> [(Name, String, Int)] -> Q [Dec]
 showSumProdInstance typeName prs = do
   clauses <- mapM showSumProdClause prs
+  return 
+    [ InstanceD Nothing [] (AppT (ConT ''Show) (ConT typeName))
+        [ FunD 'show clauses ]
+    ]
+
+-- | Like `showSumProdInstance`, but with a different way of turning
+--   the sum/product type into a string. Again, for a type like
+-- 
+--   > data Example = Ex1 Int Bool String | Ex2 Bool Word8 | Ex3 Int Int
+-- 
+--   ... the resulting `Show` instance would look like...
+--
+--   > instance `Show` Example where
+--   >   show (Ex1 x1 x2 x3) = "Ex1[" <> (show x1) <> " " <> (show x2) <> " " <> show x3 <> "]"
+--   >   show (Ex2 x1 x2)    = "Ex2[" <> (show x1) <> " " <> (show x2) <> "]"
+--   >   show (Ex3 x1 x2)    = "Ex3[" <> (show x1) <> " " <> (show x2) <> "]"
+showSumProdInstanceAlt :: Name -> [(Name, String, Int)] -> Q [Dec]
+showSumProdInstanceAlt typeName prs = do
+  clauses <- mapM showSumProdClauseAlt prs
   return 
     [ InstanceD Nothing [] (AppT (ConT ''Show) (ConT typeName))
         [ FunD 'show clauses ]
@@ -106,7 +135,22 @@ showSumProdClause (phoneName, phoneString, n)
           clauseP = [ConP phoneName [] varps]
           spc = LitE (StringL " ")
       return $ Clause clauseP 
-        (NormalB (intersperseInfixE (VarE '(<>)) ((LitE (StringL (phoneString <> " "))) :| (intersperse spc vares)  )  )) []
+        (NormalB (intersperseInfixE (VarE '(<>)) ((LitE (StringL (phoneString <> " "))) :| (intersperse spc (map (AppE (VarE 'show)) vares))  )  )) []
+
+showSumProdClauseAlt :: (Name, String, Int) -> Q Clause
+showSumProdClauseAlt (phoneName, phoneString, n) 
+  | (n <= 0) = return $ Clause [ConP (phoneName) [] []] (NormalB (LitE (StringL phoneString))) []
+  | otherwise = do
+      -- Generate the variable names
+      phoneVars <- replicateM n (newName "x")
+      let varps   = map VarP phoneVars
+          vares   = map VarE phoneVars
+          clauseP = [ConP phoneName [] varps]
+          spc  = LitE (StringL " ")
+          endB = LitE (StringL "]")
+      return $ Clause clauseP 
+        (NormalB (intersperseInfixE (VarE '(<>)) ((LitE (StringL (phoneString <> "["))) :| ((intersperse spc (map (AppE (VarE 'show)) vares)) <> [endB])  )  )) []
+
 
 -- [ConP Data.Either.Right [] [VarP x_1]]
 
