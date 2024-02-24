@@ -267,7 +267,7 @@ data GroupProps = GroupProps
   } deriving (Show, Eq)
 -}
 
-
+  -- This is WAY too complicated...
   subFuncs <- sequence $ forIntersectionWithKey subPats subGrps $ \str (sumNom,typs) subGroupsMap -> do
     -- For the top-level stuff...
     funName <- newName $ "is" <> (dataName str) <> "_" <> (nameBase nm)
