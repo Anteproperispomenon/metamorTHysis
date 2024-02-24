@@ -177,6 +177,7 @@ producePropertyData' pps = do
   
   return (aspMap1, trtMap1, trtRecOutput, aspDecs <> trtDecs <> trtRecordDec <> defRecordSig <> defRecordDec)
 
+
 -- | Should only be used for mapping from Types of the fields
 --   of `defaultPhonemeTraits` to expressions.
 produceDefaultRecV :: Type -> Exp
@@ -200,9 +201,10 @@ data GroupProps = GroupProps
   { groupStringName :: String
   , isGroupFuncName :: Name
   -- all the lower-down "is<Subsubgroup>" functions.
-  , isGroupSubFuncs :: M.Map String Name
+  , isGroupSubFuncs :: M.Map String (Maybe Name)
   -- , groupType :: Type
   , phonemeConstructors :: M.Map String ((Int, Name), [Name])
+  , isGroupBottom :: Bool
   -- 
   -- , isGroupFuncType :: Type
   } deriving (Show, Eq)
@@ -284,7 +286,8 @@ data GroupProps = GroupProps
   subGrpRslts <- forWithKey subGrps $ \subGrpString (subGrpNom, subGrpProps) -> do
     -- hmm...
     let oneDownFnc  = isGroupFuncName subGrpProps
-        downhillMap = M.insert subGrpString oneDownFnc $ isGroupSubFuncs subGrpProps
+        oneDownFnc' = if (isGroupBottom subGrpProps) then Nothing else (Just oneDownFnc)
+        downhillMap = M.insert subGrpString oneDownFnc' $ isGroupSubFuncs subGrpProps
         newPhoneConstrs = M.map (second (nm:)) $ phonemeConstructors subGrpProps
     
     -- This will be merged with other maps once returned to the upper level.
@@ -294,11 +297,13 @@ data GroupProps = GroupProps
       newFuncName <- newName $ "is" <> (dataName anotherGroupStr) <> "_" <> (nameBase nm)
       newVar      <- newName "x"
       let newFuncSign = SigD newFuncName (THL.arrowChainT [ConT nm] (ConT ''Bool))
-          newFuncBod1 = Clause [ConP subGrpNom [] [VarP newVar]] (NormalB (AppE (VarE subFuncNom) (VarE newVar))) []
+          -- produceSubMapClause constr (Just funcName) var
+          -- newFuncBod1 = Clause [ConP subGrpNom [] [VarP newVar]] (NormalB (AppE (VarE subFuncNom) (VarE newVar))) []
+          newFuncBod1 = produceSubMapClause subGrpNom subFuncNom newVar
           newFuncBod2 = Clause [WildP] (NormalB (ConE 'False)) []
           newFuncDefn = FunD newFuncName [newFuncBod1, newFuncBod2]
           newFuncDecl = [newFuncSign, newFuncDefn]
-      return (newFuncName, newFuncDecl)
+      return (Just newFuncName, newFuncDecl)
     
     let newSubFuncNames = M.map fst newSubFuncs
         newSubFuncDecls = concat $ M.elems $ M.map snd newSubFuncs
@@ -324,6 +329,7 @@ data GroupProps = GroupProps
         , isGroupFuncName     = igfName
         , isGroupSubFuncs     = subGrpRslts1
         , phonemeConstructors = subGrpRslts2
+        , isGroupBottom       = False
         }
 
 
@@ -398,7 +404,7 @@ data GroupProps = GroupProps
 
   -- Temporary combining:
 
-  return ((subRslts), thisGroupProps, [newDecs] <> subGrpDecls <> igfDecls)
+  return ((subRslts), thisGroupProps, [newDecs] <> subDecs' <> subGrpDecls <> igfDecls)
 
 {-
 data GroupProps = GroupProps
@@ -409,6 +415,16 @@ data GroupProps = GroupProps
   } deriving (Show, Eq)
 
 -}
+
+-- newFuncBod1 = Clause [ConP subGrpNom [] [VarP newVar]] (NormalB (AppE (VarE subFuncNom) (VarE newVar))) []
+produceSubMapClause' :: Bool -> Name -> Name -> Name -> Clause
+produceSubMapClause' True  constr        _   _ = Clause [ConP constr [] [WildP]]    (NormalB (ConE 'True)) []
+produceSubMapClause' False constr funcName var = Clause [ConP constr [] [VarP var]] (NormalB (AppE (VarE funcName) (VarE var))) []
+
+produceSubMapClause :: Name -> (Maybe Name) -> Name -> Clause
+produceSubMapClause constr         Nothing   _ = Clause [ConP constr [] [WildP]]    (NormalB (ConE 'True)) []
+produceSubMapClause constr (Just funcName) var = Clause [ConP constr [] [VarP var]] (NormalB (AppE (VarE funcName) (VarE var))) []
+
 
 
 producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q (M.Map String (Name, [Type]), GroupProps, [Dec])
@@ -459,9 +475,11 @@ producePhonemeSet propData subName phoneSet = do
         , isGroupFuncName = igfName
         , isGroupSubFuncs = M.empty
         , phonemeConstructors = phoneConstructors
+        , isGroupBottom   = True
         }
 
-  return (phoneMap, groupProps, phoneDecs : phoneShowDecs <> igfDecls)
+  -- return (phoneMap, groupProps, phoneDecs : phoneShowDecs <> igfDecls)
+  return (phoneMap, groupProps, phoneDecs : phoneShowDecs)
 
 -- | Make a record update expression, to be used
 --   when making the `phonemeProperties` function.
