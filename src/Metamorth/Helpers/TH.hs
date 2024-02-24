@@ -10,6 +10,7 @@ module Metamorth.Helpers.TH
   , showSumInstance
   , showSumProdInstance
   , showSumProdInstanceAlt
+  , nestedConPat
   , forMap
   , first
   , second
@@ -150,6 +151,10 @@ showSumProdClauseAlt (phoneName, phoneString, n)
           endB = LitE (StringL "]")
       return $ Clause clauseP 
         (NormalB (intersperseInfixE (VarE '(<>)) ((LitE (StringL (phoneString <> "["))) :| ((intersperse spc (map (AppE (VarE 'show)) vares)) <> [endB])  )  )) []
+
+nestedConPat :: [Name] -> Name -> [Pat] -> Pat
+nestedConPat [] nom pats     = ConP nom [] pats
+nestedConPat (c:cs) nom pats = ConP   c [] [nestedConPat cs nom pats]
 
 
 -- [ConP Data.Either.Right [] [VarP x_1]]

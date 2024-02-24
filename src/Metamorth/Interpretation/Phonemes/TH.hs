@@ -53,15 +53,15 @@ produceVariousDecs pps = do
   (_,decs) <- produceVariousData pps
   return decs
 
-produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy), [Dec])
+produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name), [Dec])
 produceVariousData pps = do
   propData <- producePropertyData pps
   let propDecs = propertyDecs propData
       phoneInv = ppsPhonemeInventory pps
-  (phonDats, phonGrps, phonDecs) <- producePhonemeInventory propData phoneInv
+  (phonDats, phonGrps, patNoms, phonDecs) <- producePhonemeInventory propData phoneInv
   -- let phonDecs = snd phonData
   --     phonDats = fst phonData
-  return ((propData, phonDats), (propDecs <> phonDecs))
+  return ((propData, phonDats, patNoms), (propDecs <> phonDecs))
 
 
 
@@ -230,12 +230,28 @@ makeNodes  = M.map $ \(nm, nods) -> PhoneNode nm nods
 --    * A pattern synonym to cut through the nested layers
 --    * An integer giving the number of arguments it has.
 
+producePhonemePatterns :: M.Map String ((Int, Name), [Name]) -> Q (M.Map String (Name, Dec))
+producePhonemePatterns mp = do
+  -- Only create as many vars as needed.
+  let maxLen = if (M.null mp) then 0 else maximum $ M.map (\((n,_),_) -> n) mp
+  necVars <- replicateM maxLen $ newName "x"
+  forWithKey mp $ \phoneStr ((numArgs, baseConstr), cstrList) -> do
+    -- hmm...
+    patName <- newName $ (dataName phoneStr) <> "PhonePat"
+    let patVars = take numArgs necVars
+        patRslt = PatSynD patName (PrefixPatSyn patVars) ImplBidir (nestedConPat cstrList baseConstr (map VarP patVars))
+    return (patName, patRslt)
 
-producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
+producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, [Dec])
 producePhonemeInventory propData phi = do
   mainName <- newName "Phoneme"
   (phoneHi, groupProps, decs) <- producePhonemeInventory' mainName propData phi
-  return (phoneHi, groupProps, decs)
+  patMap <- producePhonemePatterns (phonemeConstructors groupProps)
+  let patDecs = M.elems $ M.map snd patMap
+      patNoms = M.map fst patMap
+
+
+  return (phoneHi, groupProps, patNoms, decs <> patDecs)
 
 producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
 producePhonemeInventory' nm propData (PhonemeSet mp) = do
@@ -283,12 +299,12 @@ data GroupProps = GroupProps
   -- Create the isSubgroup_ThisGroup functions, etc...
   
   -- subGrpRslts :: M.Map String ((M.Map String Name, M.Map String ((Int, Name), [Name])), [Dec])
-  subGrpRslts <- forWithKey subGrps $ \subGrpString (subGrpNom, subGrpProps) -> do
+  subGrpRslts <- sequence $ forIntersectionWithKey subGrps subPats $ \subGrpString (subGrpNom, subGrpProps) (conName,_) -> do
     -- hmm...
     let oneDownFnc  = isGroupFuncName subGrpProps
         oneDownFnc' = if (isGroupBottom subGrpProps) then Nothing else (Just oneDownFnc)
         downhillMap = M.insert subGrpString oneDownFnc' $ isGroupSubFuncs subGrpProps
-        newPhoneConstrs = M.map (second (nm:)) $ phonemeConstructors subGrpProps
+        newPhoneConstrs = M.map (second (conName:)) $ phonemeConstructors subGrpProps
     
     -- This will be merged with other maps once returned to the upper level.
     -- newSubFuncs :: M.Map String (Name, [Dec])
