@@ -26,9 +26,12 @@ source-repository head
 library
   exposed-modules:
       Lib
+      Metamorth.Helpers.Char
       Metamorth.Helpers.Map
       Metamorth.Helpers.Parsing
       Metamorth.Helpers.TH
+      Metamorth.Interpretation.Parser.Parsing
+      Metamorth.Interpretation.Parser.Types
       Metamorth.Interpretation.Phonemes.Parsing
       Metamorth.Interpretation.Phonemes.Parsing.Types
       Metamorth.Interpretation.Phonemes.TH
