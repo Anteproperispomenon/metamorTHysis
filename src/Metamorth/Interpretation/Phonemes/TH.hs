@@ -10,6 +10,8 @@ module Metamorth.Interpretation.Phonemes.TH
   ) where
 
 import Control.Monad
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.State.Strict
 
 import Data.Foldable
 import Data.Functor
@@ -17,7 +19,7 @@ import Data.Maybe
 import Data.Tuple
 
 import Language.Haskell.TH
-import Language.Haskell.TH.Syntax
+import Language.Haskell.TH.Syntax hiding (lift)
 
 import THLego.Helpers qualified as THL
 
@@ -53,15 +55,26 @@ produceVariousDecs pps = do
   (_,decs) <- produceVariousData pps
   return decs
 
-produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name), [Dec])
+-- fmap (\((_,_,_,fncs),_) -> fncs) $ join $ runQ <$> produceVariousData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
+
+-- ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name, M.Map (String, String) Name), [Dec])
+
+{-
+  :: IO
+       ((PropertyData, M.Map String PhonemeHierarchy, M.Map String Name,M.Map (String, String) Name),
+[Dec])
+-}
+
+
+produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name, M.Map (String, String) Name), [Dec])
 produceVariousData pps = do
   propData <- producePropertyData pps
   let propDecs = propertyDecs propData
       phoneInv = ppsPhonemeInventory pps
-  (phonDats, phonGrps, patNoms, phonDecs) <- producePhonemeInventory propData phoneInv
+  (phonDats, phonGrps, patNoms, isFuncNames, phonDecs) <- producePhonemeInventory propData phoneInv
   -- let phonDecs = snd phonData
   --     phonDats = fst phonData
-  return ((propData, phonDats, patNoms), (propDecs <> phonDecs))
+  return ((propData, phonDats, patNoms, isFuncNames), (propDecs <> phonDecs))
 
 
 
@@ -190,7 +203,7 @@ produceDefaultRecV (AppT (ConT x) _)
 produceDefaultRecV _ = error "Encountered a type that isn't Bool or (Maybe ...)"
 
 
--- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either Language.Haskell.TH.Ppr
+-- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either Language.Haskell.TH.Ppr Control.Monad
 -- import Data.Text.IO qualified as TIO
 -- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 
@@ -242,26 +255,28 @@ producePhonemePatterns mp = do
         patRslt = PatSynD patName (PrefixPatSyn patVars) ImplBidir (nestedConPat cstrList baseConstr (map VarP patVars))
     return (patName, patRslt)
 
-producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, [Dec])
+producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, [Dec])
 producePhonemeInventory propData phi = do
   mainName <- newName "Phoneme"
-  (phoneHi, groupProps, decs) <- producePhonemeInventory' mainName propData phi
+  ((phoneHi, groupProps, decs), isGroupFuncsStuff) <- runStateT (producePhonemeInventory' "Phoneme" mainName propData phi) M.empty
   patMap <- producePhonemePatterns (phonemeConstructors groupProps)
   let patDecs = M.elems $ M.map snd patMap
       patNoms = M.map fst patMap
 
 
-  return (phoneHi, groupProps, patNoms, decs <> patDecs)
+  return (phoneHi, groupProps, patNoms, isGroupFuncsStuff, decs <> patDecs)
 
-producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
-producePhonemeInventory' nm propData (PhonemeSet mp) = do
-  (mpX, grpProps, decs) <- producePhonemeSet propData nm mp
+
+-- producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
+producePhonemeInventory' :: String -> Name -> PropertyData -> PhonemeInventory -> StateT (M.Map (String, String) Name) Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
+producePhonemeInventory' thisGrpStr nm propData (PhonemeSet mp) = do
+  (mpX, grpProps, decs) <- lift $ producePhonemeSet propData nm mp
   return (makeLeaves mpX, grpProps, decs)
-producePhonemeInventory' nm propData (PhonemeGroup mp) = do
+producePhonemeInventory' thisGrpStr nm propData (PhonemeGroup mp) = do
   -- rslts :: M.Map String (Name, ((M.Map String PhonemeHierarchy), [Dec]) )
   rslts <- forWithKey mp $ \str phi -> do
-    subName <- newName $ dataName str
-    (mpX, gProps, decs) <- producePhonemeInventory' subName propData phi
+    subName <- lift $ newName $ dataName str
+    (mpX, gProps, decs) <- producePhonemeInventory' str subName propData phi
     return (subName, (mpX, gProps, decs))
   
   let subDecs  = forMap rslts $ \(_,(_,_,dcls)) -> dcls
@@ -280,7 +295,7 @@ producePhonemeInventory' nm propData (PhonemeGroup mp) = do
   -- i.e. M.Map String (Name,[Type])
   subPats <- forWithKey subNoms $ \str nom -> do
     -- Adding "Ph" to distinguish it a bit...
-    sumName <- newName $ "Ph" <> (dataName str)
+    sumName <- lift $ newName $ "Ph" <> (dataName str)
     return (sumName, [ConT nom])
 
 {-
@@ -310,8 +325,8 @@ data GroupProps = GroupProps
     -- newSubFuncs :: M.Map String (Name, [Dec])
     newSubFuncs <- forWithKey downhillMap $ \anotherGroupStr subFuncNom -> do
       -- remember, "nm" is actually the top-level name here.
-      newFuncName <- newName $ "is" <> (dataName anotherGroupStr) <> "_" <> (nameBase nm)
-      newVar      <- newName "x"
+      newFuncName <- lift $ newName $ "is" <> (dataName anotherGroupStr) <> "_" <> (thisGrpStr)
+      newVar      <- lift $ newName "x"
       let newFuncSign = SigD newFuncName (THL.arrowChainT [ConT nm] (ConT ''Bool))
           -- produceSubMapClause constr (Just funcName) var
           -- newFuncBod1 = Clause [ConP subGrpNom [] [VarP newVar]] (NormalB (AppE (VarE subFuncNom) (VarE newVar))) []
@@ -319,6 +334,7 @@ data GroupProps = GroupProps
           newFuncBod2 = Clause [WildP] (NormalB (ConE 'False)) []
           newFuncDefn = FunD newFuncName [newFuncBod1, newFuncBod2]
           newFuncDecl = [newFuncSign, newFuncDefn]
+      modify $ M.insert (thisGrpStr, anotherGroupStr) newFuncName
       return (Just newFuncName, newFuncDecl)
     
     let newSubFuncNames = M.map fst newSubFuncs
@@ -330,7 +346,7 @@ data GroupProps = GroupProps
   -- isGroupFuncName
   -- This is a mostly pointless function whose purpose
   -- is to make the recursive steps easier.
-  igfName <- newName $ "is" <> (nameBase nm) <> "_" <> (nameBase nm)
+  igfName <- lift $ newName $ "is" <> (nameBase nm) <> "_" <> (nameBase nm)
   let groupStr = nameBase nm -- temp?
       igfSign  = SigD igfName (AppT (AppT ArrowT (ConT nm)) (ConT ''Bool))
       igfDecl  = FunD igfName [Clause [WildP] (NormalB (ConE 'True)) []]
