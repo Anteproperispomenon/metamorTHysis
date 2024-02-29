@@ -80,5 +80,9 @@ data GroupReferences = GroupReferences
   , grGroupParents :: [(String, Name)]
   -- | The constructors needed to create this group.
   , grGroupConstructors :: [Name]
+  -- | A `M.Map` from phoneme `String`s to patterns
+  --   that can be used to construct/match values of
+  --   this group's type.
+  , grGroupPatterns :: M.Map String (Name, Int)
   } deriving (Show, Eq)
 
