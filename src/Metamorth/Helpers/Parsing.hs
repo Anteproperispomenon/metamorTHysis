@@ -9,6 +9,8 @@ module Metamorth.Helpers.Parsing
   , consProd
   
   , forParseOnly
+
+  , (AT.<?>)
   ) where
 
 import Data.Attoparsec.Text qualified as AT
