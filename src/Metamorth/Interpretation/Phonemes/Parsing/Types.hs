@@ -22,6 +22,7 @@ module Metamorth.Interpretation.Phonemes.Parsing.Types
   , modifyStructure
   ) where
 
+import Metamorth.Helpers.Parsing
 import Metamorth.Interpretation.Phonemes.Types
 
 import Data.List (intercalate)
@@ -67,9 +68,6 @@ defaultParsingState
 --   * The writer is used to collect error messages
 --   * The state holds all the important info.
 type PhonemeParser a = RWST () [String] PhonemeParsingState AT.Parser a
-
-forParseOnly :: T.Text -> AT.Parser a -> Either String a
-forParseOnly txt prs = AT.parseOnly prs txt
 
 -- | Run a `PhonemeParser`, returning the result if
 --   no errors occurred, and failing with a list of

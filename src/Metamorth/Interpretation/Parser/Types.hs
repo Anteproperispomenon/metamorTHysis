@@ -2,10 +2,13 @@ module Metamorth.Interpretation.Parser.Types
   ( HeaderData(..)
   , PhonemePattern(..)
   , CharPattern(..)
-  , validCharPattern
+  , processRawPhonePattern
   
   , RawPhonemePattern(..)
+  , CharPatternRaw(..)
   ) where
+
+import Data.Bifunctor
 
 import Data.Map.Strict qualified as M
 
@@ -82,7 +85,9 @@ validCharPatternE' [WordEndR] = Right ()
 validCharPatternE' (WordStartR:xs) = Left "Can't have a word-start mark in the middle of a pattern."
 validCharPatternE' (WordEndR:xs)   = Left "Can't have a word-end mark in the middle of a pattern."
 
-validateCharPatternE :: [CharPatternRaw] -> Either String (PhonemePattern)
+-- | Convert a list of `CharPatternRaw`s into a
+--   single `PhonemePattern`
+validateCharPatternE :: [CharPatternRaw] -> Either String PhonemePattern
 validateCharPatternE cpr = do
   (rslt, st) <- runStateT (validateCharPatternEX cpr) Nothing
   case st of
@@ -127,24 +132,39 @@ data PhonemePattern = PhonemePattern
   , charPatsPP :: [CharPattern] -- ^ The pattern of `Char`s for this phoneme.
   } deriving (Show, Eq)
 
+makeLower :: PhonemePattern -> PhonemePattern
+makeLower x = x { isUpperPP = False }
+
+makeUpper :: PhonemePattern -> PhonemePattern
+makeUpper x = x { isUpperPP = True }
+
 -- | The Raw Parsed type of a phoneme pattern.
 --   Needs to be converted to a list of possible
 --   `PhonemePattern`s.
 data RawPhonemePattern = RawPhonemePattern
   { modCharRP  :: [Char] -- ^ Modifier Characters for this pattern.
-  , charPatsRP :: [CharPattern]
+  , charPatsRP :: [CharPatternRaw]
   } deriving (Show, Eq)
 
 -- | Process a `RawPhonemePattern` into one or more
 --   valid `PhonemePattern`s.
-processRawPhonePattern :: RawPhonemePattern -> Either [String] [RawPhonemePattern]
+processRawPhonePattern :: RawPhonemePattern -> Either [String] PhonemePattern
 processRawPhonePattern pat 
-  | hasUpper && hasLower = Left ["Cannot declare a pattern to be both upper and lower case."]
-  | otherwise = Left ["incomplete function"]
-
+  | otherwise = bimap (:collectedErrors) makeCase $ validateCharPatternE (charPatsRP pat)
+  -- | otherwise = Left ["incomplete function"]
+  
   where 
     mods = modCharRP pat
     hasUpper = '+' `elem` mods
     hasLower = '-' `elem` mods
+    makeCase = if | hasUpper  -> makeUpper
+                  | hasLower  -> makeLower
+                  | otherwise -> id
+
+    collectedErrors = concat [bothCaseError]
+    -- Errors
+    bothCaseError = if (hasUpper && hasLower) 
+      then ["Cannot declare a pattern to be both upper and lower case."] 
+      else []
 
 

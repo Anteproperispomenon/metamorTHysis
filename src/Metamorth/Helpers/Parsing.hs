@@ -5,11 +5,18 @@ module Metamorth.Helpers.Parsing
   , skipHorizontalSpace1
 
   , takeIdentifier
+  , isFollowId
+  , consProd
+  
+  , forParseOnly
   ) where
 
 import Data.Attoparsec.Text qualified as AT
 
+import Data.Functor
 import Data.Text qualified as T
+import Data.Char (isAlphaNum)
+
 
 skipHoriz :: AT.Parser ()
 skipHoriz = AT.skipWhile AT.isHorizontalSpace
@@ -29,3 +36,16 @@ skipHorizontalSpace1 = skipHoriz1
 --   acceptable set of the rest of the chars.
 takeIdentifier :: (Char -> Bool) -> (Char -> Bool) -> AT.Parser T.Text
 takeIdentifier p1 p2 = T.cons <$> AT.satisfy p1 <*> AT.takeWhile p2
+
+-- | Common predicate to use for second argument
+--   of `takeIdentifier`.
+isFollowId :: Char -> Bool
+isFollowId x = isAlphaNum x || (x == '_') || (x == '-') || (x == '\'')
+
+forParseOnly :: T.Text -> AT.Parser a -> Either String a
+forParseOnly txt prs = AT.parseOnly prs txt
+
+-- | "Consume and produce". i.e. consume any `Char`,
+--   followed by outputting the specified value.
+consProd :: a -> AT.Parser a
+consProd x = AT.anyChar $> x
