@@ -11,6 +11,7 @@ import Control.Monad.Trans.RWS.CPS
 import Data.Attoparsec.Text qualified as AT
 
 import Data.Functor
+import Data.Bifunctor
 
 import Data.Char (ord, chr, isSpace, isLower, isAlpha)
 import Data.Text qualified as T
@@ -31,9 +32,6 @@ import Data.Set        qualified as S
 -- - : This is a  lowercase sequence
 -- 
 
---------------------------------
--- Helper Parsers
-
 ----------------------------------------------------------------
 -- Helper Parsers
 ----------------------------------------------------------------
@@ -49,11 +47,20 @@ parseCodepointR = do
   x <- parseCodepoint
   return $ PlainCharR x
 
+parseCodepointRS :: ParserParser CharPatternRaw
+parseCodepointRS = lift parseCodepointR
+
 parseStartPoint :: AT.Parser CharPatternRaw
 parseStartPoint = (AT.char '^') $> WordStartR
 
 parseEndPoint :: AT.Parser CharPatternRaw
 parseEndPoint = (AT.char '$') $> WordEndR
+
+parseStartPointS :: ParserParser CharPatternRaw
+parseStartPointS = lift parseStartPoint
+
+parseEndPointS :: ParserParser CharPatternRaw
+parseEndPointS = lift parseEndPoint
 
 -- | Parse an escaped character.
 -- 
@@ -82,6 +89,12 @@ parseEscaped = do
     '-' -> '-'
     y   -> y
   -}
+
+parseEscapedR :: AT.Parser CharPatternRaw
+parseEscapedR = PlainCharR <$> parseEscaped
+
+parseEscapedRS :: ParserParser CharPatternRaw
+parseEscapedRS = lift parseEscapedR
 
 -- | For parsing class names in phoneme patterns.
 parseClassName :: AT.Parser String
@@ -114,6 +127,17 @@ parseNonSpace = AT.satisfy (not . isSpace)
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
 
+parseNonSpaceRS :: ParserParser CharPatternRaw
+parseNonSpaceRS = lift parseNonSpaceR
+
+--------------------------------
+-- Special Char Parsers
+
+parseSpecials :: AT.Parser [Char] 
+parseSpecials = AT.sepBy (AT.satisfy (\x -> x == '+' || x == '-')) skipHoriz1
+
+parseSpecialsS :: ParserParser [Char]
+parseSpecialsS = lift parseSpecials
 
 ----------------------------------------------------------------
 -- Class Pattern/Declaration Parsers
@@ -183,14 +207,38 @@ parseOrthographyChoice = do
 -- Phoneme Pattern Parsers
 ----------------------------------------------------------------
 
-
-
-
-
-
-
-
-
+parsePhonemePatS :: ParserParser ()
+parsePhonemePatS = do
+  lift skipHoriz
+  phoneName <- T.unpack <$> lift (takeIdentifier isAlpha isFollowId)
+  -- This... should work? Since `takeIdentifier` will consume
+  -- all the possible characters that any property name could
+  -- use.
+  lift skipHoriz
+  argNames  <- lift (AT.sepBy (T.unpack <$> takeIdentifier isAlpha isFollowId) skipHoriz1)
+  let pn = PhoneName phoneName argNames
+  lift skipHoriz 
+  _ <- lift ((AT.char ':') <?> ("Phoneme pattern for \"" <> phoneName <> "\" is missing ':'."))
+  lift skipHoriz
+  -- hmm...
+  specs <- AT.option [] (parseSpecialsS <* (lift skipHoriz1))
+  
+  -- Set the internal phoneme name to phoneName.
+  runOnPhoneme phoneName $ do
+    thePats <- AT.sepBy1' 
+      ( parseCodepointRS 
+        <|> parseClassNameRS 
+        <|> parseEscapedRS 
+        <|> parseStartPointS 
+        <|> parseEndPointS 
+        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go last.
+      ) 
+      (lift skipHoriz1)
+    -- hmm...
+    let ePhonePats = processRawPhonePattern (RawPhonemePattern specs thePats)
+    case ePhonePats of
+      (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
+      (Right rslt) -> addPhonemePattern pn rslt
 
 
 

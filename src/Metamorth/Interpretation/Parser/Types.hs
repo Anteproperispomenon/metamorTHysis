@@ -147,7 +147,8 @@ data RawPhonemePattern = RawPhonemePattern
   } deriving (Show, Eq)
 
 -- | Process a `RawPhonemePattern` into one or more
---   valid `PhonemePattern`s.
+--   valid `PhonemePattern`s. This, uh... needs some
+--   more work.
 processRawPhonePattern :: RawPhonemePattern -> Either [String] PhonemePattern
 processRawPhonePattern pat 
   | otherwise = bimap (:collectedErrors) makeCase $ validateCharPatternE (charPatsRP pat)
