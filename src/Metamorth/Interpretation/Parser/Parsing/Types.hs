@@ -8,6 +8,7 @@ module Metamorth.Interpretation.Parser.Parsing.Types
   , runOnPhoneme
   , runParserParser
   , execParserParser
+  , embedParserParser
   ) where
 
 import Data.Function
@@ -82,6 +83,9 @@ execParserParser prs txt = forParseOnly txt $ do
   case errs of
     [] -> return stt
     xs -> fail $ intercalate "\n" xs
+
+embedParserParser :: ParserParser a -> AT.Parser (a, ParserParsingState, [String])
+embedParserParser prs = runRWST prs "N/A" defParseState
 
 -- | A constructor for how phoneme names
 --   are written in phoneme patterns.

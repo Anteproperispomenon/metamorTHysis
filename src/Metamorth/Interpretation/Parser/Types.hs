@@ -26,15 +26,14 @@ import Data.Maybe
 data HeaderData = HeaderData
   -- | The name of the orthography this parser is for.
   { hdOrthName    :: String
-  -- | A map from names of classes to
+  -- | The name of the phoneme set this parser
+  --   is working with.
+  , hdPhoneSet    :: String
+  --   A map from names of classes to
   --   the `Char`s in them.
-  , hdCharClasses :: M.Map String [Char]
+  -- , hdCharClasses :: M.Map String [Char]
   } deriving (Show, Eq)
 
--- | The patterns that can make up a character.
--- 
---   e.g. @ts' : t s *apost@ would become
---   > [PlainChar 't', PlainChar 's', CharClass "apost"]
 data CharPatternRaw
   = PlainCharR Char   -- ^ A single `Char`.
   | CharClassR String -- ^ Any member of a class from the header.
@@ -42,6 +41,10 @@ data CharPatternRaw
   | WordEndR          -- ^ The end of a word.
   deriving (Show, Eq, Ord)
 
+-- | The patterns that can make up a character.
+-- 
+--   e.g. @ts' : t s *apost@ would become
+--   > [PlainChar 't', PlainChar 's', CharClass "apost"]
 data CharPattern
   = PlainChar Char   -- ^ A single `Char`.
   | CharOptCase Char -- ^ Any case of a `Char`.

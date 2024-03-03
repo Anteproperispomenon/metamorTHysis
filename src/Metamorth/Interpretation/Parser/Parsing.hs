@@ -1,5 +1,5 @@
 module Metamorth.Interpretation.Parser.Parsing
-  (
+  ( parseOrthographyFile
 
   ) where
 
@@ -10,6 +10,7 @@ import Control.Monad.Trans.RWS.CPS
 
 import Data.Attoparsec.Text qualified as AT
 
+import Data.List (groupBy)
 import Data.Functor
 import Data.Bifunctor
 
@@ -31,6 +32,9 @@ import Data.Set        qualified as S
 -- + : This is an uppercase sequence
 -- - : This is a  lowercase sequence
 -- 
+
+-- TODO: Allow comments in data.
+-- Will use '#' to indicate comments.
 
 ----------------------------------------------------------------
 -- Helper Parsers
@@ -134,7 +138,7 @@ parseNonSpaceRS = lift parseNonSpaceR
 -- Special Char Parsers
 
 parseSpecials :: AT.Parser [Char] 
-parseSpecials = AT.sepBy (AT.satisfy (\x -> x == '+' || x == '-')) skipHoriz1
+parseSpecials = AT.sepBy (AT.satisfy (\x -> x == '+' || x == '-' || x == '%')) skipHoriz
 
 parseSpecialsS :: ParserParser [Char]
 parseSpecialsS = lift parseSpecials
@@ -143,7 +147,7 @@ parseSpecialsS = lift parseSpecials
 -- Class Pattern/Declaration Parsers
 ----------------------------------------------------------------
 
--- | Parser a class declaration.
+-- | Parse a class declaration.
 parseClassDec :: AT.Parser (String, S.Set Char)
 parseClassDec = do
   _ <- "class"
@@ -168,6 +172,22 @@ parseClassDecS = do
     Nothing  -> do
         let newMap = M.insert clName clSet theMap
         modify $ \x -> x {ppsClassDictionary = newMap}
+
+-- | Parse the class declaration section.
+parseClassDecSection :: ParserParser ()
+parseClassDecSection = do
+  lift AT.skipSpace
+  _ <- AT.many' $ do
+    parseClassDecS
+    lift skipHoriz
+    lift AT.endOfLine
+    lift AT.skipSpace
+  lift AT.skipSpace
+  _ <- lift ("====" <?> "Classes: Separator1")
+  _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
+  lift skipHoriz
+  lift AT.endOfLine
+
 
 ----------------------------------------------------------------
 -- Orthography Properties Parsers
@@ -199,9 +219,28 @@ parseOrthographyChoice = do
   _ <- AT.option "" "set"
   skipHoriz
   _ <- AT.char ':' <?> "Phoneme set declaration is missing ':'."
-  T.unpack <$> takeIdentifier isAlpha isFollowId
+  skipHoriz
+  (T.unpack <$> takeIdentifier isAlpha isFollowId) <?> "Phoneme Set Name"
 
 -- Place other phoneme property parsers here.
+
+-- | Parse the orthography's `HeaderData` and
+--   the separator.
+parseOrthographyProps :: AT.Parser HeaderData
+parseOrthographyProps = do
+  AT.skipSpace <?> "Header: skipSpace 1"
+  nom <- parseOrthographyName <?> "Header: parseOrthographyName"
+  AT.skipSpace <?> "Header: skipSpace 2"
+  pho <- parseOrthographyChoice <?> "Header: parseOrthographyChoice"
+  skipHoriz    <?> "Header: skipHoriz 1"
+  AT.endOfLine <?> "Header: endOfLine 1"
+  AT.skipSpace <?> "Header: skipSpace 3"
+  _ <- "===="  <?> "Header: Separator"
+  _ <- (AT.takeWhile (== '=')) <?> "Separator"
+  skipHoriz <?> "Header: skipHoriz 2"
+  AT.endOfLine <?> "Header: endOfLine 2"
+  return $ HeaderData nom pho
+
 
 ----------------------------------------------------------------
 -- Phoneme Pattern Parsers
@@ -210,7 +249,7 @@ parseOrthographyChoice = do
 parsePhonemePatS :: ParserParser ()
 parsePhonemePatS = do
   lift skipHoriz
-  phoneName <- T.unpack <$> lift (takeIdentifier isAlpha isFollowId)
+  phoneName <- T.unpack <$> lift ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
   -- This... should work? Since `takeIdentifier` will consume
   -- all the possible characters that any property name could
   -- use.
@@ -240,5 +279,50 @@ parsePhonemePatS = do
       (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemePattern pn rslt
 
+
+----------------------------------------------------------------
+-- Full File Parsers
+----------------------------------------------------------------
+
+parseOrthographyFile :: AT.Parser (HeaderData, ParserParsingState, [String])
+parseOrthographyFile = do
+  hdr <- parseOrthographyProps
+  (_rslt, stt, errs) <- embedParserParser $ do
+    -- Parse the class instances
+    parseClassDecSection
+    -- Parse the phoneme patterns
+    _ <- AT.many' $ do
+      -- Skip spaces...
+      lift AT.skipSpace
+      parsePhonemePatS
+      lift skipHoriz
+      lift AT.endOfLine
+    lift AT.skipSpace
+  
+  let phonePatsM  = ppsPhonemePatterns stt
+      phoneNames  = M.keys phonePatsM
+      phoneGroups = groupBy eqOnPN phoneNames
+      wrongPhones = filter (not . sameArgsPN) phoneGroups
+      phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
+  return (hdr,stt,errs ++ phoneErrs)
+
+getStrPN :: [PhoneName] -> String
+getStrPN [] = "<??>"
+getStrPN ((PhoneName nom _):_) = nom
+
+-- :m + Metamorth.Interpretation.Parser.Parsing Metamorth.Interpretation.Parser.Types Data.Either Control.Monad
+-- import Data.Text.IO qualified as TIO
+-- import Data.Attoparsec.Text qualified as AT
+-- AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample1.thyp"
+
+
+{-
+eqOnPN = (==) `on` pnName
+
+-- | Check that a list of `PhoneName`s all have
+--   the same number of arguments.
+sameArgsPN :: [PhoneName] -> Bool
+sameArgsPN []  = True
+-}
 
 
