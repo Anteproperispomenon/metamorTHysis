@@ -34,6 +34,7 @@ dependencies:
 - text
 - th-lego
 - transformers
+- trie-simple
 
 ghc-options:
 - -Wall
