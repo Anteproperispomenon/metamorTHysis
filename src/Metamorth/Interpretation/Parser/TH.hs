@@ -82,8 +82,9 @@ the total number of generated functions.
 
 
 module Metamorth.Interpretation.Parser.TH
-  (
-
+  ( setupTrie'
+  , pathifyTrie
+  , tempTester
   ) where
 
 import Data.Attoparsec.Text qualified as AT
@@ -130,15 +131,58 @@ makeTheParser
   -> ()
 makeTheParser _ _ _ _ = ()
 
+{-
+x <- AT.peekChar'
+case x of
+  c1 -> AT.anyChar 
 
+-}
 
 
 ----------------------------------------------------------------
 -- Helper Functions
 ----------------------------------------------------------------
 
+{-
+data ParserParsingState = ParserParsingState
+  { ppsClassDictionary :: M.Map String (S.Set Char)
+  , ppsPhonemePatterns :: M.Map PhoneName [PhonemePattern]
+  } deriving (Show, Eq)
+
+parseOrthographyFile :: AT.Parser (HeaderData, ParserParsingState, [String])
+
+data PhonemePattern = PhonemePattern 
+  { isUpperPP  :: Caseness      -- ^ Is this pattern upper-case?
+  , charPatsPP :: [CharPattern] -- ^ The pattern of `Char`s for this phoneme.
+  } deriving (Show, Eq)
+
+-}
+
+-- :m + Metamorth.Interpretation.Parser.Parsing Metamorth.Interpretation.Parser.Types Data.Either Control.Monad Metamorth.Interpretation.Parser.TH
+-- import Data.Text.IO qualified as TIO
+-- import Data.Attoparsec.Text qualified as AT
+-- setupTrie' <$> ppsPhonemePatterns <$> (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample1.thyp"
+-- (tempTester (\(_,x,_) -> setupTrie' $ ppsPhonemePatterns $ x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample1.thyp"
+-- 
+
+pathifyTrie :: M.Map PhoneName [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness))
+pathifyTrie = unifyPaths . setupTrie'
+
+setupTrie' :: M.Map PhoneName [PhonemePattern] -> TM.TMap CharPattern (PhoneName, Caseness)
+setupTrie' phonePats = TM.fromList $ concatMap phoneStuff $ M.toList phonePats
+
+  where
+    phoneStuff :: (PhoneName, [PhonemePattern]) -> [([CharPattern], (PhoneName, Caseness))]
+    phoneStuff (pname, phPats) = forMap phPats $ \thisPat ->
+      (charPatsPP thisPat, (pname, isUpperPP thisPat))
+
+tempTester :: (a -> b) -> Either String a -> IO b
+tempTester f (Right x) = return $ f x
+tempTester f (Left st) = fail $ st
+
+{-
 
 
-
+-}
 
 

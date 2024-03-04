@@ -8,12 +8,20 @@ Description : Helpers for Tries
 Copyright   : (c) David Wilson, 2024
 License     : BSD-3
 
+Helpers for `TM.TMap`s. from the package "simple-trie".
+
+Of particular use to this project is `unifyPaths`. This
+annotates all internal nodes of a `TM.TMap` with a label
+such that if two nodes have the same label, then the same
+parser function generated can be used for either branch.
+
 -}
 
 module Metamorth.Helpers.Trie
   ( TrieAnnotation(..)
   , isLeafAnn
   , unifyPaths
+  , getSubTries
   -- , annotateTrie
   -- , annotifyTrie
   -- , setifyTrie
@@ -75,14 +83,16 @@ annotateTrie initialMap = finalTrie
 -- invertTrie
 
 -- | Get a list of the sub-tries of a trie.
-getSubTries :: (Ord c) => TM.TMap c a -> [TM.TMap c a]
-getSubTries tm
+getSubTriesX :: (Ord c) => TM.TMap c a -> [TM.TMap c a]
+getSubTriesX tm
   = map (\x -> snd (TM.match x tm)) keys1c
   where
     keys1c = filter len1 $ TS.toList $ TS.prefixes $ TM.keysTSet tm
 
-getSubTries' :: (Ord c) => TM.TMap c a -> [(c,(Maybe a, TM.TMap c a))]
-getSubTries' tm
+-- | Get a list of the sub-tries of a trie, along
+--   with their elements and prefix.
+getSubTries :: (Ord c) => TM.TMap c a -> [(c,(Maybe a, TM.TMap c a))]
+getSubTries tm
   = map (\x -> (x, (TM.match [x] tm))) keys1c
   where
     keys1c = mapMaybe len1' $ TS.toList $ TS.prefixes $ TM.keysTSet tm
@@ -105,7 +115,7 @@ setifyTrie' :: (Ord c, Ord a) => S.Set (TM.TMap c a) -> TM.TMap c a -> S.Set (TM
 setifyTrie' st tmp = case sbTries of
   [] -> st -- Maybe?
   xs -> foldl setifyTrie' (S.insert tmp st) sbTries
-  where sbTries = getSubTries tmp
+  where sbTries = getSubTriesX tmp
 
 -- | Unify and annotate a `TM.TMap`.
 annotifyTrie  :: (Ord c, Ord a) => TM.TMap c a -> TM.TMap c (TrieAnnotation, Maybe a)
@@ -119,7 +129,7 @@ annotifyTrie' trieDict prfx thisMVal trieAcc thisTrie = case sbTries of
     foldl (\theTrieMap (x,(mVal, subTrie)) -> annotifyTrie' trieDict (prfx ++ [x]) mVal theTrieMap subTrie) (TM.insert prfx (annot, thisMVal) trieAcc) sbTries
   where
     annot = fromMaybe TrieLeaf $ M.lookup thisTrie trieDict
-    sbTries = getSubTries' thisTrie
+    sbTries = getSubTries thisTrie
 
 -- (c,(Maybe a,TM.TMap c a))
 -- (x,(mVal, subTrie))

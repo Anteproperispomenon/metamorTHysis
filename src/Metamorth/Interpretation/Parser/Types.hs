@@ -2,6 +2,7 @@ module Metamorth.Interpretation.Parser.Types
   ( HeaderData(..)
   , PhonemePattern(..)
   , CharPattern(..)
+  , Caseness(..)
   , processRawPhonePattern
   
   , RawPhonemePattern(..)
@@ -94,8 +95,8 @@ validateCharPatternE :: [CharPatternRaw] -> Either String PhonemePattern
 validateCharPatternE cpr = do
   (rslt, st) <- runStateT (validateCharPatternEX cpr) Nothing
   case st of
-    (Just True) -> return $ PhonemePattern True  rslt
-    _           -> return $ PhonemePattern False rslt
+    (Just True) -> return $ PhonemePattern CMaj rslt
+    _           -> return $ PhonemePattern CMin rslt
 
 validateCharPatternEX :: [CharPatternRaw] -> StateT (Maybe Bool) (Either String) [CharPattern]
 validateCharPatternEX [] = lift $ Left "Can't have an empty pattern."
@@ -113,33 +114,77 @@ validateCharPatternE' [] = return []
 validateCharPatternE' ((PlainCharR x):xs) = do 
   cst <- get
   case cst of
-    Nothing -> do 
+    Nothing -> do
       when (isCasable x) (put $ Just (isTupper x))
       ((PlainChar x):) <$> validateCharPatternE' xs
     (Just cs) -> do
       ((CharOptCase (toLower x)):) <$> validateCharPatternE' xs
-  ((PlainChar x):) <$> validateCharPatternE' xs
+  -- ((PlainChar x):) <$> validateCharPatternE' xs -- ???
 validateCharPatternE' ((CharClassR x):xs) = ((CharClass x):) <$> validateCharPatternE' xs
 validateCharPatternE' [WordEndR] = return [WordEnd]
 validateCharPatternE' (WordStartR:xs) = lift $ Left "Can't have a word-start mark in the middle of a pattern."
 validateCharPatternE' (WordEndR:xs)   = lift $ Left "Can't have a word-end mark in the middle of a pattern."
 
+-- | Alternate version of `validateCharPatternE`.
+validateCharPatternZ :: [CharPatternRaw] -> Either String PhonemePattern
+validateCharPatternZ cpr = do
+  (rslt, _st) <- runStateT (validateCharPatternZX cpr) Nothing
+  return $ PhonemePattern CDep rslt
 
+
+validateCharPatternZX :: [CharPatternRaw] -> StateT (Maybe Bool) (Either String) [CharPattern]
+validateCharPatternZX [] = lift $ Left "Can't have an empty pattern."
+validateCharPatternZX ((PlainCharR x):xs) = do
+  when (isCasable x) (put $ Just (isTupper x))
+  ((CharOptCase x):) <$> validateCharPatternZ' xs
+validateCharPatternZX ((CharClassR x):xs) = ((CharClass x):) <$> validateCharPatternZ' xs
+validateCharPatternZX [WordStartR] = lift $ Left "Can't have a pattern with just a starting word mark."
+validateCharPatternZX [WordStartR,WordEndR] = lift $ Left "Can't have a pattern that consists of just start and end marks"
+validateCharPatternZX (WordEndR:xs)   = lift $ Left "Can't start a pattern with a word-end mark."
+validateCharPatternZX (WordStartR:xs) = (WordStart:) <$> validateCharPatternZ' xs
+
+validateCharPatternZ' :: [CharPatternRaw] -> StateT (Maybe Bool) (Either String) [CharPattern]
+validateCharPatternZ' [] = return []
+validateCharPatternZ' ((PlainCharR x):xs) = do 
+  cst <- get
+  case cst of
+    Nothing -> do
+      when (isCasable x) (put $ Just (isTupper x))
+      ((caseChar x):) <$> validateCharPatternZ' xs
+    (Just cs) -> do
+      ((caseChar x):) <$> validateCharPatternZ' xs
+  -- ((PlainChar x):) <$> validateCharPatternZ' xs -- ???
+validateCharPatternZ' ((CharClassR x):xs) = ((CharClass x):) <$> validateCharPatternZ' xs
+validateCharPatternZ' [WordEndR] = return [WordEnd]
+validateCharPatternZ' (WordStartR:xs) = lift $ Left "Can't have a word-start mark in the middle of a pattern."
+validateCharPatternZ' (WordEndR:xs)   = lift $ Left "Can't have a word-end mark in the middle of a pattern."
+
+caseChar :: Char -> CharPattern
+caseChar c
+  | isCasable c = CharOptCase (toLower c) -- Maybe ?
+  | otherwise   = PlainChar c
+
+
+data Caseness
+  = CMaj -- ^ Upper-Case, or "Majuscule"
+  | CMin -- ^ Lower-Case, or "Minuscule"
+  | CDep -- ^ Dependent on other factors.
+  deriving (Show, Eq, Ord)
 
 -- | A pattern that makes up a single phoneme.
 --   Consists of multiple `CharPattern`s and 
 --   a flag for whether the pattern is upper
 --   or lower case.
 data PhonemePattern = PhonemePattern 
-  { isUpperPP  :: Bool          -- ^ Is this pattern upper-case?
+  { isUpperPP  :: Caseness      -- ^ Is this pattern upper-case?
   , charPatsPP :: [CharPattern] -- ^ The pattern of `Char`s for this phoneme.
   } deriving (Show, Eq)
 
 makeLower :: PhonemePattern -> PhonemePattern
-makeLower x = x { isUpperPP = False }
+makeLower x = x { isUpperPP = CMin }
 
 makeUpper :: PhonemePattern -> PhonemePattern
-makeUpper x = x { isUpperPP = True }
+makeUpper x = x { isUpperPP = CMaj }
 
 -- | The Raw Parsed type of a phoneme pattern.
 --   Needs to be converted to a list of possible
@@ -153,8 +198,9 @@ data RawPhonemePattern = RawPhonemePattern
 --   valid `PhonemePattern`s. This, uh... needs some
 --   more work.
 processRawPhonePattern :: RawPhonemePattern -> Either [String] PhonemePattern
-processRawPhonePattern pat 
-  | otherwise = bimap (:collectedErrors) makeCase $ validateCharPatternE (charPatsRP pat)
+processRawPhonePattern pat
+  | (hasUpper || hasLower) = bimap (:collectedErrors) makeCase $ validateCharPatternE (charPatsRP pat)
+  | otherwise              = bimap (:collectedErrors) makeCase $ validateCharPatternZ (charPatsRP pat)
   -- | otherwise = Left ["incomplete function"]
   
   where 
