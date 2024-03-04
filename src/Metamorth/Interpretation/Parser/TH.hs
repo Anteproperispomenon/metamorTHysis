@@ -70,12 +70,13 @@ use the same state in those two spots, like so:
      ║
 @
 
-I'm not sure what the best way to achieve this
-kind of sharing is. My current thought is to
-create a map/trie of backwards paths to create
-the names of functions, and then use those names
-when processing the forwards try.
-
+This can be accomplished by using `unifyPaths`
+from "Metamorth.Helpers.Trie". It annotates each
+branch of a `TM.TMap`/Trie with a label such that
+two branches with the same label can be assumed
+to be the same state. Thus only one function
+needs to be generated for either state, reducing
+the total number of generated functions.
 
 -}
 
@@ -92,6 +93,7 @@ import Data.Text qualified as T -- ?
 import Data.Map.Strict qualified as M
 
 import Data.Trie.Map qualified as TM
+import Metamorth.Helpers.Trie
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
@@ -99,6 +101,7 @@ import Language.Haskell.TH.Syntax hiding (lift)
 import Metamorth.Interpretation.Parser.Types
 import Metamorth.Interpretation.Parser.Parsing.Types
 import Metamorth.Helpers.TH
+
 
 -- How to check for the end of a word:
 -- Create a bool function that checks
@@ -114,6 +117,10 @@ import Metamorth.Helpers.TH
 --                    else (pure phone) 
 -- @
 
+----------------------------------------------------------------
+-- Main Constructor
+----------------------------------------------------------------
+
 
 makeTheParser 
   :: M.Map String Name                  -- ^ A `M.Map` from `String`s to Pattern Synonym `Name`s.
@@ -122,6 +129,16 @@ makeTheParser
   -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an lower-case character.
   -> ()
 makeTheParser _ _ _ _ = ()
+
+
+
+
+----------------------------------------------------------------
+-- Helper Functions
+----------------------------------------------------------------
+
+
+
 
 
 
