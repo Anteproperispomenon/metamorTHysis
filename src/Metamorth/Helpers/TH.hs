@@ -10,6 +10,7 @@ module Metamorth.Helpers.TH
   , showSumInstance
   , showSumProdInstance
   , showSumProdInstanceAlt
+  , intersperseInfixRE
   , nestedConPat
   , forMap
   , first
@@ -155,6 +156,25 @@ showSumProdClauseAlt (phoneName, phoneString, n)
 nestedConPat :: [Name] -> Name -> [Pat] -> Pat
 nestedConPat [] nom pats     = ConP nom [] pats
 nestedConPat (c:cs) nom pats = ConP   c [] [nestedConPat cs nom pats]
+
+-- | Essentially the same as `THLego.Helpers.intersperseInfixRE`, but
+--   with a right-fold instead of a left-fold. For example, this means
+--   that 
+--
+--   @
+--   intersperseInfixRE (||) [x,y,z,w]
+--   == (x || (y || (z || w)))
+--   @
+-- 
+--   Instead of:
+-- 
+--   @
+--   intersperseInfixE  (||) [x,y,z,w]
+--   == (((x || y) || z) || w)
+--   @
+intersperseInfixRE :: Exp -> NonEmpty Exp -> Exp
+intersperseInfixRE op =
+  foldr1 (\l r -> InfixE (Just l) op (Just r))
 
 
 -- [ConP Data.Either.Right [] [VarP x_1]]

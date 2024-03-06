@@ -1,8 +1,16 @@
 module Metamorth.Helpers.List
   ( nubSort 
+  , liftEitherList
+  , withZip
+  , withZipM
   ) where
 
+import Control.Monad (zipWithM)
+
 import Data.List qualified as L
+
+import Metamorth.Helpers.Either (liftEitherList)
+
 
 -- | A combination of `L.sort` and `L.nub`. This should
 --   be faster than @`L.nub` . `L.sort`@ and possibly
@@ -76,4 +84,10 @@ pairwiseMerge [] = []
 pairwiseMerge [xs] = [xs]
 pairwiseMerge (xs:ys:xss) = (mergeRuns xs ys) : pairwiseMerge xss
 
+-- | Like zipWith, but with a different argument order.
+withZip :: [a] -> [b] -> (a -> b -> c) -> [c]
+withZip xs ys f = zipWith f xs ys
 
+-- | Like zipWithM, but with a different argument order.
+withZipM :: (Applicative m) => [a] -> [b] -> (a -> b -> m c) -> m [c]
+withZipM xs ys f = zipWithM f xs ys

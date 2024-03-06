@@ -1,9 +1,11 @@
 module Metamorth.Helpers.Char
   ( isTupper
   , isCasable
+  , getCases
   ) where
 
 import Data.Char
+import Data.List (nub)
 
 -- | Test whether a `Char` is Upper/Title case.
 --   This is here because both `isUpper` and
@@ -21,4 +23,16 @@ isTupper x = isUpperCase x || (generalCategory x == TitlecaseLetter)
 --   apostrophes.
 isCasable :: Char -> Bool
 isCasable x = (generalCategory x) <= TitlecaseLetter
-  
+
+getCases :: Char -> [Char]
+getCases c = nub [c,c1,c2,c3]
+  -- | (c == c1) && (c  == c2) && (c == c3) = [c]
+  -- | (c == c2) && (c  == c3) = [c,c1]
+  -- | (c == c1) && (c2 == c3) = [c,c2]
+  -- | (c /= c1) && (c  /= c2) && (c /= c3) = nub [c,c1,c2,c3]
+  where
+    c1 = toLower c
+    c2 = toUpper c
+    c3 = toTitle c
+    -- safeTail []     = []
+    -- safeTail (x:xs) = xs
