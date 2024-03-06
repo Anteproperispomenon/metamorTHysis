@@ -177,10 +177,12 @@ makeGuards
   -> (M.Map String ([M.Map String Name])) -- ^ Map for constructors of sub-elements.
   -> (M.Map String Name)           -- ^ Map for class function names.
   -> Name                          -- ^ Name of the "end of word" function.
+  -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
   -> Either [String] (Body, [Maybe ()])
-makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc = do
+makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
-  return (GuardedB $ map (first NormalG) grds, subs)
+  lstGrd       <- finalRslt
+  return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], subs)
   
   where
     -- Since TrieAnnotation should always be present, it should
@@ -193,16 +195,29 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
       -- cstr <- eitherMaybe' (M.lookup )
       case (ann, mPhone) of
         (TrieLeaf, mph) -> do 
-          (pnom, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern ends in \"" <> (show chr) <> "\"."]
+          (pnom, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chr]) <> "\"."]
           -- cstrPat <- eitherMaybe' (M.lookup (pnName pnom) patMap) ("Can't find constructor for phoneme: \"" <> (pnName pnom) <> "\".")
           cstrExp    <- phoneNamePattern patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc chr charVarName
           return (( guardThing , consumerRet' mkMaj mkMin chr cs mbl cstrExp), Nothing)
+        -- (Trie)
     
-    -- finalRslt = case 
+    finalRslt = otherwiseG <$> case mTrieVal of
+      Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
+      (Just (pnom, cs)) -> do 
+        cstrExp    <- phoneNamePattern patMap aspMaps pnom
+        return $ phonemeRet' mkMaj mkMin cs mbl cstrExp
 
 
 {-
+
+phonemeRet'
+  :: (Exp -> Exp) -- ^ A function to make upper-case constructors.
+  -> (Exp -> Exp) -- ^ A function to make lower-case constructors
+  -> Caseness     -- ^ The `Caseness` of the Phoneme.
+  -> (Maybe Name) -- ^ The name of the variable with the caseness value.
+  -> Exp          -- ^ The uncased value of this phoneme.
+  -> Exp          -- ^ The resulting expression.
 
 charPatternGuard :: (M.Map String Name) -> Name -> CharPattern -> Name -> Either String Exp
 
@@ -444,7 +459,7 @@ orE x y = InfixE (Just x) (VarE '(||)) (Just y)
 anyE :: [Exp] -> Exp
 anyE xs  = case (NE.nonEmpty xs) of
   Nothing   -> falseE -- since False is the identity of "or".
-  (Just xs) -> intersperseInfixRE (VarE '(||)) xs
+  (Just ys) -> intersperseInfixRE (VarE '(||)) ys
 
 -- | Construct a constructor/pattern synonym
 --   for a specific Phoneme Name.
@@ -463,13 +478,13 @@ phoneNamePattern patMap patConMap (PhoneName nom ps) = do
 -- | For constructing the guard part of 
 --   a body.
 charPatternGuard :: (M.Map String Name) -> Name -> CharPattern -> Name -> Either String Exp
-charPatternGaurd _classMap _endWordFunc (PlainChar c)   charVarName = Right (eqJustChar charVarName c)
+charPatternGuard _classMap _endWordFunc (PlainChar c)   charVarName = Right (eqJustChar charVarName c)
 charPatternGuard _classMap _endWordFunc (CharOptCase c) charVarName = Right (anyE (map (eqJustChar charVarName) (getCases c)))
 charPatternGuard  classMap _endWordFunc (CharClass cnm) charVarName = do
   funcName <- eitherMaybe' (M.lookup cnm classMap) ("Couldn't find class name: \"" <> cnm <> "\".")
   return $ AppE (VarE funcName) (VarE charVarName)
 charPatternGuard _classMap _endWordFunc WordStart _charVarName = Left $ "Can't have a 'WordStart' makrer in the middle of a Word."
-charPatternGuard _classMap  endWordFunc WordStart  charVarName = return $ AppE (VarE endWordFunc) (VarE charVarName)
+charPatternGuard _classMap  endWordFunc WordEnd  charVarName = return $ AppE (VarE endWordFunc) (VarE charVarName)
 
 {-
 

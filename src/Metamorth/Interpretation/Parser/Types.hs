@@ -2,6 +2,7 @@ module Metamorth.Interpretation.Parser.Types
   ( HeaderData(..)
   , PhonemePattern(..)
   , CharPattern(..)
+  , ppCharPats
   , Caseness(..)
   , processRawPhonePattern
   
@@ -53,6 +54,17 @@ data CharPattern
   | WordStart        -- ^ The start of a word.
   | WordEnd          -- ^ The end of a word.
   deriving (Show, Eq, Ord)
+
+-- | "Pretty" Print a @[`CharPattern`]@.
+ppCharPats :: [CharPattern] -> String
+ppCharPats = concatMap ppCharPat
+
+ppCharPat :: CharPattern -> String
+ppCharPat (PlainChar   c) = [c]
+ppCharPat (CharOptCase c) = [c]
+ppCharPat (CharClass str) = "<" ++ str ++ ">"
+ppCharPat WordStart = "^"
+ppCharPat WordEnd   = "$"
 
 -- | Check whether a `CharPattern` is well-formed.
 validCharPattern :: [CharPatternRaw] -> Bool
