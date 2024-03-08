@@ -112,6 +112,7 @@ import Metamorth.Helpers.Trie
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
+import Language.Haskell.TH.Ppr qualified as PP
 
 import THLego.Helpers
 
@@ -164,6 +165,103 @@ case x of
 
 -- TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness))
 
+-- | Data type containing all the static info
+--   that'll be used for generating parsers.
+data StaticParserInfo = StaticParserInfo
+  -- | A `M.Map` from `TrieAnnotation`s to function `Name`s, 
+  --   where the function `Name` refers to the function
+  --   that corresponds to that node in the `TM.TMap`.
+  { spiAnnotationMap  :: M.Map TrieAnnotation Name
+  -- | A `M.Map` from phoneme `String`s to Constructor/Pattern Synonym `Name`s.
+  , spiConstructorMap :: M.Map String Name
+  -- | A `M.Map` from phoneme `String`s to the constructors of the
+  --   arguments (i.e. aspects) of the constructor of that Phoneme. 
+  --   Each argument is represented by a `M.Map` from `String`s to
+  --   `Name`s, where each `Name` refers to a constructor itself.
+  --
+  --   For example, let's say you have the following phoneme and
+  --   aspect definitions:
+  --
+  --   > aspect release : plain labial palatal
+  --   > aspect voice   : voiceless voiced ejective
+  --   >
+  --   > ====
+  --   > 
+  --   > ...
+  --   > k : voice release
+  --   > ...
+  --
+  --   Then the entry for @k@ in @spiAspectMaps` would be
+  --   something like...
+  --   
+  --   > ("k", 
+  --   >   [ fromList [("plain", "Plain"), ("labial","Labial"), ("palatal","Palatal")]
+  --   >   , fromList [("voiceless", "Voiceless"), ("voiced", "Voiced"), ("ejective", "Ejective")]
+  --   >   ]
+  --   >  )
+  , spiAspectMaps     :: M.Map String [M.Map String Name]
+  -- | A `M.Map` from class `String` names to function `Name`s.
+  --   These functions will have the type @`Char` -> `Bool`@,
+  --   and just be simple tests of whether the `Char` is one
+  --   of the members of the class. e.g.
+  --
+  --   > isApost :: Char -> Bool
+  --   > isApost x = (x == '\'') || (x == '`') || (x == '\x313')
+  --   
+  --   etc...
+  , spiClassMap       :: M.Map String Name
+  -- | A function to turn a `Phoneme` expression/value into
+  --   a upper-case value. This is represented as a function
+  --   for more flexibility. This should be a very simple function.
+  --   For uncased orthographies, it should just be @`id`@ or the
+  --   same as @`spiMkMin`@. For cased orthographies, it should 
+  --   just be a function like:
+  --
+  --   > mkMaj :: Exp -> Exp
+  --   > mkMaj expr = AppE (ConE upperName) expr
+  --
+  --   where @upperName` is the `Name` for the Upper-case constructor.
+  , spiMkMaj          :: (Exp -> Exp)
+  -- | Same as `spiMkMaj`, but for lower-case instead.
+  , spiMkMin          :: (Exp -> Exp)
+  -- | The `Name` of a function that checks whether a `Char`
+  --   is *NOT* one of the characters that can start a phoneme
+  --   mid-word. If a peeked `Char` satisfies this predicate,
+  --   then we know we are at the end of a word.
+  , spiEndWordFunc    :: Name
+  }
+
+instance Eq StaticParserInfo where
+  x == y
+    = ((spiAnnotationMap x) == (spiAnnotationMap y))
+      && ((spiConstructorMap x) == (spiConstructorMap y))
+      && ((spiAspectMaps x) == (spiAspectMaps y))
+      && ((spiClassMap x) == (spiClassMap y))
+      && ((spiMkMaj' x) == (spiMkMaj' y))
+      && ((spiMkMin' x) == (spiMkMin' y))
+      && ((spiEndWordFunc x) == (spiEndWordFunc y))
+    where
+      spiMkMaj' z = (spiMkMaj z) (ConE (mkName "Example"))
+      spiMkMin' z = (spiMkMin z) (ConE (mkName "Example"))
+
+instance Show StaticParserInfo where
+  show x =
+    "StaticParserInfo {spiAnnotationMap = " <> show (spiAnnotationMap x)
+      <> ", spiConstructorMap = " <> show (spiConstructorMap x)
+      <> ", spiAspectMaps = "     <> show (spiAspectMaps x)
+      <> ", spiClassMap = "       <> show (spiClassMap x)
+      <> ", spiMkMaj = "          <> show (PP.ppr mkMajRep)
+      <> ", spiMkMin = "          <> show (PP.ppr mkMinRep)
+      <> ", spiEndWordFunc = "    <> show (spiEndWordFunc x)
+      <> "}"
+    where
+      exprNom  = mkName "expr"
+      exprPat  = VarP exprNom
+      exprVar  = VarE exprNom
+      mkMajRep = LamE [exprPat] (spiMkMaj x exprVar)
+      mkMinRep = LamE [exprPat] (spiMkMin x exprVar)
+      
+
 makeGuards
   :: Maybe Name                    -- ^ The name of the boolean variable.
   -> Name                          -- ^ The name of the peeked char variable.
@@ -178,11 +276,11 @@ makeGuards
   -> (M.Map String Name)           -- ^ Map for class function names.
   -> Name                          -- ^ Name of the "end of word" function.
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
-  -> Either [String] (Body, [Maybe ()])
+  -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneName, Caseness)), TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)))])
 makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
-  return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], subs)
+  return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
   
   where
     -- Since TrieAnnotation should always be present, it should
@@ -201,7 +299,16 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc chr charVarName
           return (( guardThing , consumerRet' mkMaj mkMin chr cs mbl cstrExp), Nothing)
         -- (Trie)
-    
+        -- [((TrieAnnotation, Maybe (PhoneName, Caseness)), TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)))]
+        elm@(tnn@(TrieAnn _), mph) -> do
+          nextFunc <- eitherMaybe' (M.lookup tnn funcMap) ["Couldn't find function for pattern: \"" <> (ppCharPats $ precPatrn ++ [chr]) <> "\"."]
+          guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc chr charVarName
+          -- idk...
+          let expVal = consumerFunc' blName nextFunc
+          return ((guardThing, expVal),Just (elm, thisSubTrie))
+
+    -- This guard matches @peekedChar == `Nothing`@, or when
+    -- none of the possible matches are correct.
     finalRslt = otherwiseG <$> case mTrieVal of
       Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
       (Just (pnom, cs)) -> do 
@@ -265,9 +372,13 @@ consumerFunc c nom
   | (isLowerCase c)     = infixCont anyCharE (infixBind peekCharE (AppE (VarE nom) falseE))
   | otherwise           = infixCont anyCharE (infixBind peekCharE (VarE nom))
 
--- consumerFunc' :: Name -> Name -> (Guard, Exp)
--- consumerFunc' caseVal funcName
---   | 
+-- | Uh... hmm...
+-- 
+--   Like `consumerFunc`, but where you already
+--   have the `Name` of the caseness variable.
+consumerFunc' :: Name -> Name -> Exp
+consumerFunc' caseVal funcName
+  = infixCont anyCharE (infixBind peekCharE (AppE (VarE funcName) (VarE caseVal)))
 
 {-
 data CharPattern
@@ -279,6 +390,7 @@ data CharPattern
   deriving (Show, Eq, Ord)
 -}
 
+-- | For when the next node is a `AnnLeaf`.
 consumerRet'
   :: (Exp -> Exp) -- ^ A function to make upper-case constructors.
   -> (Exp -> Exp) -- ^ A function to make lower-case constructors
@@ -394,6 +506,9 @@ data PhonemePattern = PhonemePattern
 -- setupTrie' <$> ppsPhonemePatterns <$> (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample1.thyp"
 -- (tempTester (\(_,x,_) -> setupTrie' $ ppsPhonemePatterns $ x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample1.thyp"
 -- 
+
+-- :m + Language.Haskell.TH Language.Haskell.TH.Syntax Language.Haskell.TH.Ppr
+
 
 pathifyTrie :: M.Map PhoneName [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness))
 pathifyTrie = unifyPaths . setupTrie'

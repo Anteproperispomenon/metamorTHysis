@@ -27,6 +27,7 @@ library
   exposed-modules:
       Lib
       Metamorth.Helpers.Char
+      Metamorth.Helpers.Either
       Metamorth.Helpers.List
       Metamorth.Helpers.Map
       Metamorth.Helpers.Parsing

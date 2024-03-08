@@ -22,7 +22,8 @@ isTupper x = isUpperCase x || (generalCategory x == TitlecaseLetter)
 --   but it filters out punctuation such as
 --   apostrophes.
 isCasable :: Char -> Bool
-isCasable x = (generalCategory x) <= TitlecaseLetter
+-- isCasable x = (generalCategory x) <= TitlecaseLetter
+isCasable x = isUpperCase x || isLowerCase x || (generalCategory x == TitlecaseLetter)
 
 getCases :: Char -> [Char]
 getCases c = nub [c,c1,c2,c3]
