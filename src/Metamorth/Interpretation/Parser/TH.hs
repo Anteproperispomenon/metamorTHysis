@@ -94,6 +94,8 @@ import Data.Attoparsec.Text qualified as AT
 
 import Data.Bifunctor qualified as Bi
 
+import Data.Foldable
+
 import Data.Char
 import Metamorth.Helpers.Char
 import Metamorth.Helpers.Either
@@ -230,10 +232,6 @@ data StaticParserInfo = StaticParserInfo
   --   mid-word. If a peeked `Char` satisfies this predicate,
   --   then we know we are at the end of a word.
   , spiEndWordFunc    :: Name
-  -- unnecessary; can just use "any".
-  -- | The `Name` of the function that is just `isUpperCase`
-  --   lifted to `Maybe` values.
-  -- , spiIsUpperCaseM   :: Name
   }
 
 instance Eq StaticParserInfo where
@@ -245,7 +243,6 @@ instance Eq StaticParserInfo where
       && ((spiMkMaj' x) == (spiMkMaj' y))
       && ((spiMkMin' x) == (spiMkMin' y))
       && ((spiEndWordFunc x) == (spiEndWordFunc y))
-      -- && ((spiIsUpperCaseM x) == (spiIsUpperCaseM y))
     where
       spiMkMaj' z = (spiMkMaj z) (ConE (mkName "Example"))
       spiMkMin' z = (spiMkMin z) (ConE (mkName "Example"))
@@ -259,7 +256,6 @@ instance Show StaticParserInfo where
       <> ", spiMkMaj = "          <> show (PP.ppr mkMajRep)
       <> ", spiMkMin = "          <> show (PP.ppr mkMinRep)
       <> ", spiEndWordFunc = "    <> show (spiEndWordFunc x)
-      -- <> ", spiIsUpperCaseM = "   <> show (spiIsUpperCaseM x)
       <> "}"
     where
       exprNom  = mkName "expr"
@@ -267,14 +263,19 @@ instance Show StaticParserInfo where
       exprVar  = VarE exprNom
       mkMajRep = LamE [exprPat] (spiMkMaj x exprVar)
       mkMinRep = LamE [exprPat] (spiMkMin x exprVar)
-      
+
+-- | To make re-writing code easier.
+type MultiPhoneName = NonEmpty PhoneName
+
+-- | To make re-writing code easier.
+type MulExp = NonEmpty Exp
 
 makeGuards
   :: Maybe Name                    -- ^ The name of the boolean variable.
   -> Name                          -- ^ The name of the peeked char variable.
   -> TrieAnnotation                -- ^ This node's Annotation
-  -> (Maybe (PhoneName, Caseness)) -- ^ This node's output value.
-  -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)) -- ^ This node in the Trie.
+  -> (Maybe (MultiPhoneName, Caseness)) -- ^ This node's output value.
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness)) -- ^ This node in the Trie.
   -> M.Map TrieAnnotation Name     -- ^ Mapping from `TrieAnnotation`s to function names.
   -> (Exp -> Exp)                  -- ^ Maj-maker
   -> (Exp -> Exp)                  -- ^ Min-maker
@@ -282,9 +283,8 @@ makeGuards
   -> (M.Map String ([M.Map String Name])) -- ^ Map for constructors of sub-elements.
   -> (M.Map String (Name, [Char])) -- ^ Map for class function names.
   -> Name                          -- ^ Name of the "end of word" function.
-  -- -> Name                          -- ^ The `isUpperMaybe` function.
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
-  -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneName, Caseness)), Bool, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)))])
+  -> Either [String] (Body, [((TrieAnnotation, Maybe (MultiPhoneName, Caseness)), Bool, TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness)))])
 makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
@@ -303,9 +303,9 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
         (TrieLeaf, mph) -> do 
           (pnom, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
           -- cstrPat <- eitherMaybe' (M.lookup (pnName pnom) patMap) ("Can't find constructor for phoneme: \"" <> (pnName pnom) <> "\".")
-          cstrExp    <- phoneNamePattern patMap aspMaps pnom
+          cstrExps   <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc chrP charVarName
-          return (( guardThing , consumerRet' mkMaj mkMin chrP cs mbl cstrExp), Nothing)
+          return (( guardThing , consumerRet' mkMaj mkMin chrP cs mbl cstrExps), Nothing)
         -- (Trie)
         -- [((TrieAnnotation, Maybe (PhoneName, Caseness)), Bool, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)))]
         elm@(tnn@(TrieAnn _), mph) -> do
@@ -321,7 +321,7 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
     finalRslt = otherwiseG <$> case mTrieVal of
       Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
       (Just (pnom, cs)) -> do 
-        cstrExp    <- phoneNamePattern patMap aspMaps pnom
+        cstrExp    <- phoneNamePatterns patMap aspMaps pnom
         return $ phonemeRet' mkMaj mkMin cs mbl cstrExp
 makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
@@ -335,7 +335,7 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
       case (ann, mPhone) of
         (TrieLeaf, mph) -> do
           (pnom, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
-          cstrExp    <- phoneNamePattern patMap aspMaps pnom
+          cstrExp    <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc chrP charVarName
           let xRslt = consumerRetX mkMaj mkMin chrP cs charVarName cstrExp
           return ((guardThing,xRslt), Nothing)
@@ -355,7 +355,7 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
     finalRslt = otherwiseG <$> case mTrieVal of
       Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
       (Just (pnom, cs)) -> do
-        cstrExp <- phoneNamePattern patMap aspMaps pnom
+        cstrExp <- phoneNamePatterns patMap aspMaps pnom
         return $ phonemeRetZ mkMaj mkMin cs charVarName cstrExp
 {-
 
@@ -451,8 +451,7 @@ consumerRetX
   -> CharPattern  -- ^ The `Char` in question.
   -> Caseness     -- ^ The `Caseness` of the Phoneme.
   -> Name         -- ^ The `Name` of the next peeked `Char`.
-  --- > Name         -- ^ The `Name` of the @isUpperCaseM` function.
-  -> Exp          -- ^ The uncased value of this phoneme.
+  -> MulExp       -- ^ The uncased value of this phoneme.
   -> Exp          -- ^ The resulting expression.
 consumerRetX mkMaj mkMin (PlainChar   c) cs peekName rslt = infixCont anyCharE (phonemeRetZ mkMaj mkMin cs peekName rslt)
 consumerRetX mkMaj mkMin (CharOptCase c) cs peekName rslt = infixCont anyCharE (phonemeRetZ mkMaj mkMin cs peekName rslt)
@@ -468,7 +467,7 @@ consumerRet'
   -> CharPattern  -- ^ The `Char` in question.
   -> Caseness     -- ^ The `Caseness` of the Phoneme.
   -> (Maybe Name) -- ^ The name of the variable with the caseness value.
-  -> Exp          -- ^ The uncased value of this phoneme.
+  -> MulExp       -- ^ The uncased value of this phoneme.
   -> Exp          -- ^ The resulting expression.
 consumerRet' mkMaj mkMin (PlainChar   c) cs mblName rslt = infixCont anyCharE (phonemeRet  mkMaj mkMin c cs mblName rslt)
 consumerRet' mkMaj mkMin (CharOptCase c) cs mblName rslt = infixCont anyCharE (phonemeRet  mkMaj mkMin c cs mblName rslt)
@@ -485,9 +484,9 @@ consumerRet
   -> Char         -- ^ The `Char` in question.
   -> Caseness     -- ^ The `Caseness` of the Phoneme.
   -> (Maybe Name) -- ^ The name of the variable with the caseness value.
-  -> Exp          -- ^ The uncased value of this phoneme.
+  -> MulExp       -- ^ The uncased value of this phoneme.
   -> Exp          -- ^ The resulting expression.
-consumerRet mkMaj mkMin c cs mblName rslt = infixCont anyCharE (phonemeRet mkMaj mkMin c cs mblName rslt)
+consumerRet mkMaj mkMin c cs mblName rslts = infixCont anyCharE (phonemeRet mkMaj mkMin c cs mblName rslts)
 
 -- | For when you still don't have a clue
 --   whether this phoneme is upper or lower.
@@ -496,13 +495,12 @@ phonemeRetZ
   -> (Exp -> Exp) -- ^ mkMin
   -> Caseness     -- ^ Caseness
   -> Name         -- ^ Name of the next peekedChar
-  -- -> Name         -- ^ Name of the @isUpperCaseM@ function.
-  -> Exp          -- ^ Uncased expression
+  -> MulExp       -- ^ Uncased expression
   -> Exp          -- ^ Result
-phonemeRetZ mkMaj mkMin cs peekName rslt
-  | cs == CMaj = AppE ret (mkMaj rslt)
-  | cs == CMin = AppE ret (mkMin rslt)
-  | otherwise  = condCaseExp (AppE (liftPred 'isUpperCase) (VarE peekName)) mkMaj mkMin rslt
+phonemeRetZ mkMaj mkMin cs peekName rslts
+  | cs == CMaj = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
+  | cs == CMin = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | otherwise  = condCaseExp (AppE (liftPred 'isUpperCase) (VarE peekName)) mkMaj mkMin rslts
   where ret = VarE 'return
 
 
@@ -521,19 +519,19 @@ phonemeRet
   -> Char         -- ^ The `Char` in question.
   -> Caseness     -- ^ The `Caseness` of the Phoneme.
   -> (Maybe Name) -- ^ The name of the variable with the caseness value.
-  -> Exp          -- ^ The uncased value of this phoneme.
+  -> MulExp       -- ^ The uncased value of this phoneme.
   -> Exp          -- ^ The resulting expression.
-phonemeRet mkMaj mkMin c cs (Just blName) rslt
-  | (cs == CMaj) = AppE ret (mkMaj rslt)
-  | (cs == CMin) = AppE ret (mkMin rslt)
-  | otherwise    = condCase blName mkMaj mkMin rslt
+phonemeRet mkMaj mkMin c cs (Just blName) rslts
+  | (cs == CMaj) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
+  | (cs == CMin) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | otherwise    = condCase blName mkMaj mkMin rslts
   where
     ret  = VarE 'return
-phonemeRet mkMaj mkMin c cs Nothing rslt
-  | (isUp && cs == CDep) = AppE ret (mkMaj rslt)
-  | (cs == CDep)         = AppE ret (mkMin rslt)
-  | (cs == CMaj)         = AppE ret (mkMaj rslt)
-  | otherwise            = AppE ret (mkMin rslt)
+phonemeRet mkMaj mkMin c cs Nothing rslts
+  | (isUp && cs == CDep) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
+  | (cs == CDep)         = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | (cs == CMaj)         = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
+  | otherwise            = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
   where
     isUp = isTupper c
     ret  = VarE 'return
@@ -543,32 +541,40 @@ phonemeRet'
   -> (Exp -> Exp) -- ^ A function to make lower-case constructors
   -> Caseness     -- ^ The `Caseness` of the Phoneme.
   -> (Maybe Name) -- ^ The name of the variable with the caseness value.
-  -> Exp          -- ^ The uncased value of this phoneme.
+  -> MulExp       -- ^ The uncased value of this phoneme.
   -> Exp          -- ^ The resulting expression.
-phonemeRet' mkMaj mkMin cs (Just blName) rslt
-  | (cs == CMaj) = AppE ret (mkMaj rslt)
-  | (cs == CMin) = AppE ret (mkMin rslt)
-  | otherwise    = condCase blName mkMaj mkMin rslt
+phonemeRet' mkMaj mkMin cs (Just blName) rslts
+  | (cs == CMaj) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
+  | (cs == CMin) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | otherwise    = condCase blName mkMaj mkMin rslts
   where
     ret  = VarE 'return
-phonemeRet' mkMaj mkMin cs Nothing rslt
-  | (cs == CDep) = AppE ret (mkMin rslt)
-  | (cs == CMaj) = AppE ret (mkMaj rslt)
-  | otherwise    = AppE ret (mkMin rslt)
+phonemeRet' mkMaj mkMin cs Nothing rslts
+  | (cs == CDep) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | (cs == CMaj) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
+  | otherwise    = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
   where
     ret  = VarE 'return
 
-condCase :: Name -> (Exp -> Exp) -> (Exp -> Exp) -> Exp -> Exp
-condCase blName mkMaj mkMin expr
-  | (mkMaj expr == mkMin expr) = AppE ret (mkMaj expr)
-  | otherwise                  = CondE (VarE blName) (AppE ret (mkMaj expr)) (AppE ret (mkMin expr))
+condCase :: Name -> (Exp -> Exp) -> (Exp -> Exp) -> MulExp -> Exp
+condCase blName mkMaj mkMin exprs
+  | (fmap mkMaj exprs == fmap mkMin exprs) = AppE ret $ formMulExp $ forMap exprs $ \expr -> (mkMaj expr)
+  | otherwise = 
+      CondE 
+        (VarE blName) 
+        (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMaj expr) 
+        (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMin expr)
   where
     ret = VarE 'return
 
-condCaseExp :: Exp -> (Exp -> Exp) -> (Exp -> Exp) -> Exp -> Exp
-condCaseExp blExpr mkMaj mkMin expr
-  | (mkMaj expr == mkMin expr) = AppE ret (mkMaj expr)
-  | otherwise = CondE blExpr (AppE ret (mkMaj expr)) (AppE ret (mkMin expr))
+condCaseExp :: Exp -> (Exp -> Exp) -> (Exp -> Exp) -> MulExp -> Exp
+condCaseExp blExpr mkMaj mkMin exprs
+  | (fmap mkMaj exprs == fmap mkMin exprs) = formMulExp $ fmap (\expr -> AppE ret (mkMaj expr)) exprs
+  | otherwise = 
+    CondE 
+      blExpr 
+      (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMaj expr) 
+      (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMin expr)
   where
     ret = VarE 'return
 
@@ -675,6 +681,22 @@ anyE xs  = case (NE.nonEmpty xs) of
 --   that works on @Maybe a@.
 liftPred :: Name -> Exp
 liftPred funcName = (AppE (VarE 'any) (VarE funcName))
+
+-- | Convert a `MulExp` into a plain `Exp`
+--   by making it a `NonEmpty`.
+formMulExp :: MulExp -> Exp
+formMulExp (expr :| [])
+  = InfixE (Just expr) (ConE '(:|)) (Just (ConE '[]))
+formMulExp (expr :| xs)
+  = InfixE (Just expr) (ConE '(:|)) (Just (ListE xs))
+
+-- | Lifting `phoneNamePattern` to work over `NonEmpty`.
+--   Actually combining the expressions will be done
+--   at a later step.
+phoneNamePatterns :: M.Map String Name -> (M.Map String ([M.Map String Name])) -> MultiPhoneName -> Either [String] (NonEmpty Exp)
+phoneNamePatterns patMap patConMap phoneNames
+  = Bi.first fold $ liftEitherNonEmpty $ fmap (phoneNamePattern patMap patConMap) phoneNames
+  -- fold :: (NonEmpty [String]) -> [String]
 
 -- | Construct a constructor/pattern synonym
 --   for a specific Phoneme Name.
