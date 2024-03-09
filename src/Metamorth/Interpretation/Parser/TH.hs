@@ -167,6 +167,77 @@ case x of
 
 -}
 
+----------------------------------------------------------------
+-- Top-Level Function Generator
+----------------------------------------------------------------
+
+makeTrieAnnNames :: TM.TMap CharPattern (TrieAnnotation, Maybe a) -> Q (M.Map TrieAnnotation Name)
+makeTrieAnnNames theTrie = do
+  let anns = map fst $ TM.elems theTrie
+  prs <- for anns $ \ann -> do
+    annName <- annFuncName ann
+    return (ann, annName)
+  return $ M.fromList prs
+
+{-
+createWordStartFunction 
+  :: Name
+  -> Name
+  -> StaticParserInfo
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> ([Dec], M.Map TrieAnnotation Bool)
+createWordStartFunction blName peekName spi theTrie
+  where
+    subTries = map (second (first fromJust)) $ getSubTries theTrie
+-}
+
+createCasesForStart :: Name -> StaticParserInfo -> CharPattern -> TrieAnnotation -> Either String ((Either (Guard, Exp) [Match]), Bool)
+createCasesForStart grdName spi cp trieAnn@(TrieAnn _) = case cp of
+  -- hmm
+  (PlainChar c) -> do
+    funcName <- eitherMaybe' (M.lookup trieAnn funcMap) ("Couldn't find a function name for \"" <> show trieAnn <> "\".")
+    if (isCasable c) 
+      then Right (Right [Match (LitP (CharL c)) (NormalB $ consumerFuncE (boolE $ isTupper c) funcName ) []], True)
+      else Right (Right [Match (LitP (CharL c)) (NormalB $ consumerFuncX funcName) []], False)
+  (CharOptCase c) -> do
+    funcName <- eitherMaybe' (M.lookup trieAnn funcMap) ("Couldn't find a function name for \"" <> show trieAnn <> "\".")
+    let xs = getCases c
+        cs = map (\c -> (c, isTupper c)) xs
+    if (any isCasable xs)
+      then do 
+        zqr <- return $ forMap cs $ \(theChar, theCase) ->
+          (Match (LitP (CharL theChar)) (NormalB $ consumerFuncE (boolE theCase) funcName) [])
+        return (Right zqr, True)
+      else do 
+        zqr <- return $ forMap xs $ \theChar ->
+          (Match (LitP (CharL theChar)) (NormalB $ consumerFuncX funcName) [])
+        return (Right zqr, False)
+  (CharClass cn) -> do
+    funcName  <- eitherMaybe' (M.lookup trieAnn funcMap) ("Couldn't find a function name for \"" <> show trieAnn <> "\".")
+    (classFunc, cs) <- eitherMaybe' (M.lookup cn classMap) ("Couldn't find function name for class \"" <> cn <> "\".")
+    let checkExp = AppE (VarE funcName) (VarE grdName)
+        boolExp  = AppE (VarE 'isUpperCase) (VarE grdName)
+    if (any isCasable cs)
+      then Right (Left (NormalG checkExp, consumerFuncE boolExp funcName), True )
+      else Right (Left (NormalG checkExp, consumerFuncX         funcName), False)
+  WordStart -> Left "Shouldn't encounter a \"WordStart\" when using this function."
+  WordEnd   -> Left "Shouldn't encounter a \"WordEnd\" when using this function."
+      
+  where
+    funcMap  = spiAnnotationMap spi
+    classMap = spiClassMap spi
+
+-- | Split a trie into those that start with
+--   `WordStart` and those that don't.
+splitTrie 
+  ::  TM.TMap CharPattern (TrieAnnotation, Maybe a) 
+  -> (TM.TMap CharPattern (TrieAnnotation, Maybe a), TM.TMap CharPattern (TrieAnnotation, Maybe a))
+splitTrie trie
+  = (startTrie, notStartTrie)
+  where
+    (_, startTrie) = TM.match     [WordStart] trie
+    notStartTrie   = deleteBranch  WordStart  trie
+
 
 ----------------------------------------------------------------
 -- Function Generators
@@ -288,9 +359,19 @@ eitherToRWST :: (Monoid w, Monad m) => Either w a -> RWST r w s m (Maybe a)
 eitherToRWST (Left err) = tell err >> return Nothing
 eitherToRWST (Right  x) = return $ Just x
 
+{-
+constructFunctions 
+  :: StaticParserInfo
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> Q [Dec]
+constructFunctions spi trie = do
+  blName   <- newName "isCharMaj"
+  peekName <- newName "peekedChar"
+-}
+
 constructFunctions'
-  :: Name -- ^ The name generated to be used as the 
-  -> Name 
+  :: Name -- ^ The name generated to be used as the bool argument
+  -> Name -- ^ The name generated to be used as the char argument
   -> Bool
   -> StaticParserInfo
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
@@ -304,6 +385,7 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal = 
   case rslts of
     Nothing -> return []
     (Just (bod, conts)) -> do
+      funcNom <- lift $ annFuncName trieAnn
       modify $ first  $ S.insert trieAnn
       modify $ second $ M.insert trieAnn isCased
       moreDecs <- for conts $ \( tval@(nextAnn, nextVal) , nextCased, nextPat, nextTrie ) -> do
@@ -315,7 +397,8 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal = 
             constructFunctions' blName peekName nextCased spi nextTrie (cPats ++ [nextPat]) nextAnn nextVal
         return xrslts
       -- okay, convert the body to decs...
-      funcNom <- lift $ annFuncName trieAnn
+      
+      
       -- now, do the signature...
       -- mbool <- lift $ [t| Maybe Bool |]
       -- mchar <- lift $ [t| Maybe Char |]
@@ -758,6 +841,10 @@ trueE = ConE 'True
 
 falseE :: Exp
 falseE = ConE 'False
+
+boolE :: Bool -> Exp
+boolE True  = trueE
+boolE False = falseE
 
 parserT :: Type
 parserT = ConT ''AT.Parser
