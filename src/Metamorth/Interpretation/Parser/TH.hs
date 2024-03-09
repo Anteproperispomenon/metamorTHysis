@@ -89,12 +89,16 @@ module Metamorth.Interpretation.Parser.TH
   ) where
 
 import Control.Monad
+import Control.Monad.Trans.Class
+import Control.Monad.Trans.RWS.CPS
 
 import Data.Attoparsec.Text qualified as AT
 
 import Data.Bifunctor qualified as Bi
 
 import Data.Foldable
+
+import Data.Traversable
 
 import Data.Char
 import Metamorth.Helpers.Char
@@ -106,6 +110,8 @@ import Data.Maybe
 import Data.Text qualified as T -- ?
 
 import Data.Map.Strict qualified as M
+
+import Data.Set qualified as S
 
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty (NonEmpty(..))
@@ -232,6 +238,8 @@ data StaticParserInfo = StaticParserInfo
   --   mid-word. If a peeked `Char` satisfies this predicate,
   --   then we know we are at the end of a word.
   , spiEndWordFunc    :: Name
+  -- | The `Name` of the `Type` used for phonemes.
+  , spiPhoneTypeName  :: Name
   }
 
 instance Eq StaticParserInfo where
@@ -243,6 +251,7 @@ instance Eq StaticParserInfo where
       && ((spiMkMaj' x) == (spiMkMaj' y))
       && ((spiMkMin' x) == (spiMkMin' y))
       && ((spiEndWordFunc x) == (spiEndWordFunc y))
+      && ((spiPhoneTypeName x) == (spiPhoneTypeName y))
     where
       spiMkMaj' z = (spiMkMaj z) (ConE (mkName "Example"))
       spiMkMin' z = (spiMkMin z) (ConE (mkName "Example"))
@@ -256,6 +265,7 @@ instance Show StaticParserInfo where
       <> ", spiMkMaj = "          <> show (PP.ppr mkMajRep)
       <> ", spiMkMin = "          <> show (PP.ppr mkMinRep)
       <> ", spiEndWordFunc = "    <> show (spiEndWordFunc x)
+      <> ", spiPhoneTypeName = "  <> show (spiPhoneTypeName x)
       <> "}"
     where
       exprNom  = mkName "expr"
@@ -269,6 +279,95 @@ type MultiPhoneName = NonEmpty PhoneName
 
 -- | To make re-writing code easier.
 type MulExp = NonEmpty Exp
+
+
+annFuncName :: TrieAnnotation -> Q Name
+annFuncName ann = newName $ varName $ show ann
+
+eitherToRWST :: (Monoid w, Monad m) => Either w a -> RWST r w s m (Maybe a)
+eitherToRWST (Left err) = tell err >> return Nothing
+eitherToRWST (Right  x) = return $ Just x
+
+constructFunctions'
+  :: Name -- ^ The name generated to be used as the 
+  -> Name 
+  -> Bool
+  -> StaticParserInfo
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> [CharPattern]
+  -> TrieAnnotation
+  -> Maybe (MultiPhoneName, Caseness)
+  -> RWST () [String] (S.Set TrieAnnotation, M.Map TrieAnnotation Bool) Q [Dec] -- ?
+constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal = do
+  -- uh...
+  rslts <- eitherToRWST $ constructGuards mbl peekName trieAnn thisVal theTrie spi cPats
+  case rslts of
+    Nothing -> return []
+    (Just (bod, conts)) -> do
+      modify $ first  $ S.insert trieAnn
+      modify $ second $ M.insert trieAnn isCased
+      moreDecs <- for conts $ \( tval@(nextAnn, nextVal) , nextCased, nextPat, nextTrie ) -> do
+        curMemSet <- gets fst
+        xrslts <- if (nextAnn `S.member` curMemSet)
+          then (return [])
+          else do
+            -- hmm...
+            constructFunctions' blName peekName nextCased spi nextTrie (cPats ++ [nextPat]) nextAnn nextVal
+        return xrslts
+      -- okay, convert the body to decs...
+      funcNom <- lift $ annFuncName trieAnn
+      -- now, do the signature...
+      -- mbool <- lift $ [t| Maybe Bool |]
+      -- mchar <- lift $ [t| Maybe Char |]
+      let phonType = ConT $ spiPhoneTypeName spi
+          funcType = arrowChainT margs (parserT' phonType)
+          funcSign = SigD funcNom funcType
+          funcDec  = FunD funcNom [Clause pargs bod []]
+      return (funcSign:funcDec:concat moreDecs)
+
+  where
+    mbl = if isCased then (Just blName) else Nothing
+    mbool = AppT (ConT ''Maybe) (ConT ''Bool)
+    mchar = AppT (ConT ''Maybe) (ConT ''Char)
+    pbool = VarP blName
+    pchar = VarP peekName
+    margs = if isCased then [mbool,mchar] else [mchar]
+    pargs = if isCased then [pbool,pchar] else [pchar]
+
+
+{-
+[( (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+ , Bool
+ , CharPattern
+ , TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+ )
+ ]
+-}
+
+constructGuards 
+  :: Maybe Name 
+  -> Name 
+  -> TrieAnnotation
+  -> Maybe (MultiPhoneName, Caseness)
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness)) -- ^ This node in the Trie.
+  -> StaticParserInfo -- ^ Constant info about the parser.
+  -> [CharPattern]
+  -> Either [String] (Body, [((TrieAnnotation, Maybe (MultiPhoneName, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness)))])
+constructGuards mbl charVarName trieAnn mTrieVal theTrie spi charPat
+  = makeGuards
+      mbl
+      charVarName
+      trieAnn
+      mTrieVal
+      theTrie
+      (spiAnnotationMap spi)
+      (spiMkMaj spi)
+      (spiMkMin spi)
+      (spiConstructorMap spi)
+      (spiAspectMaps spi)
+      (spiClassMap spi)
+      (spiEndWordFunc spi)
+      charPat
 
 makeGuards
   :: Maybe Name                    -- ^ The name of the boolean variable.
@@ -284,7 +383,7 @@ makeGuards
   -> (M.Map String (Name, [Char])) -- ^ Map for class function names.
   -> Name                          -- ^ Name of the "end of word" function.
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
-  -> Either [String] (Body, [((TrieAnnotation, Maybe (MultiPhoneName, Caseness)), Bool, TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness)))])
+  -> Either [String] (Body, [((TrieAnnotation, Maybe (MultiPhoneName, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness)))])
 makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
@@ -314,7 +413,7 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
           -- idk...
           let expVal = consumerFunc' blName nextFunc
           -- The True is since the next function expects a 
-          return ((guardThing, expVal),Just (elm, True, thisSubTrie))
+          return ((guardThing, expVal),Just (elm, True, chrP, thisSubTrie))
 
     -- This guard matches @peekedChar == `Nothing`@, or when
     -- none of the possible matches are correct.
@@ -346,11 +445,11 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
           if isCased
             then do
               let rsltX = consumerFuncE (AppE (liftPred 'isUpperCase) (VarE charVarName)) nextFunc
-              return ((guardThing, rsltX), Just (elm, True, thisSubTrie))
+              return ((guardThing, rsltX), Just (elm, True, chrP, thisSubTrie))
             else do
               -- uh...
               let rsltX = consumerFuncX nextFunc
-              return ((guardThing, rsltX), Just (elm, False, thisSubTrie))
+              return ((guardThing, rsltX), Just (elm, False, chrP, thisSubTrie))
     
     finalRslt = otherwiseG <$> case mTrieVal of
       Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
@@ -392,8 +491,6 @@ eqJustChar mbVar theChar
 
 otherwiseG :: Exp -> (Guard, Exp)
 otherwiseG exp1 = (NormalG (VarE 'otherwise), exp1)
-
-
 
 -}
 
@@ -661,6 +758,13 @@ trueE = ConE 'True
 
 falseE :: Exp
 falseE = ConE 'False
+
+parserT :: Type
+parserT = ConT ''AT.Parser
+
+parserT' :: Type -> Type
+parserT' typ = AppT parserT typ
+
 
 eqJustChar :: Name -> Char -> Exp
 eqJustChar mbVar theChar
