@@ -2,6 +2,7 @@ module Metamorth.Interpretation.Parser.Parsing.Types
   ( ParserParser
   , ParserParsingState(..)
   , addPhonemePattern
+  , addPhonemesPattern
   , PhoneName(..)
   , eqOnPN
   , sameArgsPN
@@ -16,6 +17,9 @@ import Data.List (intercalate)
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
+
+import Data.List.NonEmpty qualified as NE
+import Data.List.NonEmpty (NonEmpty(..))
 
 import Data.Attoparsec.Text qualified as AT
 
@@ -53,12 +57,21 @@ runOnPhoneme str = local (const str)
 addPhonemePattern :: PhoneName -> PhonemePattern -> ParserParser ()
 addPhonemePattern phone pat = do
   theMap <- gets ppsPhonemePatterns
-  let newMap = M.insertWith (flip (++)) phone [pat] theMap
+  let newMap = M.insertWith (flip (++)) (NE.singleton phone) [pat] theMap
   modify $ \st -> st {ppsPhonemePatterns = newMap}
+
+-- | Add a new phoneme pattern for a specific `PhoneName`.
+--   Multiple `PhonemePattern`s are allowed per `PhoneName`.
+addPhonemesPattern :: NonEmpty PhoneName -> PhonemePattern -> ParserParser ()
+addPhonemesPattern phones pat = do
+  theMap <- gets ppsPhonemePatterns
+  let newMap = M.insertWith (flip (++)) phones [pat] theMap
+  modify $ \st -> st {ppsPhonemePatterns = newMap}
+
 
 data ParserParsingState = ParserParsingState
   { ppsClassDictionary :: M.Map String (S.Set Char)
-  , ppsPhonemePatterns :: M.Map PhoneName [PhonemePattern]
+  , ppsPhonemePatterns :: M.Map (NonEmpty PhoneName) [PhonemePattern]
   } deriving (Show, Eq)
 
 defParseState :: ParserParsingState

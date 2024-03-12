@@ -22,6 +22,7 @@ module Metamorth.Helpers.Trie
   , isLeafAnn
   , unifyPaths
   , getSubTries
+  , deleteBranch
   -- , annotateTrie
   -- , annotifyTrie
   -- , setifyTrie
@@ -32,6 +33,8 @@ import Data.Maybe
 
 import Data.Trie.Map qualified as TM
 import Data.Trie.Set qualified as TS
+
+import Data.Trie.Map.Internal qualified as TMI
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
@@ -136,8 +139,6 @@ annotifyTrie' trieDict prfx thisMVal trieAcc thisTrie = case sbTries of
 -- --> annotifyTrie' (prfx ++ [x]) (TM.insert (prfx ++ [c]) (annot,))
 -- where (Just annot) = M.lookup thisTrie trieDict
 
-
-
 -- This is gonna be tricky...
 -- Maybe... For each node, see if any sub-tries
 -- in the overall Trie are equivalent, at which point,
@@ -150,4 +151,8 @@ annotifyTrie' trieDict prfx thisMVal trieAcc thisTrie = case sbTries of
 unifyPaths :: (Ord c, Ord a) => TM.TMap c a -> TM.TMap c (TrieAnnotation, Maybe a)
 unifyPaths = annotifyTrie
 
+-- | Delete the branch starting with a value.
+deleteBranch :: (Ord c) => c -> TM.TMap c a -> TM.TMap c a
+deleteBranch x (TMI.TMap (TMI.Node val0 cmap))
+  = TMI.TMap (TMI.Node val0 (M.delete x cmap))
 

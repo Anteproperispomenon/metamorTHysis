@@ -10,13 +10,16 @@ import Control.Monad.Trans.RWS.CPS
 
 import Data.Attoparsec.Text qualified as AT
 
-import Data.List (groupBy)
+import Data.List (groupBy, intercalate)
 import Data.Functor
 import Data.Bifunctor
 
 import Data.Char (ord, chr, isSpace, isLower, isAlpha)
 import Data.Text qualified as T
 import Data.Text (Text)
+
+import Data.List.NonEmpty qualified as NE
+import Data.List.NonEmpty (NonEmpty(..))
 
 import Metamorth.Helpers.Char
 import Metamorth.Helpers.Parsing
@@ -78,6 +81,7 @@ parseEscaped = do
   case x of
     -- Don't consume the space.
     ' ' -> return '\\'
+    -- consProd x = AT.anyChar $> x
     'U' -> consProd 'U'
     '*' -> consProd '*'
     '+' -> consProd '+'
@@ -126,7 +130,7 @@ parseClassNameRS = do
 -- | The main character selector parser, after
 --   all the specialised ones have been run.
 parseNonSpace :: AT.Parser Char
-parseNonSpace = AT.satisfy (not . isSpace)
+parseNonSpace = AT.satisfy (\x -> (not $ isSpace x) && (x /= '#'))
 
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
@@ -176,18 +180,15 @@ parseClassDecS = do
 -- | Parse the class declaration section.
 parseClassDecSection :: ParserParser ()
 parseClassDecSection = do
-  lift AT.skipSpace
+  -- lift AT.skipSpace
+  _ <- lift $ many parseEndComment
   _ <- AT.many' $ do
     parseClassDecS
-    lift skipHoriz
-    lift AT.endOfLine
-    lift AT.skipSpace
-  lift AT.skipSpace
+    lift $ AT.many1 parseEndComment
+  _ <- lift $ many  parseEndComment
   _ <- lift ("====" <?> "Classes: Separator1")
   _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
-  lift skipHoriz
-  lift AT.endOfLine
-
+  lift parseEndComment
 
 ----------------------------------------------------------------
 -- Orthography Properties Parsers
@@ -241,6 +242,37 @@ parseOrthographyProps = do
   AT.endOfLine <?> "Header: endOfLine 2"
   return $ HeaderData nom pho
 
+----------------------------------------------------------------
+-- Multiple Phoneme list parsers
+----------------------------------------------------------------
+
+parsePhonemeBrack :: AT.Parser PhoneName
+parsePhonemeBrack = do
+  _ <- AT.char '('
+  skipHoriz
+  phoneName <- T.unpack <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
+  rst <- AT.many' $ do
+    skipHoriz1 -- to ensure a space between each value
+    T.unpack <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read aspect value")
+  skipHoriz
+  _ <- AT.char ')'
+  return $ PhoneName phoneName rst
+
+parsePhoneme1 :: AT.Parser PhoneName
+parsePhoneme1 = parsePhonemeBrack <|> parseAlt
+  where 
+    parseAlt = (\x -> (PhoneName (T.unpack x) [])) <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
+          
+
+parsePhonemeList :: AT.Parser (NonEmpty PhoneName)
+parsePhonemeList = do
+  skipHoriz
+  fstPhone  <- parsePhoneme1
+  rstPhones <- AT.many' $ do
+    skipHoriz1
+    parsePhoneme1
+  return (fstPhone :| rstPhones)
+
 
 ----------------------------------------------------------------
 -- Phoneme Pattern Parsers
@@ -279,6 +311,33 @@ parsePhonemePatS = do
       (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemePattern pn rslt
 
+parsePhonemePatMulti :: ParserParser ()
+parsePhonemePatMulti = do
+  phones <- lift parsePhonemeList
+  lift skipHoriz
+  let patString = map pnName $ NE.toList phones
+      phoneName = intercalate " " patString
+  _ <- lift ((AT.char ':') <?> ("Phoneme pattern for \"" <> phoneName <> "\" is missing ':'."))
+  lift skipHoriz
+  -- hmm...
+  specs <- AT.option [] (parseSpecialsS <* (lift skipHoriz1))
+  
+  -- Set the internal phoneme name to phoneName.
+  runOnPhoneme phoneName $ do
+    thePats <- AT.sepBy1' 
+      ( parseCodepointRS 
+        <|> parseClassNameRS 
+        <|> parseEscapedRS 
+        <|> parseStartPointS 
+        <|> parseEndPointS 
+        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go last.
+      ) 
+      (lift skipHoriz1)
+    -- hmm...
+    let ePhonePats = processRawPhonePattern (RawPhonemePattern specs thePats)
+    case ePhonePats of
+      (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
+      (Right rslt) -> addPhonemesPattern phones rslt
 
 ----------------------------------------------------------------
 -- Full File Parsers
@@ -290,18 +349,32 @@ parseOrthographyFile = do
   (_rslt, stt, errs) <- embedParserParser $ do
     -- Parse the class instances
     parseClassDecSection
+    void $ lift $ many parseEndComment
+
     -- Parse the phoneme patterns
     _ <- AT.many' $ do
       -- Skip spaces...
-      lift AT.skipSpace
+      void $ lift $ many parseEndComment
       parsePhonemePatS
-      lift skipHoriz
-      lift AT.endOfLine
+      -- lift skipHoriz
+      lift parseEndComment
     lift AT.skipSpace
+    lift $ many parseEndComment
+    _ <- AT.option () $ do
+      _ <- lift ("====" <?> "Phoneme Patterns: Separator")
+      _ <- AT.many' $ do
+        lift $ many parseEndComment
+        parsePhonemePatMulti
+        lift parseEndComment
+      return ()
+    return ()
+    -- hmm...
+
   
   let phonePatsM  = ppsPhonemePatterns stt
       phoneNames  = M.keys phonePatsM
-      phoneGroups = groupBy eqOnPN phoneNames
+      phoneNames' = concatMap NE.toList phoneNames
+      phoneGroups = groupBy eqOnPN phoneNames'
       wrongPhones = filter (not . sameArgsPN) phoneGroups
       phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
   return (hdr,stt,errs ++ phoneErrs)
@@ -309,6 +382,16 @@ parseOrthographyFile = do
 getStrPN :: [PhoneName] -> String
 getStrPN [] = "<??>"
 getStrPN ((PhoneName nom _):_) = nom
+
+-- | Parse the end of line, possibly preceded by a comment.
+parseEndComment :: AT.Parser ()
+parseEndComment = do
+  skipHoriz
+  AT.option () $ do
+    _ <- AT.char '#'
+    AT.skipWhile (\x -> x /= '\n' && x /= '\r')
+  AT.endOfLine
+
 
 -- :m + Metamorth.Interpretation.Parser.Parsing Metamorth.Interpretation.Parser.Types Data.Either Control.Monad
 -- import Data.Text.IO qualified as TIO
