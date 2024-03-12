@@ -166,6 +166,10 @@ case x of
   c1 -> AT.anyChar 
   c2 -> AT.anyChar
 
+constructFunctions 
+  :: StaticParserInfo
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> Q (Either [String] [Dec])
 
 
 -}
@@ -463,7 +467,15 @@ constructFunctions
   :: StaticParserInfo
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
   -> Q (Either [String] [Dec])
-constructFunctions spi trie = do
+constructFunctions spi trie
+  = fmap fst <$> constructFunctionsS spi trie
+
+
+constructFunctionsS
+  :: StaticParserInfo
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> Q (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool)))
+constructFunctionsS spi trie = do
   blName   <- newName "isCharMaj"
   peekName <- newName "peekedChar"
   grdName  <- newName "c"
@@ -473,29 +485,40 @@ constructFunctions spi trie = do
     (Left errs)    -> return (Left $ concat errs)
     (Right rsltsX) -> do
       let rsltsY = map (\case {(Left x, y) -> Left (x,y) ; (Right x, y) -> Right (x,y)}) rsltsX
+          -- Get the bool results of rsltsX.
+          rsltsZ = map snd rsltsX
+          -- Zip the bool results with stuff.
+          subTriesX = zip subTries rsltsZ
+          -- Partition the class matches from the char matches.
           (grds, mtchs) = partitionEithers  rsltsY
           grdBody   = GuardedB $ map fst grds
+          -- Matching for class types
           grdMatch  = if (null grds) then [] else [Match (VarP grdName) grdBody []]
+          -- The otherwise clause.
           finalMat  = Match WildP (NormalB $ AppE (VarE 'fail) (strE "No matches found.")) []
+          -- The resulting case expression.
           matches   = (concatMap fst mtchs) ++ grdMatch ++ [finalMat]
           caseStuff = CaseE (VarE peekName) matches
       mainType <- [t| Char -> AT.Parser (NonEmpty $(return $ ConT phoneType) ) |]
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
-      (moreDecs, errs) <- evalRWST' () (S.empty, M.empty) $ forM subTries $ \(cp, ((tann, mval), subTrie )) -> do 
-        let thisbl = True -- TEMPORARY
+      (moreDecs, stt, errs) <- runRWST' () (S.empty, M.empty) $ forM subTriesX $ \((cp, ((tann, mval), subTrie )),thisbl) -> do 
+        -- let thisbl = True -- TEMPORARY
         constructFunctions' blName peekName thisbl spi subTrie [cp] tann mval
       let moreDecs' = concat moreDecs
           errs'     = errs
       case errs' of
-        [] -> return (Right (mainSign:mainDec:moreDecs'))
+        [] -> return (Right ((mainSign:mainDec:moreDecs'),stt))
         xs -> return (Left xs)
       
   where
     subTries  = map (second (first fromJust)) $ getSubTries trie
     phoneType = spiPhoneTypeName spi
     evalRWST' rdr st act = evalRWST act rdr st
+    runRWST'  rdr st act = runRWST  act rdr st
+
+
 
 
 constructFunctions'
@@ -1129,8 +1152,8 @@ exampleInfo
   = StaticParserInfo
       -- hmm...
       (M.fromList $ forMap [1..100]   $ \n -> (TrieAnn n, mkName ("trieAnn_" ++ show n)))
-      (M.fromList $ forMap ['a'..'z'] $ \c -> ([c], mkName $ dataName [c]))
-      (M.fromList $ forMap ['a'..'z'] $ \c -> ([c], []))
+      (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["glt","asp","schwa","etc"]) $ \c -> (c, mkName $ dataName c))
+      (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["glt","asp","schwa","etc"]) $ \c -> (c, []))
       (M.empty) -- class Map (empty for now)
       id
       id
