@@ -89,6 +89,7 @@ module Metamorth.Interpretation.Parser.TH
   , exampleInfo
   , constructFunctions
   , constructFunctionsBothX
+  , makeClassDec
   ) where
 
 import Control.Applicative
@@ -188,6 +189,15 @@ makeTrieAnnNames theTrie = do
     return (ann, annName)
   return $ M.fromList prs
 
+makeClassDec :: Name -> Name -> [Char] -> [Dec]
+makeClassDec xvar nom chrSet
+  = [ SigD nom (AppT (AppT ArrowT (ConT ''Char)) (ConT ''Bool))
+    , FunD nom [Clause [VarP xvar] (NormalB $ anyE (map mkBool chrSet)) []]
+    , PragmaD (InlineP nom Inline FunLike AllPhases)
+    ]
+  where
+    mkBool :: Char -> Exp
+    mkBool = eqChar xvar 
 
 {-
 createWordStartFunction 
@@ -1077,6 +1087,8 @@ data PhonemePattern = PhonemePattern
 
 -- fmap (ppr . (fromRight [])) $ (runQ . (fmap (fmap fst) . constructFunctionsBothX exampleInfo)) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample3.thyp")
 
+-- fmap (ppr . (fromRight [])) $ (runQ . (fmap (fmap fst) . constructFunctionsBothX exampleInfo)) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample4.thyp")
+
 -- 
 -- 
 -- fmap (ppr . (fromRight [])) $ (runQ . (constructFunctions exampleInfo)) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample2.thyp")
@@ -1147,6 +1159,10 @@ parserT' typ = AppT parserT typ
 eqJustChar :: Name -> Char -> Exp
 eqJustChar mbVar theChar
   = InfixE (Just (VarE mbVar)) (VarE '(==)) (Just (AppE (ConE 'Just) (LitE (CharL theChar))))
+
+eqChar :: Name -> Char -> Exp
+eqChar xvar theChar
+  = InfixE (Just (VarE xvar)) (VarE '(==)) (Just (LitE (CharL theChar)))
 
 otherwiseG :: Exp -> (Guard, Exp)
 otherwiseG exp1 = (NormalG (VarE 'otherwise), exp1)
