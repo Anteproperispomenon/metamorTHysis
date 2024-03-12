@@ -88,8 +88,10 @@ module Metamorth.Interpretation.Parser.TH
   , makeGuards
   , exampleInfo
   , constructFunctions
+  , constructFunctionsBothX
   ) where
 
+import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.RWS.CPS
@@ -206,7 +208,7 @@ getSubTries
   :: Ord c => TM.TMap c a -> [(c, (Maybe a, TM.TMap c a))]
 -}
 
--- | Kinda hard to explain...
+-- | Creates the cases for the initial parser function.
 createCasesForStart :: Name -> StaticParserInfo -> CharPattern -> TrieAnnotation -> Maybe (MultiPhoneName, Caseness) -> Either [String] ((Either (Guard, Exp) [Match]), Bool)
 createCasesForStart grdName spi cp trieAnn@(TrieAnn _) _mph = case cp of
   -- hmm
@@ -463,19 +465,82 @@ createCasesForStart
   -> Either [String] ((Either (Guard, Exp) [Match]), Bool)
 -}
 
+-- splitTrie 
+
+constructFunctionsBothX
+  :: StaticParserInfo
+  -- -> [CharPattern]
+  -- -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> Q (Either [String] ([Dec],(Name, Name)))
+constructFunctionsBothX spi trie
+  = constructFunctionsBoth spi trie "startParser" "restParser"
+
+
+constructFunctionsBoth
+  :: StaticParserInfo
+  -- -> [CharPattern]
+  -- -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> String
+  -> String
+  -> Q (Either [String] ([Dec],(Name, Name)))
+constructFunctionsBoth spi trie funNomStrt funNomRst = do
+  let (trie1, trie2) = splitTrie trie
+  -- Construct the 
+  eRslt1 <- constructFunctionsS spi [WordStart] (S.empty, M.empty) trie1
+  case eRslt1 of
+    (Left errs) -> return $ Left errs
+    (Right (decs1, st1, nom1)) -> do
+      eRslt2 <- constructFunctionsS spi [] st1 trie2
+      case eRslt2 of
+        (Left errs) -> return $ Left errs
+        (Right (decs2, _st2, nom2)) -> do
+          -- Now, create the function that merges those two.
+          combinedFuncExp <- [| AT.peekChar' >>= \pkc -> ( ( $(return $ VarE nom1) pkc) <|> ( $(return $ VarE nom2) pkc) ) |]
+          followFuncExp   <- [| AT.peekChar' >>= \pkc -> ( $(return $ VarE nom2) pkc ) |]
+          let phoneType = spiPhoneTypeName spi
+          functionType    <- [t| AT.Parser (NonEmpty $(return $ VarT phoneType)) |]
+          -- Might want to check these strings are valid...
+          funNom1 <- newName $ varName funNomStrt
+          funNom2 <- newName $ varName funNomRst
+          let func1Dec = FunD funNom1 [Clause [] (NormalB combinedFuncExp) []]
+              func2Dec = FunD funNom2 [Clause [] (NormalB followFuncExp  ) []]
+              func1Sig = SigD funNom1 functionType
+              func2Sig = SigD funNom2 functionType
+              theseDecs = [func1Sig, func1Dec, func2Sig, func2Dec]
+          return $ Right (theseDecs ++ decs1 ++ decs2, (funNom1, funNom2))
+          
+
+
+
+
+
+constructFunctionsPat
+  :: StaticParserInfo
+  -> [CharPattern]
+  -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
+  -> Q (Either [String] ([Dec],Name))
+constructFunctionsPat spi cps stVals trie
+  = fmap getIt <$> constructFunctionsS spi cps stVals trie
+  where getIt (decs,_,nom) = (decs,nom)
+
 constructFunctions 
   :: StaticParserInfo
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
-  -> Q (Either [String] [Dec])
+  -> Q (Either [String] ([Dec], Name))
 constructFunctions spi trie
-  = fmap fst <$> constructFunctionsS spi trie
-
+  = fmap getIt <$> constructFunctionsS spi [] (S.empty, M.empty) trie
+  where getIt (decs,_,nom) = (decs,nom)
 
 constructFunctionsS
   :: StaticParserInfo
+  -> [CharPattern]
+  -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
-  -> Q (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool)))
-constructFunctionsS spi trie = do
+  -> Q (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool), Name))
+constructFunctionsS spi xcp stVals trie = do
   blName   <- newName "isCharMaj"
   peekName <- newName "peekedChar"
   grdName  <- newName "c"
@@ -503,13 +568,13 @@ constructFunctionsS spi trie = do
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
-      (moreDecs, stt, errs) <- runRWST' () (S.empty, M.empty) $ forM subTriesX $ \((cp, ((tann, mval), subTrie )),thisbl) -> do 
+      (moreDecs, stt, errs) <- runRWST' () stVals $ forM subTriesX $ \((cp, ((tann, mval), subTrie )),thisbl) -> do 
         -- let thisbl = True -- TEMPORARY
-        constructFunctions' blName peekName thisbl spi subTrie [cp] tann mval
+        constructFunctions' blName peekName thisbl spi subTrie (xcp ++ [cp]) tann mval
       let moreDecs' = concat moreDecs
           errs'     = errs
       case errs' of
-        [] -> return (Right ((mainSign:mainDec:moreDecs'),stt))
+        [] -> return (Right ((mainSign:mainDec:moreDecs'),stt,topFuncName))
         xs -> return (Left xs)
       
   where
@@ -993,6 +1058,8 @@ data PhonemePattern = PhonemePattern
 -- (constructFunctions exampleInfo) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample2.thyp")
 -- (runQ . (constructFunctions exampleInfo)) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample2.thyp")
 -- :m + Language.Haskell.TH Language.Haskell.TH.Syntax Language.Haskell.TH.Ppr
+
+-- fmap (ppr . (fromRight [])) $ (runQ . (fmap (fmap fst) . constructFunctionsBothX exampleInfo)) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample3.thyp")
 
 -- 
 -- 
