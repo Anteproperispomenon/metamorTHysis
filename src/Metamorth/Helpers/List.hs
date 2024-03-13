@@ -3,6 +3,7 @@ module Metamorth.Helpers.List
   , liftEitherList
   , withZip
   , withZipM
+  , allUnique
   ) where
 
 import Control.Monad (zipWithM)
@@ -91,3 +92,7 @@ withZip xs ys f = zipWith f xs ys
 -- | Like zipWithM, but with a different argument order.
 withZipM :: (Applicative m) => [a] -> [b] -> (a -> b -> m c) -> m [c]
 withZipM xs ys f = zipWithM f xs ys
+
+-- | Check that all members of a list are unique
+allUnique :: (Eq a) => [a] -> Bool
+allUnique xs = xs == (L.nub xs)

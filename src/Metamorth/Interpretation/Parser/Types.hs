@@ -5,12 +5,15 @@ module Metamorth.Interpretation.Parser.Types
   , ppCharPats
   , Caseness(..)
   , processRawPhonePattern
+  , StateMod(..)
   
   , RawPhonemePattern(..)
   , CharPatternRaw(..)
   ) where
 
 import Data.Bifunctor
+
+import Data.List (partition)
 
 import Data.Map.Strict qualified as M
 
@@ -43,7 +46,14 @@ data CharPatternRaw
   | WordEndR          -- ^ The end of a word.
   | NotStartR         -- ^ NOT the start of a word.
   | NotEndR           -- ^ NOT the end of a word.
+  | ValStateR String (Either String Bool) -- ^ Check that the state is a certain value.
+  | SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
   deriving (Show, Eq, Ord)
+
+isStateR :: CharPatternRaw -> Bool
+isStateR (ValStateR _ _) = True
+isStateR (SetStateR _ _) = True
+isStateR _ = False
 
 -- | The patterns that can make up a character.
 -- 
@@ -96,13 +106,14 @@ validCharPattern (x:y:xs) | (startPatR x) && (endPatR y) = False -- covers [Word
 validCharPattern (x:xs) | (endPatR x) = False
 validCharPattern (WordStartR:xs) = validCharPattern' xs
 validCharPattern (NotStartR :xs) = validCharPattern' xs
+validCharPattern _ = False
 
 validCharPattern' :: [CharPatternRaw] -> Bool
 validCharPattern' [] = True
 validCharPattern' ((PlainCharR _):xs) = validCharPattern' xs
 validCharPattern' ((CharClassR _):xs) = validCharPattern' xs
 validCharPattern' [x] | endPatR x = True
-validCharPattern' (x:xs) | (startPatR x || endPatR x) = False
+validCharPattern' (x:xs) | (startPatR x || endPatR x || isStateR x) = False
 
 validCharPatternE :: [CharPatternRaw] -> Either String ()
 validCharPatternE [] = Left "Can't have an empty pattern."
@@ -113,6 +124,10 @@ validCharPatternE [x,y]  | (startPatR x && endPatR y) = Left "Can't have a patte
 validCharPatternE (x:xs) | (endPatR x) = Left "Can't start a pattern with a [not-]word-end mark."
 validCharPatternE (WordStartR:xs) = validCharPatternE' xs
 validCharPatternE (NotStartR :xs) = validCharPatternE' xs
+validCharPatternE (x:_)  
+  | isStateR x = Left "State-patterns should have been filtered out by this point."
+  | otherwise  = Left "Some type of error happened in validateCharPatternZX."
+
 
 validCharPatternE' :: [CharPatternRaw] -> Either String ()
 validCharPatternE' [] = Right ()
@@ -122,15 +137,17 @@ validCharPatternE' [x] | (endPatR x) = Right ()
 validCharPatternE' (x:xs) 
   | (startPatR x) = Left "Can't have a [not-]word-start mark in the middle of a pattern."
   | (endPatR   x) = Left "Can't have a [not-]word-end mark in the middle of a pattern."
+  | (isStateR  x) = Left "State-patterns should have been filtered out by this point."
+  | otherwise     = Left "Some type of error happened in validateCharPatternE'."
 
 -- | Convert a list of `CharPatternRaw`s into a
 --   single `PhonemePattern`
-validateCharPatternE :: [CharPatternRaw] -> Either String PhonemePattern
-validateCharPatternE cpr = do
+validateCharPatternE :: [StateMod] -> [CharPatternRaw] -> Either String PhonemePattern
+validateCharPatternE stms cpr = do
   (rslt, st) <- runStateT (validateCharPatternEX cpr) Nothing
   case st of
-    (Just True) -> return $ PhonemePattern CMaj rslt
-    _           -> return $ PhonemePattern CMin rslt
+    (Just True) -> return $ PhonemePattern CMaj rslt stms
+    _           -> return $ PhonemePattern CMin rslt stms
 
 validateCharPatternEX :: [CharPatternRaw] -> StateT (Maybe Bool) (Either String) [CharPattern]
 validateCharPatternEX [] = lift $ Left "Can't have an empty pattern."
@@ -143,6 +160,8 @@ validateCharPatternEX [x,y]  | (startPatR x && endPatR y) = lift $ Left "Can't h
 validateCharPatternEX (x:xs) | (endPatR x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
 validateCharPatternEX (WordStartR:xs) = (WordStart:) <$> validateCharPatternE' xs
 validateCharPatternEX (NotStartR :xs) = (NotStart :) <$> validateCharPatternE' xs
+validateCharPatternEX (x:_)  | isStateR x = lift $ Left "State-patterns should have been filtered out by this point."
+validateCharPatternEX _ = lift $ Left "Some type of error happened in validateCharPatternEX."
 
 validateCharPatternE' :: [CharPatternRaw] -> StateT (Maybe Bool) (Either String) [CharPattern]
 validateCharPatternE' [] = return []
@@ -161,12 +180,14 @@ validateCharPatternE' [NotEndR]  = return [NotEnd]
 validateCharPatternE' (x:xs) 
   | (startPatR x) = lift $ Left "Can't have a [not-]word-start mark in the middle of a pattern."
   | (endPatR   x) = lift $ Left "Can't have a [not-]word-end mark in the middle of a pattern."
+  | (isStateR  x) = lift $ Left "State-patterns should have been filtered out by this point."
+  | otherwise     = lift $ Left "Some type of error happened in validateCharPatternE'."
 
 -- | Alternate version of `validateCharPatternE`.
-validateCharPatternZ :: [CharPatternRaw] -> Either String PhonemePattern
-validateCharPatternZ cpr = do
+validateCharPatternZ :: [StateMod] -> [CharPatternRaw] -> Either String PhonemePattern
+validateCharPatternZ stms cpr = do
   (rslt, _st) <- runStateT (validateCharPatternZX cpr) Nothing
-  return $ PhonemePattern CDep rslt
+  return $ PhonemePattern CDep rslt stms
 
 
 validateCharPatternZX :: [CharPatternRaw] -> StateT (Maybe Bool) (Either String) [CharPattern]
@@ -177,9 +198,11 @@ validateCharPatternZX ((PlainCharR x):xs) = do
 validateCharPatternZX ((CharClassR x):xs) = ((CharClass x):) <$> validateCharPatternZ' xs
 validateCharPatternZX [x]    | (startPatR x) = lift $ Left "Can't have a pattern with just a [not-]start-word mark."
 validateCharPatternZX [x,y]  | (startPatR x && endPatR y) = lift $ Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
-validateCharPatternZX (x:xs) | (endPatR x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
+validateCharPatternZX (x:xs) | (endPatR  x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
+                             | (isStateR x) = lift $ Left "State-patterns should have been filtered out by this point."
 validateCharPatternZX (WordStartR:xs) = (WordStart:) <$> validateCharPatternZ' xs
 validateCharPatternZX (NotStartR :xs) = (NotStart :) <$> validateCharPatternZ' xs
+validateCharPatternZX _ = lift $ Left "Some type of error happened in validateCharPatternZX."
 
 validateCharPatternZ' :: [CharPatternRaw] -> StateT (Maybe Bool) (Either String) [CharPattern]
 validateCharPatternZ' [] = return []
@@ -198,6 +221,8 @@ validateCharPatternZ' [NotEndR]  = return [NotEnd]
 validateCharPatternZ' (x:xs) 
   | (startPatR x) = lift $ Left "Can't have a [not-]word-start mark in the middle of a pattern."
   | (endPatR   x) = lift $ Left "Can't have a [not-]word-end mark in the middle of a pattern."
+  | (isStateR  x) = lift $ Left "State-patterns should have been filtered out by this point."
+  | otherwise     = lift $ Left "Some type of error happened when validating a CharPatternRaw."
 
 caseChar :: Char -> CharPattern
 caseChar c
@@ -211,13 +236,36 @@ data Caseness
   | CDep -- ^ Dependent on other factors.
   deriving (Show, Eq, Ord)
 
+data StateMod 
+  -- | Set a state to a boolean value
+  = SetStateB String Bool
+  -- | Set a state to a enumerated value
+  | SetStateV String String
+  -- | Check whether a state is a certain boolean value.
+  | ValStateB String Bool
+  -- | Check whether a state is a certain enumerated value.
+  | ValStateV String String
+  deriving (Show, Eq)
+
+
+--   | ValStateR String (Either String Bool) -- ^ Check that the state is a certain value.
+--   | SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
+
+makeStateMod :: CharPatternRaw -> Maybe StateMod
+makeStateMod (ValStateR x (Left str)) = Just $ ValStateV x str
+makeStateMod (ValStateR x (Right bl)) = Just $ ValStateB x bl
+makeStateMod (SetStateR x (Left str)) = Just $ SetStateV x str
+makeStateMod (SetStateR x (Right bl)) = Just $ SetStateB x bl
+makeStateMod _ = Nothing
+
 -- | A pattern that makes up a single phoneme.
 --   Consists of multiple `CharPattern`s and 
 --   a flag for whether the pattern is upper
 --   or lower case.
 data PhonemePattern = PhonemePattern 
-  { isUpperPP  :: Caseness      -- ^ Is this pattern upper-case?
-  , charPatsPP :: [CharPattern] -- ^ The pattern of `Char`s for this phoneme.
+  { isUpperPP   :: Caseness      -- ^ Is this pattern upper-case?
+  , charPatsPP  :: [CharPattern] -- ^ The pattern of `Char`s for this phoneme.
+  , stateModsPP :: [StateMod]
   } deriving (Show, Eq)
 
 makeLower :: PhonemePattern -> PhonemePattern
@@ -239,11 +287,15 @@ data RawPhonemePattern = RawPhonemePattern
 --   more work.
 processRawPhonePattern :: RawPhonemePattern -> Either [String] PhonemePattern
 processRawPhonePattern pat
-  | (hasUpper || hasLower) = bimap (:collectedErrors) makeCase $ validateCharPatternE (charPatsRP pat)
-  | otherwise              = bimap (:collectedErrors) makeCase $ validateCharPatternZ (charPatsRP pat)
+  | (hasUpper || hasLower) = bimap (:collectedErrors) makeCase $ validateCharPatternE cstates' cpats
+  | otherwise              = bimap (:collectedErrors) makeCase $ validateCharPatternZ cstates' cpats
   -- | otherwise = Left ["incomplete function"]
   
   where 
+    -- Filtering out state changes
+    (cstates, cpats) = partition isStateR $ charPatsRP pat
+    cstates' = mapMaybe makeStateMod cstates
+
     mods = modCharRP pat
     hasUpper = '+' `elem` mods
     hasLower = '-' `elem` mods
