@@ -63,11 +63,23 @@ parseStartPoint = (AT.char '^') $> WordStartR
 parseEndPoint :: AT.Parser CharPatternRaw
 parseEndPoint = (AT.char '$') $> WordEndR
 
+parseNotStart :: AT.Parser CharPatternRaw
+parseNotStart = (AT.char '%') $> NotStartR
+
+parseNotEnd :: AT.Parser CharPatternRaw
+parseNotEnd = (AT.char '&') $> NotEndR
+
 parseStartPointS :: ParserParser CharPatternRaw
 parseStartPointS = lift parseStartPoint
 
 parseEndPointS :: ParserParser CharPatternRaw
 parseEndPointS = lift parseEndPoint
+
+parseNotStartS :: ParserParser CharPatternRaw
+parseNotStartS = lift parseNotStart
+
+parseNotEndS :: ParserParser CharPatternRaw
+parseNotEndS = lift parseNotEnd
 
 -- | Parse an escaped character.
 -- 
@@ -86,6 +98,7 @@ parseEscaped = do
     '*' -> consProd '*'
     '+' -> consProd '+'
     '-' -> consProd '-'
+    '%' -> consProd '%'
     y   -> consProd y
 
   {- -- older version
@@ -142,7 +155,7 @@ parseNonSpaceRS = lift parseNonSpaceR
 -- Special Char Parsers
 
 parseSpecials :: AT.Parser [Char] 
-parseSpecials = AT.sepBy (AT.satisfy (\x -> x == '+' || x == '-' || x == '%')) skipHoriz
+parseSpecials = AT.sepBy (AT.satisfy (\x -> x == '+' || x == '-')) skipHoriz
 
 parseSpecialsS :: ParserParser [Char]
 parseSpecialsS = lift parseSpecials
@@ -302,6 +315,8 @@ parsePhonemePatS = do
         <|> parseEscapedRS 
         <|> parseStartPointS 
         <|> parseEndPointS 
+        <|> parseNotStartS
+        <|> parseNotEndS
         <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go last.
       ) 
       (lift skipHoriz1)
@@ -328,8 +343,10 @@ parsePhonemePatMulti = do
       ( parseCodepointRS 
         <|> parseClassNameRS 
         <|> parseEscapedRS 
-        <|> parseStartPointS 
-        <|> parseEndPointS 
+        <|> parseStartPointS
+        <|> parseEndPointS
+        <|> parseNotStartS
+        <|> parseNotEndS
         <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go last.
       ) 
       (lift skipHoriz1)
