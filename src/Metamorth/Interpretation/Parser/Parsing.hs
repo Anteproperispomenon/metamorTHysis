@@ -191,17 +191,48 @@ parseClassDecS = do
         modify $ \x -> x {ppsClassDictionary = newMap}
 
 -- | Parse the class declaration section.
+--   This also includes states.
 parseClassDecSection :: ParserParser ()
 parseClassDecSection = do
   -- lift AT.skipSpace
   _ <- lift $ many parseEndComment
   _ <- AT.many' $ do
-    parseClassDecS
+    parseClassDecS <|> parseStateDecS
     lift $ AT.many1 parseEndComment
   _ <- lift $ many  parseEndComment
   _ <- lift ("====" <?> "Classes: Separator1")
   _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
   lift parseEndComment
+
+----------------------------------------------------------------
+-- State Info Parsers
+----------------------------------------------------------------
+
+parseStateDec :: AT.Parser (String, Maybe (S.Set String))
+parseStateDec = do
+  _ <- "state"
+  skipHoriz1
+  stateName <- takeIdentifier isLower isFollowId
+  skipHoriz
+  vals <- optional $ do
+    _ <- AT.char ':' <?> "State declaration has no ':'."
+    skipHoriz
+    let thisPrs = takeIdentifier isAlpha isFollowId
+    (AT.sepBy1' thisPrs skipHoriz1) <?> "State declaration has ':' but no options."
+  -- parseEndComment
+  return (T.unpack stateName, (S.fromList . map T.unpack) <$> vals)
+
+-- | Parse a state declaration and add it to
+--   the state dictionary.
+parseStateDecS :: ParserParser ()
+parseStateDecS = do
+  (stName, stSet) <- lift $ parseStateDec
+  theMap <- gets ppsStateDictionary
+  case (M.lookup stName theMap) of
+    (Just _) -> tell ["Error: state \"" <> stName <> "\" has multiple definitions."]
+    Nothing  -> do
+        let newMap = M.insert stName stSet theMap
+        modify $ \x -> x {ppsStateDictionary = newMap}
 
 ----------------------------------------------------------------
 -- Orthography Properties Parsers
