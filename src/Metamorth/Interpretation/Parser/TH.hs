@@ -654,7 +654,8 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal = 
 
   where
     mbl = if isCased then (Just blName) else Nothing
-    mbool = AppT (ConT ''Maybe) (ConT ''Bool)
+    -- mbool = AppT (ConT ''Maybe) (ConT ''Bool)
+    mbool = (ConT ''Bool)
     mchar = AppT (ConT ''Maybe) (ConT ''Char)
     pbool = VarP blName
     pchar = VarP peekName
