@@ -108,8 +108,8 @@ validCharPatternE :: [CharPatternRaw] -> Either String ()
 validCharPatternE [] = Left "Can't have an empty pattern."
 validCharPatternE ((PlainCharR _):xs) = validCharPatternE' xs
 validCharPatternE ((CharClassR _):xs) = validCharPatternE' xs
-validCharPatternE [x]   | (startPatR x) = Left "Can't have a pattern with just a [not-]start-word mark."
-validCharPatternE [x,y] | (startPatR x && endPatR y) = Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
+validCharPatternE [x]    | (startPatR x) = Left "Can't have a pattern with just a [not-]start-word mark."
+validCharPatternE [x,y]  | (startPatR x && endPatR y) = Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
 validCharPatternE (x:xs) | (endPatR x) = Left "Can't start a pattern with a [not-]word-end mark."
 validCharPatternE (WordStartR:xs) = validCharPatternE' xs
 validCharPatternE (NotStartR :xs) = validCharPatternE' xs
