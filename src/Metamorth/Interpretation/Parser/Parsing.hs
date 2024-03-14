@@ -554,7 +554,7 @@ parseOrthographyFile = do
   
   let phonePatsM  = ppsPhonemePatterns stt
       phoneNames  = M.keys phonePatsM
-      phoneNames' = concatMap NE.toList phoneNames
+      phoneNames' = concatMap (NE.toList . prPhonemes) phoneNames
       phoneGroups = groupBy eqOnPN phoneNames'
       wrongPhones = filter (not . sameArgsPN) phoneGroups
       phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones

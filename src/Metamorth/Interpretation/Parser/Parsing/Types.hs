@@ -4,6 +4,7 @@ module Metamorth.Interpretation.Parser.Parsing.Types
   , addPhonemePattern
   , addPhonemesPattern
   , PhoneName(..)
+  , PhoneResult(..)
   , eqOnPN
   , sameArgsPN
   , runOnPhoneme
@@ -57,7 +58,8 @@ runOnPhoneme str = local (const str)
 addPhonemePattern :: PhoneName -> PhonemePattern -> ParserParser ()
 addPhonemePattern phone pat = do
   theMap <- gets ppsPhonemePatterns
-  let newMap = M.insertWith (flip (++)) (NE.singleton phone) [pat] theMap
+  let stMods = stateModsPP pat
+      newMap = M.insertWith (flip (++)) (PhoneResult (NE.singleton phone) stMods) [pat] theMap
   modify $ \st -> st {ppsPhonemePatterns = newMap}
 
 -- | Add a new phoneme pattern for a specific `PhoneName`.
@@ -65,14 +67,15 @@ addPhonemePattern phone pat = do
 addPhonemesPattern :: NonEmpty PhoneName -> PhonemePattern -> ParserParser ()
 addPhonemesPattern phones pat = do
   theMap <- gets ppsPhonemePatterns
-  let newMap = M.insertWith (flip (++)) phones [pat] theMap
+  let stMods = stateModsPP pat
+      newMap = M.insertWith (flip (++)) (PhoneResult phones stMods) [pat] theMap
   modify $ \st -> st {ppsPhonemePatterns = newMap}
 
 
 data ParserParsingState = ParserParsingState
   { ppsClassDictionary :: M.Map String (S.Set Char)
   , ppsStateDictionary :: M.Map String (Maybe (S.Set String))
-  , ppsPhonemePatterns :: M.Map (NonEmpty PhoneName) [PhonemePattern]
+  , ppsPhonemePatterns :: M.Map PhoneResult [PhonemePattern]
   } deriving (Show, Eq)
 
 defParseState :: ParserParsingState
@@ -81,6 +84,14 @@ defParseState = ParserParsingState
   , ppsStateDictionary = M.empty
   , ppsPhonemePatterns = M.empty
   }
+
+-- | The final result that can be found at a leaf.
+--   Contains the phoneme(s) and the state modifications.
+data PhoneResult = PhoneResult
+  { prPhonemes  :: NonEmpty PhoneName
+  , prStateMods :: [ModifyState]
+  } deriving (Show, Eq, Ord)
+
 
 -- | Run a `ParserParser`, returning the result if
 --   no errors occurred, and failing with a list of
