@@ -9,6 +9,9 @@ module Metamorth.Interpretation.Parser.Types
 
   , CheckState(..)
   , ModifyState(..)
+
+  , CheckStateX(..)
+  , ModifyStateX(..)
   
   , RawPhonemePattern(..)
   , CharPatternRaw(..)
@@ -28,6 +31,8 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.State.Strict
 
 import Data.Maybe
+
+import Data.Set qualified as S
 
 import Metamorth.Helpers.Either
 
@@ -65,9 +70,9 @@ isStateR _ = False
 --   e.g. @ts' : t s *apost@ would become
 --   > [PlainChar 't', PlainChar 's', CharClass "apost"]
 data CharPattern
-  = PlainChar   [CheckState] Char   -- ^ A single `Char`.
-  | CharOptCase [CheckState] Char -- ^ Any case of a `Char`.
-  | CharClass   [CheckState] String -- ^ Any member of a class from the header.
+  = PlainChar   [CheckStateX] Char   -- ^ A single `Char`.
+  | CharOptCase [CheckStateX] Char   -- ^ Any case of a `Char`.
+  | CharClass   [CheckStateX] String -- ^ Any member of a class from the header.
   | WordStart        -- ^ The start of a word.
   | WordEnd          -- ^ The end of a word.
   | NotStart         -- ^ NOT the start of a word.
@@ -79,9 +84,15 @@ data CheckState
   | CheckStateV String String
   deriving (Show, Eq, Ord)
 
+data CheckStateX
+  = CheckStateBB String Bool
+  | CheckStateVV String String
+  | CheckStateVB String Bool
+  deriving (Show, Eq, Ord)
+
 -- | Adds `CheckState` info to the first
 --   compatible element in a pattern.
-addStateToPat :: [CheckState] -> [CharPattern] -> [CharPattern]
+addStateToPat :: [CheckStateX] -> [CharPattern] -> [CharPattern]
 addStateToPat [] cpats = cpats
 addStateToPat sts ((PlainChar   xs c):rst) = (PlainChar   (sts ++ xs) c) : rst
 addStateToPat sts ((CharOptCase xs c):rst) = (CharOptCase (sts ++ xs) c) : rst
@@ -92,6 +103,17 @@ addStateToPat _ [] = []
 data ModifyState
   = ModifyStateB String Bool
   | ModifyStateV String String
+  deriving (Show, Eq, Ord)
+
+-- | Verified modify state; tells whether
+--   
+data ModifyStateX
+  -- | Change the value of a boolean state.
+  = ModifyStateBB String Bool
+  -- | Change the value of a value-state.
+  | ModifyStateVV String String
+  -- | Set a value-state to `Nothing`.
+  | ModifyStateVX String
   deriving (Show, Eq, Ord)
 
 separateStateMod :: StateMod -> Either CheckState ModifyState
@@ -173,7 +195,7 @@ validCharPatternE' (x:xs)
 
 -- | Convert a list of `CharPatternRaw`s into a
 --   single `PhonemePattern`
-validateCharPatternE :: [ModifyState] -> [CheckState] -> [CharPatternRaw] -> Either String PhonemePattern
+validateCharPatternE :: [ModifyStateX] -> [CheckStateX] -> [CharPatternRaw] -> Either String PhonemePattern
 validateCharPatternE stms chks cpr = do
   (rslt, st) <- runStateT (validateCharPatternEX cpr) Nothing
   case st of
@@ -215,7 +237,7 @@ validateCharPatternE' (x:xs)
   | otherwise     = lift $ Left "Some type of error happened in validateCharPatternE'."
 
 -- | Alternate version of `validateCharPatternE`.
-validateCharPatternZ :: [ModifyState] -> [CheckState] -> [CharPatternRaw] -> Either String PhonemePattern
+validateCharPatternZ :: [ModifyStateX] -> [CheckStateX] -> [CharPatternRaw] -> Either String PhonemePattern
 validateCharPatternZ stms chks cpr = do
   (rslt, _st) <- runStateT (validateCharPatternZX cpr) Nothing
   return $ PhonemePattern CDep (addStateToPat chks rslt) stms
@@ -295,7 +317,7 @@ makeStateMod _ = Nothing
 data PhonemePattern = PhonemePattern 
   { isUpperPP   :: Caseness      -- ^ Is this pattern upper-case?
   , charPatsPP  :: [CharPattern] -- ^ The pattern of `Char`s for this phoneme.
-  , stateModsPP :: [ModifyState]
+  , stateModsPP :: [ModifyStateX]
   } deriving (Show, Eq)
 
 makeLower :: PhonemePattern -> PhonemePattern
@@ -315,10 +337,10 @@ data RawPhonemePattern = RawPhonemePattern
 -- | Process a `RawPhonemePattern` into one or more
 --   valid `PhonemePattern`s. This, uh... needs some
 --   more work.
-processRawPhonePattern :: RawPhonemePattern -> Either [String] PhonemePattern
-processRawPhonePattern pat
-  | (hasUpper || hasLower) = bimap (:collectedErrors) makeCase $ validateCharPatternE mstates vstates cpats
-  | otherwise              = bimap (:collectedErrors) makeCase $ validateCharPatternZ mstates vstates cpats
+processRawPhonePattern :: M.Map String (Maybe (S.Set String)) -> RawPhonemePattern -> Either [String] PhonemePattern
+processRawPhonePattern sdict pat
+  | (hasUpper || hasLower) = bimap (:collectedErrors) makeCase $ validateCharPatternE mstates' vstates' cpats
+  | otherwise              = bimap (:collectedErrors) makeCase $ validateCharPatternZ mstates' vstates' cpats
   -- | otherwise = Left ["incomplete function"]
   
   where 
@@ -328,6 +350,9 @@ processRawPhonePattern pat
 
     (vstates, mstates) = partitionWith separateStateMod cstates'
 
+    (verrs, vstates') = partitionWith (validateCheckState  sdict) vstates
+    (merrs, mstates') = partitionWith (validateModifyState sdict) mstates
+
     mods = modCharRP pat
     hasUpper = '+' `elem` mods
     hasLower = '-' `elem` mods
@@ -335,10 +360,37 @@ processRawPhonePattern pat
                   | hasLower  -> makeLower
                   | otherwise -> id
 
-    collectedErrors = concat [bothCaseError]
+    collectedErrors = concat [bothCaseError, verrs, merrs]
     -- Errors
     bothCaseError = if (hasUpper && hasLower) 
       then ["Cannot declare a pattern to be both upper and lower case."] 
       else []
+
+-- Some of these need better error messages.
+validateCheckState :: M.Map String (Maybe (S.Set String)) -> CheckState -> Either String CheckStateX
+validateCheckState sdict (CheckStateB str bl ) = case (M.lookup str sdict) of
+  Nothing         -> Left $ "Couldn't find state type \"" <> str <> "\"."
+  (Just Nothing)  -> Right (CheckStateBB str bl)
+  (Just (Just _)) -> Right (CheckStateVB str bl)
+validateCheckState sdict (CheckStateV str val) = case (M.lookup str sdict) of
+  Nothing              -> Left $ "Couldn't find state type \"" <> str <> "\"."
+  (Just Nothing)       -> Left $ "Tried to check boolean state type \"" <> str <> "\" with value \"" <> val <> "\"."
+  (Just (Just theSet)) -> if (val `S.member` theSet)
+    then Right (CheckStateVV str val)
+    else Left ("Tried to check value-state type \"" <> str <> "\" with unknown value \"" <> val <> "\".")
+
+validateModifyState :: M.Map String (Maybe (S.Set String)) -> ModifyState -> Either String ModifyStateX
+validateModifyState sdict (ModifyStateB str bl ) = case (M.lookup str sdict) of
+  Nothing         -> Left $ "Couldn't find state type \"" <> str <> "\"."
+  (Just Nothing)  -> Right (ModifyStateBB str bl)
+  (Just (Just _)) -> if bl
+    then Left ("Can't set value-state value \"" <> str <> "\" to true/on; can only set it to a specific value or false/off")
+    else Right (ModifyStateVX str)
+validateModifyState sdict (ModifyStateV str val) = case (M.lookup str sdict) of
+  Nothing              -> Left $ "Couldn't find state type \"" <> str <> "\"."
+  (Just Nothing)       -> Left $ "Tried to set boolean state type \"" <> str <> "\" to value \"" <> val <> "\"."
+  (Just (Just theSet)) -> if (val `S.member` theSet)
+    then Right (ModifyStateVV str val)
+    else Left ("Tried to set value-state type \"" <> str <> "\" to unknown value \"" <> val <> "\".")
 
 

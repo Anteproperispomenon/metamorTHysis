@@ -89,7 +89,7 @@ defParseState = ParserParsingState
 --   Contains the phoneme(s) and the state modifications.
 data PhoneResult = PhoneResult
   { prPhonemes  :: NonEmpty PhoneName
-  , prStateMods :: [ModifyState]
+  , prStateMods :: [ModifyStateX]
   } deriving (Show, Eq, Ord)
 
 
