@@ -65,11 +65,11 @@ varName (x:xs) = (toLower x : xs)
 
 sumAdtDecDeriv :: Name -> [(Name, [Type])] -> [Type] -> Dec
 sumAdtDecDeriv a b ders =
-  DataD [] a [] Nothing (fmap (uncurry sumCon) b) (map (\cl -> DerivClause Nothing [cl]) ders)
+  DataD [] a [] Nothing (fmap (uncurry sumCon) b) [DerivClause Nothing ders]
 
 recordAdtDecDeriv :: Name -> [(Name, Type)] -> [Type] -> Dec
 recordAdtDecDeriv typeName fields ders =
-  DataD [] typeName [] Nothing [con] (map (\cl -> DerivClause Nothing [cl]) ders)
+  DataD [] typeName [] Nothing [con] [DerivClause Nothing ders]
   where
     con =
       RecC typeName (fmap (\(fieldName, fieldType) -> (fieldName, fieldBang, fieldType)) fields)
