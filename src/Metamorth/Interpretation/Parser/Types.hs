@@ -1,7 +1,11 @@
+{-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE StandaloneDeriving #-}
+
 module Metamorth.Interpretation.Parser.Types
   ( HeaderData(..)
   , PhonemePattern(..)
   , CharPattern(..)
+  , CharPatternF(..)
   , ppCharPats
   , Caseness(..)
   , processRawPhonePattern
@@ -19,6 +23,7 @@ module Metamorth.Interpretation.Parser.Types
 
 import Data.Bifunctor
 
+import Data.Ord (Down(..))
 import Data.List (partition)
 
 import Data.Map.Strict qualified as M
@@ -35,6 +40,7 @@ import Data.Maybe
 import Data.Set qualified as S
 
 import Metamorth.Helpers.Either
+import Metamorth.Helpers.Ord
 
 -- | The data that's found in the header of the
 --   parser file.
@@ -69,15 +75,32 @@ isStateR _ = False
 -- 
 --   e.g. @ts' : t s *apost@ would become
 --   > [PlainChar 't', PlainChar 's', CharClass "apost"]
-data CharPattern
-  = PlainChar   [CheckStateX] Char   -- ^ A single `Char`.
-  | CharOptCase [CheckStateX] Char   -- ^ Any case of a `Char`.
-  | CharClass   [CheckStateX] String -- ^ Any member of a class from the header.
-  | WordStart        -- ^ The start of a word.
-  | WordEnd          -- ^ The end of a word.
-  | NotStart         -- ^ NOT the start of a word.
-  | NotEnd           -- ^ NOT the end of a word.
-  deriving (Show, Eq, Ord)
+--
+--   Note that this is implemented as a type synonym
+--   over `CharPatternF`. This is to control how the
+--   `Ord` instance is constructed.
+type CharPattern = CharPatternF [CheckStateX]
+
+-- | The "internal" version of `CharPattern`.
+data CharPatternF b
+  = PlainChar   b Char   -- ^ A single `Char`.
+  | CharOptCase b Char   -- ^ Any case of a `Char`.
+  | CharClass   b String -- ^ Any member of a class from the header.
+  | WordStart            -- ^ The start of a word.
+  | WordEnd              -- ^ The end of a word.
+  | NotStart             -- ^ NOT the start of a word.
+  | NotEnd               -- ^ NOT the end of a word.
+  deriving (Show, Eq)
+
+-- Make (CharPatternF (Down b)) an instance of `Ord` so that
+-- (CharPatternF b) has something to derive via. Also make this
+-- function overlapping so that it can be chosen as the instance
+-- instead of (CharPatternF b).
+deriving instance {-# OVERLAPPING  #-} (Ord b) => Ord (CharPatternF (Down b))
+
+deriving via (CharPatternF (Down b)) instance {-# OVERLAPPABLE #-} (Ord b) => Ord (CharPatternF b) 
+
+deriving via (CharPatternF (Down (SizeOrdList b))) instance {-# OVERLAPS #-} (Ord b) => Ord (CharPatternF [b])
 
 data CheckState
   = CheckStateB String Bool

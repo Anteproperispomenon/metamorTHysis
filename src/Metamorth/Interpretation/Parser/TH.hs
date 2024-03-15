@@ -87,6 +87,7 @@ module Metamorth.Interpretation.Parser.TH
   , tempTester
   , makeGuards
   , exampleInfo
+  , exampleInfo2
   , constructFunctions
   , constructFunctionsBothX
   , makeClassDec
@@ -1445,7 +1446,26 @@ exampleInfo
       (mkName "PhonemeState")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
 
-
+exampleInfo2 :: StaticParserInfo
+exampleInfo2
+  = StaticParserInfo
+      -- hmm...
+      (M.fromList $ forMap [1..100]   $ \n -> (TrieAnn n, mkName ("trieAnn_" ++ show n)))
+      (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["gh","ts","ch","sh","sep"]) $ \c -> (c, mkName $ dataName c))
+      consMap3
+      (M.empty) -- class Map (empty for now)
+      id
+      id
+      (mkName "notSomeChar")
+      (mkName "isSomeChar")
+      (mkName "Phoneme")
+      (mkName "PhonemeState")
+      (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")])))]) -- for now.
+  where
+    consMap1 = (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["gh","ts","ch","sh","sep"]) $ \c -> (c, []))
+    subMap1  = [M.fromList $ [("front",mkName "Front"), ("back", mkName "Back")]]
+    consMap2 = (M.fromList [("a", subMap1),("o", subMap1),("u", subMap1)])
+    consMap3 = M.union consMap2 consMap1
 
 {-
 data StaticParserInfo = StaticParserInfo

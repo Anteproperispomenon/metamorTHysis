@@ -30,6 +30,7 @@ library
       Metamorth.Helpers.Either
       Metamorth.Helpers.List
       Metamorth.Helpers.Map
+      Metamorth.Helpers.Ord
       Metamorth.Helpers.Parsing
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
@@ -47,6 +48,7 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      FlexibleInstances
       ImportQualifiedPost
       LambdaCase
       MultiWayIf
@@ -71,6 +73,7 @@ executable metamorTHysis-exe
   hs-source-dirs:
       app
   default-extensions:
+      FlexibleInstances
       ImportQualifiedPost
       LambdaCase
       MultiWayIf
@@ -97,6 +100,7 @@ test-suite metamorTHysis-test
   hs-source-dirs:
       test
   default-extensions:
+      FlexibleInstances
       ImportQualifiedPost
       LambdaCase
       MultiWayIf

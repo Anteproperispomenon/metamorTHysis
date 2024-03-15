@@ -20,6 +20,7 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/Anteproperispomenon/metamorTHysis#readme>
 
 default-extensions:
+- FlexibleInstances
 - ImportQualifiedPost
 - LambdaCase
 - MultiWayIf
