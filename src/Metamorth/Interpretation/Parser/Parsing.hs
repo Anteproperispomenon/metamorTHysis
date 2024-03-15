@@ -516,7 +516,8 @@ parsePhonemePatMulti = do
       ) 
       (lift skipHoriz1)
     -- hmm...
-    let ePhonePats = processRawPhonePattern (RawPhonemePattern specs thePats)
+    sdict <- gets ppsStateDictionary
+    let ePhonePats = processRawPhonePattern sdict (RawPhonemePattern specs thePats)
     case ePhonePats of
       (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemesPattern phones rslt
