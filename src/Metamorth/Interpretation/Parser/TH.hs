@@ -89,6 +89,7 @@ module Metamorth.Interpretation.Parser.TH
   , exampleInfo
   , exampleInfo2
   , constructFunctions
+  , createStateDecs
   , constructFunctionsBothX
   , makeClassDec
   ) where
@@ -105,6 +106,7 @@ import Data.Attoparsec.Text qualified as AT
 import Data.Bifunctor qualified as Bi
 
 import Data.Foldable
+import Data.Functor
 
 import Data.Traversable
 
@@ -119,6 +121,7 @@ import Data.Maybe
 import Data.Text qualified as T -- ?
 
 import Data.Map.Strict qualified as M
+import Metamorth.Helpers.Map
 
 import Data.Set qualified as S
 
@@ -127,6 +130,8 @@ import Data.List.NonEmpty (NonEmpty(..))
 
 import Data.Trie.Map qualified as TM
 import Metamorth.Helpers.Trie
+
+import Data.Tuple
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
@@ -176,9 +181,61 @@ constructFunctions
   :: StaticParserInfo
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
   -> Q (Either [String] [Dec])
-
-
 -}
+
+
+----------------------------------------------------------------
+-- Creating information from parsed data
+----------------------------------------------------------------
+
+-- | Create the state types and produce a `M.Map` of
+--   information about the types.
+createStateDecs :: String -> M.Map String (Maybe (S.Set String)) -> Q ([Dec], Name, (M.Map String (Name, Maybe (Name, M.Map String Name))))
+createStateDecs stateTypeString theMap = do
+  -- Will use the same `Name` for both the type
+  -- constructor and the data constructor.
+  stateTypeName <- newName $ dataName stateTypeString
+  rslt1 <- forWithKey theMap $ \stateStr mSet -> do
+    recFieldName <- newName $ varName stateStr
+    case mSet of
+      Nothing -> return (recFieldName, Nothing)
+      -- Generate the names for the constructors of the subtype.
+      (Just theSet) -> do
+        stateValTypeName <- newName $ dataName stateStr
+        rslt2 <- for (S.toAscList theSet) $ \valStr -> do
+          -- Remember: return this as a list, not a map.
+          constrName <- newName $ dataName valStr
+          return (valStr, constrName)
+        -- Hopefully this is safe...
+        let rsltMap = M.fromAscList rslt2
+        return (recFieldName, Just (stateValTypeName, rsltMap))
+  -- Okay, back to the main level.
+  -- Now, we have to convert this map into Decs...
+  -- Remember recordAdtDecDeriv :: Name -> [(Name, Type)]   -> [Type] -> Dec
+  -- and      sumAdtDecDeriv    :: Name -> [(Name, [Type])] -> [Type] -> Dec
+  -- and      showSumInstance   :: Name -> [(Name, String)] -> [Dec]
+
+  -- We don't really need the `String` right here, so...
+  let mp1 = M.elems rslt1
+  -- Creating the sub-Decs and the values to be
+  -- fed into `recordAdtDecDeriv`.
+  let decsInfo = forMap mp1 $ \(nom, mCons) -> case mCons of
+        Nothing -> ((nom, ConT ''Bool), [])
+        (Just (typeCstrName, thisMap)) ->
+          let showMap = map swap $ M.assocs thisMap
+              typeMap = map (second (const [])) showMap
+              theDecs = sumAdtDecDeriv  typeCstrName typeMap [ConT ''Eq, ConT ''Ord, ConT ''Enum ]
+              showDec = showSumInstance typeCstrName showMap
+          in ((nom, AppT (ConT ''Maybe) (ConT typeCstrName)), (theDecs : showDec))
+  
+  -- Okay, now the final dec...
+  let (recTypes, restDecs) = unzip decsInfo
+      recTypeDec = recordAdtDecDeriv stateTypeName recTypes [ConT ''Eq, ConT ''Ord, ConT ''Show]
+
+  return ((recTypeDec:(concat restDecs)), stateTypeName, rslt1)
+        
+-- fmap (\(x,_,_) -> ppr x) $ join (fmap (runQ . (createStateDecs "StateType") . ppsStateDictionary) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample8.thyp")
+
 
 ----------------------------------------------------------------
 -- Top-Level Function Generator

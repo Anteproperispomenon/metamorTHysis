@@ -78,7 +78,8 @@ stringExp :: String -> Exp
 stringExp = LitE . StringL
 
 -- | Create a `Show` instance for a simple sum
---   type where each 
+--   type where each constructor is represented
+--   by a given `String`.
 showSumInstance :: Name -> [(Name, String)] -> [Dec]
 showSumInstance typeName prs = 
   [InstanceD Nothing [] (AppT (ConT ''Show) (ConT typeName) )
