@@ -289,34 +289,40 @@ createCasesForStart grdName stateValName spi cp TrieLeaf mph = case cp of
   -- hmm
   (PlainChar chks c) -> do
     -- funcName <- eitherMaybe' (M.lookup trieAnn funcMap) ("Couldn't find a function name for \"" <> show trieAnn <> "\".")
-    (mphX, cs) <- eitherMaybe' mph ["Couldn't lookup value for parsed character: \"" <> [c] <> "\"."]
+    (mphZ, cs) <- eitherMaybe' mph ["Couldn't lookup value for parsed character: \"" <> [c] <> "\"."]
+    let (PhoneResult mphX stateMods) = mphZ
     mgrdExp  <- (checkStateExps sdict chks stateValName)
     mulExprs <- phoneNamePatterns constrMap aspMaps mphX
+    stateModifier <- modifyStateExps sdict stateMods
     if (isCasable c) 
-      then Right (Right [Match (LitP (CharL c)) (maybeGuard mgrdExp $ consumerRetA mkMaj mkMin c       cs mulExprs ) []], True )
-      else Right (Right [Match (LitP (CharL c)) (maybeGuard mgrdExp $ consumerRetB mkMaj mkMin grdName cs mulExprs ) []], False)
+      then Right (Right [Match (LitP (CharL c)) (maybeGuard mgrdExp $ stateModifier $ consumerRetA mkMaj mkMin c       cs mulExprs ) []], True )
+      else Right (Right [Match (LitP (CharL c)) (maybeGuard mgrdExp $ stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs ) []], False)
   (CharOptCase chks c) -> do
     -- funcName <- eitherMaybe' (M.lookup trieAnn funcMap) ["Couldn't find a function name for \"" <> show trieAnn <> "\"."]
-    (mphX, cs) <- eitherMaybe' mph ["Couldn't lookup value for parsed character: \"" <> [c] <> "\"."]
+    (mphZ, cs) <- eitherMaybe' mph ["Couldn't lookup value for parsed character: \"" <> [c] <> "\"."]
+    let (PhoneResult mphX stateMods) = mphZ
     mgrdExp  <- (checkStateExps sdict chks stateValName)
     mulExprs <- phoneNamePatterns constrMap aspMaps mphX
+    stateModifier <- modifyStateExps sdict stateMods
     let xs = getCases c
         zs = map (\q -> (q, isTupper q)) xs
     if (any isCasable xs)
       then do 
         zqr <- return $ forMap zs $ \(theChar, theCase) ->
-          (Match (LitP (CharL theChar)) (maybeGuard mgrdExp $ consumerRetA mkMaj mkMin theChar cs mulExprs) [])
+          (Match (LitP (CharL theChar)) (maybeGuard mgrdExp $ stateModifier $ consumerRetA mkMaj mkMin theChar cs mulExprs) [])
         return (Right zqr, True)
       else do 
         zqr <- return $ forMap xs $ \theChar ->
-          (Match (LitP (CharL theChar)) (NormalB $ consumerRetB mkMaj mkMin grdName cs mulExprs) [])
+          (Match (LitP (CharL theChar)) (maybeGuard mgrdExp $ stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs) [])
         return (Right zqr, False)
   (CharClass chks cn) -> do
     -- funcName  <- eitherMaybe' (M.lookup trieAnn funcMap) ["Couldn't find a function name for \"" <> show trieAnn <> "\"."]
     (classFunc, zs) <- eitherMaybe' (M.lookup cn classMap) ["Couldn't find function name for class \"" <> cn <> "\"."]
-    (mphX, cs) <- eitherMaybe' mph ["Couldn't lookup value for parsed class: \"" <> cn <> "\"."]
+    (mphZ, cs) <- eitherMaybe' mph ["Couldn't lookup value for parsed class: \"" <> cn <> "\"."]
+    let (PhoneResult mphX stateMods) = mphZ
     mgrdExp  <- (checkStateExps sdict chks stateValName)
     mulExprs <- phoneNamePatterns constrMap aspMaps mphX
+    stateModifier <- modifyStateExps sdict stateMods
     let checkExp = AppE (VarE classFunc) (VarE grdName)
         boolExp  = AppE (VarE 'isUpperCase) (VarE grdName)
         checkExp' = case mgrdExp of
@@ -324,8 +330,8 @@ createCasesForStart grdName stateValName spi cp TrieLeaf mph = case cp of
           (Just guardExp) -> andE checkExp guardExp
     -- can probably just reduce to one expression.
     if (any isCasable zs)
-      then Right (Left (NormalG checkExp, consumerRetB mkMaj mkMin grdName cs mulExprs), True ) -- need to change, maybe?
-      else Right (Left (NormalG checkExp, consumerRetB mkMaj mkMin grdName cs mulExprs), False)
+      then Right (Left (NormalG checkExp, stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs), True ) -- need to change, maybe?
+      else Right (Left (NormalG checkExp, stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs), False)
   WordStart -> Left ["Shouldn't encounter a \"WordStart\" when using this function."]
   WordEnd   -> Left ["Shouldn't encounter a \"WordEnd\" when using this function."]
   NotStart  -> Left ["Shouldn't encounter a \"NotStart\" when using this function."]
@@ -748,6 +754,7 @@ constructGuards mbl charVarName trieAnn mTrieVal theTrie spi charPat
       (spiClassMap spi)
       (spiEndWordFunc spi)
       (spiNotEndWordFunc spi)
+      (spiStateDictionary spi)
       charPat
 
 makeGuards
@@ -764,9 +771,10 @@ makeGuards
   -> (M.Map String (Name, [Char])) -- ^ Map for class function names.
   -> Name                          -- ^ Name of the "end of word" function.
   -> Name                          -- ^ Name of the "not end of word" function.
+  -> M.Map String (Name, Maybe (Name, M.Map String Name)) -- ^ The state dictionary
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
   -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneResult, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)))])
-makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc precPatrn = do
+makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -782,11 +790,15 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
       -- cstr <- eitherMaybe' (M.lookup )
       case (ann, mPhone) of
         (TrieLeaf, mph) -> do 
-          (pnom, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
+          (prslt, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
           -- cstrPat <- eitherMaybe' (M.lookup (pnName pnom) patMap) ("Can't find constructor for phoneme: \"" <> (pnName pnom) <> "\".")
+          -- modifyStateExps :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> [ModifyStateX] -> Either [String] (Exp -> Exp)
+          let pnom = prPhonemes  prslt
+              pmod = prStateMods prslt
           cstrExps   <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc notEndWordFunc chrP charVarName
-          return (( guardThing , consumerRet' mkMaj mkMin chrP cs mbl cstrExps), Nothing)
+          resultModifier <- modifyStateExps sdict pmod
+          return (( guardThing , resultModifier $ consumerRet' mkMaj mkMin chrP cs mbl cstrExps), Nothing)
         -- (Trie)
         -- [((TrieAnnotation, Maybe (PhoneName, Caseness)), Bool, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)))]
         elm@(tnn@(TrieAnn _), mph) -> do
@@ -801,10 +813,13 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
     -- none of the possible matches are correct.
     finalRslt = otherwiseG <$> case mTrieVal of
       Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
-      (Just (pnom, cs)) -> do 
-        cstrExp    <- phoneNamePatterns patMap aspMaps pnom
-        return $ phonemeRet' mkMaj mkMin cs mbl cstrExp
-makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc precPatrn = do
+      (Just (prslt, cs)) -> do 
+        let pnom = prPhonemes  prslt
+            pmod = prStateMods prslt
+        cstrExp        <- phoneNamePatterns patMap aspMaps pnom
+        resultModifier <- modifyStateExps sdict pmod
+        return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
+makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -815,11 +830,14 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
     mkRslts = \(chrP, ((ann, mPhone), thisSubTrie)) -> do
       case (ann, mPhone) of
         (TrieLeaf, mph) -> do
-          (pnom, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
+          (prslt, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
+          let pnom = prPhonemes  prslt
+              pmod = prStateMods prslt
           cstrExp    <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc notEndWordFunc chrP charVarName
+          resultModifier <- modifyStateExps sdict pmod
           let xRslt = consumerRetX mkMaj mkMin chrP cs charVarName cstrExp
-          return ((guardThing,xRslt), Nothing)
+          return ((guardThing,resultModifier xRslt), Nothing)
         elm@(tnn@(TrieAnn _), mph) -> do
           nextFunc <- eitherMaybe' (M.lookup tnn funcMap) ["Couldn't find function for pattern: \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
           (guardThing, isCased) <- Bi.first (:[]) $ charPatternGuard' classMap endWordFunc notEndWordFunc chrP charVarName
@@ -835,10 +853,13 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
     
     finalRslt = otherwiseG <$> case mTrieVal of
       Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
-      (Just (pnom, cs)) -> do
+      (Just (prslt, cs)) -> do
         -- TODO : Addd in the state stuff
-        cstrExp <- phoneNamePatterns patMap aspMaps (prPhonemes pnom)
-        return $ phonemeRetZ mkMaj mkMin cs charVarName cstrExp
+        let pnom = prPhonemes  prslt
+            pmod = prStateMods prslt
+        cstrExp <- phoneNamePatterns patMap aspMaps pnom
+        resultModifier <- modifyStateExps sdict pmod
+        return $ resultModifier $ phonemeRetZ mkMaj mkMin cs charVarName cstrExp
 {-
 
 consumerRetX mkMaj mkMin (PlainChar   c) cs peekName rslt
@@ -1170,21 +1191,30 @@ tempTester f (Left st) = fail $ st
 checkStateExp :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> Name -> CheckStateX -> Either String Exp
 checkStateExp sdict vnom (CheckStateBB str bl) = do
   -- Using a partial match here since it's already been validated.
-  (recNom, Nothing) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
-  let setFunc = if bl then id else (\exp -> AppE (VarE 'not) exp)
-  -- setFunc <$> [| $(pure $ VarE recnom) $(pure $ VarE vnom)  |]
-  return $ setFunc $ AppE (VarE recNom) (VarE vnom)
+  (recNom, mNothing) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
+  case mNothing of
+    (Just _) -> Left "checkStateExp: internal error 1"
+    Nothing  -> do
+      let setFunc = if bl then id else (\exp -> AppE (VarE 'not) exp)
+      -- setFunc <$> [| $(pure $ VarE recnom) $(pure $ VarE vnom)  |]
+      return $ setFunc $ AppE (VarE recNom) (VarE vnom)
 checkStateExp sdict vnom (CheckStateVB str bl ) = do
   -- Using a partial match here since it's already been validated.
-  (recNom, (Just _)) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
-  let setFunc = if bl then (\exp -> AppE (VarE 'isJust) exp) else (\exp -> AppE (VarE 'isNothing) exp)
-  -- setFunc <$> [| $(pure $ VarE recnom) $(pure $ VarE vnom)  |]
-  return $ setFunc $ AppE (VarE recNom) (VarE vnom)
+  (recNom, mJust) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
+  case mJust of
+    Nothing  -> Left "checkStateExp: internal error 2"
+    (Just _) -> do
+      let setFunc = if bl then (\exp -> AppE (VarE 'isJust) exp) else (\exp -> AppE (VarE 'isNothing) exp)
+      -- setFunc <$> [| $(pure $ VarE recnom) $(pure $ VarE vnom)  |]
+      return $ setFunc $ AppE (VarE recNom) (VarE vnom)
 checkStateExp sdict vnom (CheckStateVV str val) = do
-  (recNom, (Just (typName, nextMap))) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
-  valNom <- eitherMaybe' (M.lookup val nextMap) $ "Couldn't find state value \"" <> val <> "\" for state \"" <> str <> "\"."
-  -- eqJustCon :: Exp -> Name -> Exp
-  return $ eqJustCon (AppE (VarE recNom) (VarE vnom)) valNom
+  (recNom, mJust) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
+  case mJust of
+    Nothing -> Left "checkStateExp: internal error 3"
+    (Just (typName, nextMap)) -> do
+      valNom <- eitherMaybe' (M.lookup val nextMap) $ "Couldn't find state value \"" <> val <> "\" for state \"" <> str <> "\"."
+      -- eqJustCon :: Exp -> Name -> Exp
+      return $ eqJustCon (AppE (VarE recNom) (VarE vnom)) valNom
 
 -- | A function that groups check state predicates into one predicate.
 checkStateExps :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> [CheckStateX] -> Name -> Either [String] (Maybe Exp)
@@ -1199,15 +1229,22 @@ checkStateExps sdict chks varNom = do
 --   @ LamE [VarP varNom] (RecUpdE (VarE varNom) fieldExps) @
 modifyStateExp :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> ModifyStateX -> Either String FieldExp
 modifyStateExp sdict (ModifyStateBB str bl) = do
-  (recNom, Nothing) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
-  return (recNom, boolE bl)
+  (recNom, mNothing) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
+  case mNothing of
+    (Just _) -> Left "modifyStateExp: internal error 1"
+    Nothing  -> return (recNom, boolE bl)
 modifyStateExp sdict (ModifyStateVX str) = do
-  (recNom, (Just _)) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
-  return (recNom, nothingE)
+  (recNom, mJust) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
+  case mJust of
+    Nothing  -> Left "modifyStateExp: internal error 2"
+    (Just _) -> return (recNom, nothingE)
 modifyStateExp sdict (ModifyStateVV str val) = do
-  (recNom, (Just (_typNom,nextMap))) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
-  valNom <- eitherMaybe' (M.lookup val nextMap) $ "Couldn't find state value \"" <> val <> "\" for state \"" <> str <> "\"."
-  return (recNom, justE $ ConE valNom)
+  (recNom, mJust) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
+  case mJust of
+    Nothing -> Left "modifyStateExp: internal error 3"
+    (Just (_typNom,nextMap)) -> do
+      valNom <- eitherMaybe' (M.lookup val nextMap) $ "Couldn't find state value \"" <> val <> "\" for state \"" <> str <> "\"."
+      return (recNom, justE $ ConE valNom)
   -- LamE [VarP x_0] (RecUpdE (VarE x_0) [(Ghci1.recField1,LitE (IntegerL 12))])
 
 -- | A function that takes the results of `modifyStateExp` and
@@ -1237,13 +1274,13 @@ infixCont exp1 exp2 = InfixE (Just exp1) (VarE '(>>))  (Just exp2)
 --   to change the type to @StateT State Parser a@.
 --   In which case I can change this to @lift AT.anyChar@.
 anyCharE :: Exp
-anyCharE = VarE 'AT.anyChar
+anyCharE = AppE (VarE 'lift) (VarE 'AT.anyChar)
 
 peekCharE :: Exp
-peekCharE = VarE 'AT.peekChar
+peekCharE = AppE (VarE 'lift) (VarE 'AT.peekChar)
 
 peekCharE' :: Exp
-peekCharE' = VarE 'AT.peekChar'
+peekCharE' = AppE (VarE 'lift) (VarE 'AT.peekChar')
 
 peekCharQ :: Q Exp
 peekCharQ  = [| lift AT.peekChar  |]
@@ -1387,6 +1424,9 @@ data CharPattern
   | WordEnd          -- ^ The end of a word.
   deriving (Show, Eq, Ord)
 
+
+
+  , spiStateDictionary :: M.Map String (Name, Maybe (Name, M.Map String Name))
 -}
 
 exampleInfo :: StaticParserInfo
@@ -1403,7 +1443,7 @@ exampleInfo
       (mkName "isSomeChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
-      (M.empty) -- for now.
+      (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
 
 
 
