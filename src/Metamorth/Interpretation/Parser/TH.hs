@@ -92,6 +92,8 @@ module Metamorth.Interpretation.Parser.TH
   , createStateDecs
   , constructFunctionsBothX
   , makeClassDec
+  -- * Testing
+  , testTheParser
   ) where
 
 import Control.Applicative
@@ -118,13 +120,15 @@ import Metamorth.Helpers.List
 import Data.Either
 import Data.Maybe
 
-import Data.Text qualified as T -- ?
+import Data.Text    qualified as T -- ?
+import Data.Text.IO qualified as TIO
 
 import Data.Map.Strict qualified as M
 import Metamorth.Helpers.Map
 
 import Data.Set qualified as S
 
+import Data.List (intercalate)
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty (NonEmpty(..))
 
@@ -139,6 +143,7 @@ import Language.Haskell.TH.Ppr qualified as PP
 
 import THLego.Helpers
 
+import Metamorth.Interpretation.Parser.Parsing (parseOrthographyFile)
 import Metamorth.Interpretation.Parser.Types
 import Metamorth.Interpretation.Parser.Parsing.Types
 import Metamorth.Helpers.TH
@@ -162,16 +167,97 @@ import Metamorth.Helpers.TH
 -- Main Constructor
 ----------------------------------------------------------------
 
+testTheParser
+  :: StaticParserInfo
+  -> String -- File Path
+  -> IO ([Dec], StaticParserInfo)
+testTheParser spi fp = do
+  theFile <- TIO.readFile fp
+  let eParseRslt = AT.parseOnly parseOrthographyFile theFile
+  case eParseRslt of
+    (Left err) -> fail $ "Couldn't parse input: " ++ err
+    -- (HeaderData, ParserParsingState, [String])
+    (Right (hdr, pps, someStrings)) -> do
+      runQ 
+        ( makeTheParser
+            (spiConstructorMap spi)
+            (spiAspectMaps spi)
+            (spiPhoneTypeName spi)
+            (spiMkMaj spi)
+            (spiMkMin spi)
+            pps
+        )
+      
 
+-- | Construct the actual parser code.
 makeTheParser 
   :: M.Map String Name                  -- ^ A `M.Map` from `String`s to Pattern Synonym `Name`s.
   -> M.Map String ([M.Map String Name]) -- ^ A list of `M.Map`s for the constructors of each argument of the Phoneme.
+  -> Name                               -- ^ The name of the type of Phonemes.
   -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an upper-case character.
   -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an lower-case character.
-  -> ()
-makeTheParser _ _ _ _ = ()
+  -> ParserParsingState                 -- ^ The data from parsing the specification.
+  -> Q ([Dec], StaticParserInfo)
+makeTheParser phoneMap aspectMap phoneName mkMaj mkMin pps = do
+  let classDictX = ppsClassDictionary pps
+      stateDictX = ppsStateDictionary pps
+      phonePats  = ppsPhonemePatterns pps
+      mainTrie   = pathifyTrie phonePats
+  (stDecs, stateTypeName, defStateName, newStateDict) <- createStateDecs "StateType" stateDictX
+  (clDecs, newClassDict) <- makeClassDecs classDictX
+  -- Getting the annotation map...
+  let annots' = map fst $ TM.elems mainTrie
+      annots  = nubSort annots'
+  annNames <- fmap M.fromList $ forM annots $ \ann -> do
+    nom <- annFuncName ann
+    return (ann, nom)
+  
+  -- TEMPORARY!!!
+  endWordName <- newName "isEndChar"
+  notEndName  <- newName "notEndChar"
+
+  let spi = StaticParserInfo
+              { spiAnnotationMap   = annNames
+              , spiConstructorMap  = phoneMap
+              , spiAspectMaps      = aspectMap
+              , spiClassMap        = newClassDict
+              , spiMkMaj           = mkMaj
+              , spiMkMin           = mkMin
+              , spiEndWordFunc     = endWordName
+              , spiNotEndWordFunc  = notEndName
+              , spiPhoneTypeName   = phoneName
+              , spiStateTypeName   = stateTypeName
+              , spiDefStateName    = defStateName
+              , spiStateDictionary = newStateDict
+              }
+  
+  eFuncRslt <- constructFunctionsBothX spi mainTrie
+  (funcDecs, nm1, nm2) <- case eFuncRslt of
+    (Left errs) -> do 
+      qReport True (intercalate "\n" errs)
+      return ([], mkName "funcErr1", mkName "funcErr2")
+    (Right (okay, (x1,x2))) -> return  (okay, x1, x2)
+  
+
+  return (concat [stDecs, clDecs, funcDecs], spi)
 
 {-
+  :: StaticParserInfo
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
+  -> Q (Either [String] ([Dec],(Name, Name)))
+constructFunctionsBothX spi trie
+
+fmap (\(x,_,_,_) -> ppr x) $ 
+  join (fmap 
+         (runQ . (createStateDecs "StateType") . ppsStateDictionary) 
+         $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample8.thyp")
+
+fmap 
+  (ppr . (fromRight [])) 
+  $ (runQ . (fmap (fmap fst) . constructFunctionsBothX exampleInfo)) =<< (fmap 
+      (pathifyTrie . ppsPhonemePatterns) 
+      $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample3.thyp")
+
 x <- AT.peekChar'
 case x of
   c1 -> AT.anyChar 
@@ -181,6 +267,15 @@ constructFunctions
   :: StaticParserInfo
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (MultiPhoneName, Caseness))
   -> Q (Either [String] [Dec])
+
+data ParserParsingState = ParserParsingState
+  { ppsClassDictionary :: M.Map String (S.Set Char)
+  , ppsStateDictionary :: M.Map String (Maybe (S.Set String))
+  , ppsPhonemePatterns :: M.Map PhoneResult [PhonemePattern]
+  } deriving (Show, Eq)
+
+
+
 -}
 
 
@@ -266,6 +361,21 @@ makeClassDec xvar nom chrSet
   where
     mkBool :: Char -> Exp
     mkBool = eqChar xvar 
+
+-- M.Map String (Name,[Char])
+
+makeClassDecs :: M.Map String (S.Set Char) -> Q ([Dec], M.Map String (Name,[Char]))
+makeClassDecs sdict = do
+  xvar <- newName "x"
+  -- The output value
+  rsltDict <- forWithKey sdict $ \str theSet -> do
+    funcName <- newName $ "is" ++ (dataName str)
+    let charList = S.toAscList theSet
+    return (funcName, charList)
+  let decData = M.elems rsltDict
+      classDecs = map (uncurry $ makeClassDec xvar) decData
+  return (concat classDecs, rsltDict)
+
 
 {-
 createWordStartFunction 
@@ -503,7 +613,7 @@ data StaticParserInfo = StaticParserInfo
   --   etc...
   , spiClassMap       :: M.Map String (Name,[Char])
   -- | A function to turn a `Phoneme` expression/value into
-  --   a upper-case value. This is represented as a function
+  --   an upper-case value. This is represented as a function
   --   for more flexibility. This should be a very simple function.
   --   For uncased orthographies, it should just be @`id`@ or the
   --   same as @`spiMkMin`@. For cased orthographies, it should 
@@ -713,9 +823,10 @@ constructFunctionsS spi xcp stVals trie = do
           -- The resulting case expression.
           matches   = (concatMap fst mtchs) ++ grdMatch ++ [finalMat]
           caseStuff = CaseE (VarE peekName) matches
-      mainType <- [t| Char -> AT.Parser (NonEmpty $(return $ ConT phoneType) ) |]
+          stateType = spiStateTypeName spi
+      mainType <- [t| $(return $ ConT stateType) -> Char -> $(parserTQ =<< [t| (NonEmpty $(return $ ConT phoneType) )|] ) |]
       let mainSign = SigD topFuncName mainType
-          mainDec  = FunD topFuncName [Clause [VarP peekName] (NormalB caseStuff) []]
+          mainDec  = FunD topFuncName [Clause [VarP stateNom, VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
       (moreDecs, stt, errs) <- runRWST' () stVals $ forM subTriesX $ \((cp, ((tann, mval), subTrie )),thisbl) -> do 
         -- let thisbl = True -- TEMPORARY
@@ -774,7 +885,8 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal = 
       -- mchar <- lift $ [t| Maybe Char |]
       let phonType = ConT $ spiPhoneTypeName spi
           phonType' = AppT (ConT ''NonEmpty) phonType
-          funcType = arrowChainT margs (parserT' phonType')
+          statType = ConT $ spiStateTypeName spi
+          funcType = arrowChainT margs (parserT' statType phonType')
           funcSign = SigD funcNom funcType
           funcDec  = FunD funcNom [Clause pargs bod []]
       return (funcSign:funcDec:concat moreDecs)
@@ -1377,8 +1489,15 @@ justE expr = AppE (ConE 'Just) expr
 parserT :: Type
 parserT = ConT ''AT.Parser
 
-parserT' :: Type -> Type
-parserT' typ = AppT parserT typ
+parserT' :: Type -> Type -> Type
+parserT' styp typ = AppT (AppT (AppT (ConT ''State.StateT) styp) (ConT ''AT.Parser)) typ
+
+-- parserT' :: Type -> Type
+-- parserT' typ = AppT parserT typ
+
+-- AppT (AppT (AppT (ConT ''State.StateT) styp) (ConT ''AT.Parser)) typ
+
+-- AppT (AppT (ConT ''State.StateT) styp) (ConT ''AT.Parser)
 
 parserTQ :: Type -> Q Type
 parserTQ theType = [t| State.StateT $(pure theType) AT.Parser |]
