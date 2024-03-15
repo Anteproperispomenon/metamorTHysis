@@ -190,7 +190,7 @@ constructFunctions
 
 -- | Create the state types and produce a `M.Map` of
 --   information about the types.
-createStateDecs :: String -> M.Map String (Maybe (S.Set String)) -> Q ([Dec], Name, (M.Map String (Name, Maybe (Name, M.Map String Name))))
+createStateDecs :: String -> M.Map String (Maybe (S.Set String)) -> Q ([Dec], Name, Name, (M.Map String (Name, Maybe (Name, M.Map String Name))))
 createStateDecs stateTypeString theMap = do
   -- Will use the same `Name` for both the type
   -- constructor and the data constructor.
@@ -220,21 +220,29 @@ createStateDecs stateTypeString theMap = do
   -- Creating the sub-Decs and the values to be
   -- fed into `recordAdtDecDeriv`.
   let decsInfo = forMap mp1 $ \(nom, mCons) -> case mCons of
-        Nothing -> ((nom, ConT ''Bool), [])
+        Nothing -> ((nom, ConT ''Bool), ([], falseE))
         (Just (typeCstrName, thisMap)) ->
           let showMap = map swap $ M.assocs thisMap
               typeMap = map (second (const [])) showMap
               theDecs = sumAdtDecDeriv  typeCstrName typeMap [ConT ''Eq, ConT ''Ord, ConT ''Enum ]
               showDec = showSumInstance typeCstrName showMap
-          in ((nom, AppT (ConT ''Maybe) (ConT typeCstrName)), (theDecs : showDec))
+          in ((nom, AppT (ConT ''Maybe) (ConT typeCstrName)), ((theDecs : showDec), nothingE))
   
   -- Okay, now the final dec...
-  let (recTypes, restDecs) = unzip decsInfo
+  let (recTypes, restDecs') = unzip decsInfo
+      (restDecs, defValues) = unzip restDecs'
       recTypeDec = recordAdtDecDeriv stateTypeName recTypes [ConT ''Eq, ConT ''Ord, ConT ''Show]
 
-  return ((recTypeDec:(concat restDecs)), stateTypeName, rslt1)
+  -- Setting up the default value declaration...
+  defValueName <- newName $ "def" ++ stateTypeString
+  let defRecordVal = multiAppE (ConE stateTypeName) defValues
+      defValueSign = SigD defValueName (ConT stateTypeName)
+      defValueDefn = ValD (VarP defValueName) (NormalB defRecordVal) []
+      defValueDecs = [defValueSign, defValueDefn]
+
+  return ((recTypeDec:(defValueDecs ++ concat restDecs)), stateTypeName, defValueName, rslt1)
         
--- fmap (\(x,_,_) -> ppr x) $ join (fmap (runQ . (createStateDecs "StateType") . ppsStateDictionary) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample8.thyp")
+-- fmap (\(x,_,_,_) -> ppr x) $ join (fmap (runQ . (createStateDecs "StateType") . ppsStateDictionary) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample8.thyp")
 
 
 ----------------------------------------------------------------
@@ -522,6 +530,8 @@ data StaticParserInfo = StaticParserInfo
   , spiPhoneTypeName  :: Name
   -- | The `Name` of the type of the state value.
   , spiStateTypeName  :: Name
+  -- | The `Name` of the default value for the state value.
+  , spiDefStateName    :: Name
   -- | The State information dictionary. This is
   --   implemented as a `M.Map` from `String`s to
   --   `Name`s of the argument in the State type.
@@ -543,6 +553,7 @@ instance Eq StaticParserInfo where
       && ((spiNotEndWordFunc x) == (spiNotEndWordFunc y))
       && ((spiPhoneTypeName x) == (spiPhoneTypeName y))
       && ((spiStateTypeName x) == (spiStateTypeName y))
+      && ((spiDefStateName x) == (spiDefStateName y))
       && ((spiStateDictionary x) == (spiStateDictionary y))
     where
       spiMkMaj' z = (spiMkMaj z) (ConE (mkName "Example"))
@@ -560,6 +571,7 @@ instance Show StaticParserInfo where
       <> ", spiNotEndWordFunc = "  <> show (spiNotEndWordFunc x)
       <> ", spiPhoneTypeName = "   <> show (spiPhoneTypeName x)
       <> ", spiStateTypeName = "   <> show (spiStateTypeName x)
+      <> ", spiDefStateName = "    <> show (spiDefStateName x)
       <> ", spiStateDictionary = " <> show (spiStateDictionary x)
       <> "}"
     where
@@ -1501,6 +1513,7 @@ exampleInfo
       (mkName "isSomeChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
+      (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
 
 exampleInfo2 :: StaticParserInfo
@@ -1517,6 +1530,7 @@ exampleInfo2
       (mkName "isSomeChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
+      (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")])))]) -- for now.
   where
     consMap1 = (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["gh","ts","ch","sh","sep"]) $ \c -> (c, []))
