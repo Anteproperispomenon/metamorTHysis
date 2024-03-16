@@ -3,6 +3,7 @@ module Metamorth.Helpers.Either
   , liftEitherNonEmpty
   , eitherMaybe
   , eitherMaybe'
+  , partitionWith
   ) where
 
 import Data.Either
@@ -45,3 +46,12 @@ eitherMaybe' :: Maybe b -> a -> Either a b
 eitherMaybe' (Just x) _  = Right x
 eitherMaybe' Nothing  x  = Left  x
 
+-- | Uses a function to determine which of two output lists an input element should join.
+--
+--   Taken from `GHC.Utils.Misc`.
+partitionWith :: (a -> Either b c) -> [a] -> ([b], [c])
+partitionWith _ [] = ([],[])
+partitionWith f (x:xs) = case f x of
+                         Left  b -> (b:bs, cs)
+                         Right c -> (bs, c:cs)
+    where (bs,cs) = partitionWith f xs

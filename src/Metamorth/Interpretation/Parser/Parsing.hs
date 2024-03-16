@@ -5,6 +5,7 @@ module Metamorth.Interpretation.Parser.Parsing
 
 import Control.Applicative
 
+import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.RWS.CPS
 
@@ -22,6 +23,7 @@ import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty (NonEmpty(..))
 
 import Metamorth.Helpers.Char
+import Metamorth.Helpers.List
 import Metamorth.Helpers.Parsing
 
 import Metamorth.Interpretation.Parser.Parsing.Types
@@ -143,13 +145,135 @@ parseClassNameRS = do
 -- | The main character selector parser, after
 --   all the specialised ones have been run.
 parseNonSpace :: AT.Parser Char
-parseNonSpace = AT.satisfy (\x -> (not $ isSpace x) && (x /= '#'))
+parseNonSpace = AT.satisfy (\x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!'))
 
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
 
 parseNonSpaceRS :: ParserParser CharPatternRaw
 parseNonSpaceRS = lift parseNonSpaceR
+
+--------------------------------
+-- "State-must-be" Parser(s)
+
+parseStateVal :: AT.Parser (String, Text)
+parseStateVal = do
+  _ <- AT.char '@'
+  stName <- takeIdentifier isLower isFollowId
+  _ <- AT.char '='
+  stVal  <- takeIdentifier isAlpha isFollowId
+  return (T.unpack stName, stVal)
+
+{-
+parseStateValR :: AT.Parser CharPatternRaw
+parseStateValR = do
+  (st,val) <- parseStateVal
+  return $ ValStateR st (T.unpack val)
+-}
+
+parseStateValRS :: ParserParser (Maybe CharPatternRaw)
+parseStateValRS = do
+  (st, val) <- lift parseStateVal
+  let val' = T.unpack val
+  stDict <- gets ppsStateDictionary
+  let mVal = M.lookup st stDict
+  case mVal of
+    Nothing -> do 
+      tell ["Couldn't find state name \"" <> st <> "\" in dictionary."]
+      return Nothing
+    (Just Nothing) -> case (checkBoolString val) of
+      Nothing -> do 
+        tell ["Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."]
+        return Nothing
+      (Just bl) -> return $ Just (ValStateR st (Right bl))
+    (Just (Just valSet)) -> if (val' `S.member` valSet)
+      then (return $ Just $ ValStateR st (Left val'))
+      else case (checkBoolString val) of
+        Nothing -> do
+          tell ["Couldn't find \"" <> val' <> "\" as an option for state \"" <> st <> "\"."]
+          return Nothing
+        (Just bl) -> return $ Just (ValStateR st (Right bl))
+
+
+parseStateValRS' :: ParserParser CharPatternRaw
+parseStateValRS' = do
+  (cpat, wrtr) <- listens safeHead parseStateValRS
+  case cpat of
+    Nothing -> case wrtr of
+      Nothing    -> fail "Couldn't parse a state-val expression"
+      (Just err) -> fail err
+    (Just cptrn) -> return cptrn
+
+safeHead :: [a] -> Maybe a
+safeHead []    = Nothing
+safeHead (x:_) = Just x
+
+checkBoolString :: T.Text -> Maybe Bool
+checkBoolString txt
+  | (txt' == "yes" || txt' == "y" || txt' == "t" || txt' == "true"  || txt' == "on" ) = Just True
+  | (txt' == "no"  || txt' == "n" || txt' == "f" || txt' == "false" || txt' == "off") = Just False
+  | otherwise = Nothing
+  where txt' = T.toLower txt
+
+checkOffString :: T.Text -> Maybe Bool
+checkOffString txt
+  | (txt' == "no"  || txt' == "n" || txt' == "f" || txt' == "false" || txt' == "off") = Just False
+  | otherwise = Nothing
+  where txt' = T.toLower txt
+
+--------------------------------
+-- "Set-state-to" Parser(s)
+
+parseStateSet :: AT.Parser (String, Text)
+parseStateSet = do
+  _ <- AT.char '!'
+  stName <- takeIdentifier isLower isFollowId
+  _ <- AT.char '='
+  stVal  <- takeIdentifier isAlpha isFollowId
+  return (T.unpack stName, stVal)
+
+{-
+parseStateSetR :: AT.Parser CharPatternRaw
+parseStateSetR = do
+  (st,val) <- parseStateSet
+  return $ SetStateR st val
+-}
+
+parseStateSetRS :: ParserParser (Maybe CharPatternRaw)
+parseStateSetRS = do
+  (st, val) <- lift parseStateSet
+  let val' = T.unpack val
+  stDict <- gets ppsStateDictionary
+  let mVal = M.lookup st stDict
+  case mVal of
+    Nothing -> do 
+      tell ["Couldn't find state name \"" <> st <> "\" in dictionary."]
+      return Nothing
+    (Just Nothing) -> case (checkBoolString val) of
+      Nothing -> do 
+        tell ["Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."]
+        return Nothing
+      (Just bl) -> return $ Just (SetStateR st (Right bl))
+    (Just (Just valSet)) -> if (val' `S.member` valSet)
+      then (return $ Just $ SetStateR st (Left val'))
+      -- need to use `checkOffString` since you can't just
+      -- set an option string to `On`; you need a value to
+      -- set it to.
+      else case (checkOffString val) of
+        Nothing -> do
+          tell ["Couldn't find \"" <> val' <> "\" as an option for state \"" <> st <> "\"."]
+          return Nothing
+        (Just bl) -> return $ Just (SetStateR st (Right bl))
+
+parseStateSetRS' :: ParserParser CharPatternRaw
+parseStateSetRS' = do
+  (cpat, wrtr) <- listens safeHead parseStateSetRS
+  case cpat of
+    Nothing -> case wrtr of
+      Nothing    -> fail "Couldn't parse a state-set expression"
+      (Just err) -> fail err
+    (Just cptrn) -> return cptrn
+
 
 --------------------------------
 -- Special Char Parsers
@@ -191,17 +315,51 @@ parseClassDecS = do
         modify $ \x -> x {ppsClassDictionary = newMap}
 
 -- | Parse the class declaration section.
+--   This also includes states.
 parseClassDecSection :: ParserParser ()
 parseClassDecSection = do
   -- lift AT.skipSpace
   _ <- lift $ many parseEndComment
   _ <- AT.many' $ do
-    parseClassDecS
+    parseClassDecS <|> parseStateDecS
     lift $ AT.many1 parseEndComment
   _ <- lift $ many  parseEndComment
   _ <- lift ("====" <?> "Classes: Separator1")
   _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
   lift parseEndComment
+
+----------------------------------------------------------------
+-- State Info Parsers
+----------------------------------------------------------------
+
+parseStateDec :: AT.Parser (String, Maybe (S.Set String))
+parseStateDec = do
+  _ <- "state"
+  skipHoriz1
+  stateName <- takeIdentifier isLower isFollowId
+  skipHoriz
+  vals <- optional $ do
+    _ <- AT.char ':' <?> "State declaration has no ':'."
+    skipHoriz
+    let thisPrs = takeIdentifier isAlpha isFollowId
+    (AT.sepBy1' thisPrs skipHoriz1) <?> "State declaration has ':' but no options."
+  -- parseEndComment
+  case vals of
+    Nothing -> return ()
+    (Just xs) -> when (not $ allUnique xs) $ fail $ "State \"" <> (T.unpack stateName) <> "\" has multiple options with the same name."
+  return (T.unpack stateName, (S.fromList . map T.unpack) <$> vals)
+
+-- | Parse a state declaration and add it to
+--   the state dictionary.
+parseStateDecS :: ParserParser ()
+parseStateDecS = do
+  (stName, stSet) <- lift $ parseStateDec
+  theMap <- gets ppsStateDictionary
+  case (M.lookup stName theMap) of
+    (Just _) -> tell ["Error: state \"" <> stName <> "\" has multiple definitions."]
+    Nothing  -> do
+        let newMap = M.insert stName stSet theMap
+        modify $ \x -> x {ppsStateDictionary = newMap}
 
 ----------------------------------------------------------------
 -- Orthography Properties Parsers
@@ -317,11 +475,15 @@ parsePhonemePatS = do
         <|> parseEndPointS 
         <|> parseNotStartS
         <|> parseNotEndS
-        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go last.
+        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go (almost) last.
+        -- These two should probably be combined into one function for better errors.
+        <|> parseStateValRS'
+        <|> parseStateSetRS'
       ) 
       (lift skipHoriz1)
     -- hmm...
-    let ePhonePats = processRawPhonePattern (RawPhonemePattern specs thePats)
+    sdict <- gets ppsStateDictionary
+    let ePhonePats = processRawPhonePattern sdict (RawPhonemePattern specs thePats)
     case ePhonePats of
       (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemePattern pn rslt
@@ -347,11 +509,15 @@ parsePhonemePatMulti = do
         <|> parseEndPointS
         <|> parseNotStartS
         <|> parseNotEndS
-        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go last.
+        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go (almost) last.
+        -- These two should probably be combined into one function for better errors.
+        <|> parseStateValRS'
+        <|> parseStateSetRS'
       ) 
       (lift skipHoriz1)
     -- hmm...
-    let ePhonePats = processRawPhonePattern (RawPhonemePattern specs thePats)
+    sdict <- gets ppsStateDictionary
+    let ePhonePats = processRawPhonePattern sdict (RawPhonemePattern specs thePats)
     case ePhonePats of
       (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemesPattern phones rslt
@@ -390,7 +556,7 @@ parseOrthographyFile = do
   
   let phonePatsM  = ppsPhonemePatterns stt
       phoneNames  = M.keys phonePatsM
-      phoneNames' = concatMap NE.toList phoneNames
+      phoneNames' = concatMap (NE.toList . prPhonemes) phoneNames
       phoneGroups = groupBy eqOnPN phoneNames'
       wrongPhones = filter (not . sameArgsPN) phoneGroups
       phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
