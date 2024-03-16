@@ -82,18 +82,23 @@ the total number of generated functions.
 
 
 module Metamorth.Interpretation.Parser.TH
-  ( setupTrie'
-  , pathifyTrie
-  , tempTester
-  , makeGuards
+  -- * Parser Generation
+  ( makeTheParser
+  , testTheParser
+  -- * Output Types
+  , StaticParserInfo(..)
+  -- * Testing Helpers
   , exampleInfo
   , exampleInfo2
+  , tempTester
+  -- * Debug Functions
+  , setupTrie'
+  , pathifyTrie
+  , makeGuards
   , constructFunctions
   , createStateDecs
   , constructFunctionsBothX
   , makeClassDec
-  -- * Testing
-  , testTheParser
   ) where
 
 import Control.Applicative
@@ -798,7 +803,16 @@ constructFunctionsS
   -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
   -> Q (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool), Name))
-constructFunctionsS spi xcp stVals trie = do
+constructFunctionsS = constructFunctionsSB True
+
+constructFunctionsSB
+  :: Bool
+  -> StaticParserInfo
+  -> [CharPattern]
+  -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
+  -> Q (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool), Name))
+constructFunctionsSB toReduce spi xcp stVals trie = do
   blName   <- newName "isCharMaj"
   peekName <- newName "peekedChar"
   grdName  <- newName "c"
@@ -822,9 +836,10 @@ constructFunctionsS spi xcp stVals trie = do
           finalMat  = Match WildP (NormalB $ AppE (VarE 'fail) (strE "No matches found.")) []
           -- The resulting case expression.
           matches   = (concatMap fst mtchs) ++ grdMatch ++ [finalMat]
-          caseStuff = CaseE (VarE peekName) matches
+          casePrime = CaseE (VarE peekName) matches
+          caseStuff = if toReduce then (groupCaseGuards casePrime) else casePrime
           stateType = spiStateTypeName spi
-      mainType <- [t| $(return $ ConT stateType) -> Char -> $(parserTQ =<< [t| (NonEmpty $(return $ ConT phoneType) )|] ) |]
+      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (VarT stateType)) (NonEmpty $(return $ VarT phoneType)) ) |]
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP stateNom, VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
@@ -1501,6 +1516,9 @@ parserT' styp typ = AppT (AppT (AppT (ConT ''State.StateT) styp) (ConT ''AT.Pars
 
 parserTQ :: Type -> Q Type
 parserTQ theType = [t| State.StateT $(pure theType) AT.Parser |]
+
+parserTQ' :: Type -> Type -> Q Type
+parserTQ' stType outType = [t| State.StateT $(pure stType) AT.Parser $(pure outType) |]
 
 eqJustCon :: Exp -> Name -> Exp
 eqJustCon mbExp theVarb

@@ -78,7 +78,12 @@ isStateR _ = False
 --
 --   Note that this is implemented as a type synonym
 --   over `CharPatternF`. This is to control how the
---   `Ord` instance is constructed.
+--   `Ord` instance is constructed. In particular,
+--   since we want to try more restrictive patterns
+--   first, we want the "lowest" value of @[`CheckStateX`]@
+--   to be the one with the most elements. Thus, we
+--   derive @`Ord` (`CharPatternF` [b])@ via 
+--   @`CharPatternF` (Down (`SizeOrdList` b))@.
 type CharPattern = CharPatternF [CheckStateX]
 
 -- | The "internal" version of `CharPattern`.
@@ -95,21 +100,32 @@ data CharPatternF b
 -- Make (CharPatternF (Down b)) an instance of `Ord` so that
 -- (CharPatternF b) has something to derive via. Also make this
 -- function overlapping so that it can be chosen as the instance
--- instead of (CharPatternF b).
-deriving instance {-# OVERLAPPING  #-} (Ord b) => Ord (CharPatternF (Down b))
+-- instead of (CharPatternF b). Unfortunately, this means that
+-- Using CharPatternF (Down b) *won't* reverse the order as
+-- might be expected. ...I think. Fortunately, `CharPatternF`
+-- isn't supposed to be used with anything other than [CheckStateX],
+-- so it isn't much of a problem in practice.
+deriving instance {-# OVERLAPPING #-} (Ord b) => Ord (CharPatternF (Down b))
 
 deriving via (CharPatternF (Down b)) instance {-# OVERLAPPABLE #-} (Ord b) => Ord (CharPatternF b) 
 
+-- We want this instance to be chosen over plain @b@, but
+-- *not* over @Down b@.
 deriving via (CharPatternF (Down (SizeOrdList b))) instance {-# OVERLAPS #-} (Ord b) => Ord (CharPatternF [b])
 
+-- | The unvalidated "Check-state" type.
 data CheckState
   = CheckStateB String Bool
   | CheckStateV String String
   deriving (Show, Eq, Ord)
 
+-- | The validated "Check-State" type.
 data CheckStateX
+  -- | Boolean check on a bool-state.
   = CheckStateBB String Bool
+  -- | Value check on a value-state.
   | CheckStateVV String String
+  -- | Boolean check on a value-state.
   | CheckStateVB String Bool
   deriving (Show, Eq, Ord)
 
@@ -123,13 +139,18 @@ addStateToPat sts ((CharClass   xs c):rst) = (CharClass   (sts ++ xs) c) : rst
 addStateToPat sts (x:xs) = x : (addStateToPat sts xs)
 addStateToPat _ [] = []
 
+-- | Unverified modify state; doesn't
+--   know whether the state being
+--   modified is avalue-state or a
+--   boolean state.
 data ModifyState
   = ModifyStateB String Bool
   | ModifyStateV String String
   deriving (Show, Eq, Ord)
 
--- | Verified modify state; tells whether
---   
+-- | Verified modify state; provides info
+--   about the state whose value is being
+--   changed.
 data ModifyStateX
   -- | Change the value of a boolean state.
   = ModifyStateBB String Bool
@@ -139,6 +160,9 @@ data ModifyStateX
   | ModifyStateVX String
   deriving (Show, Eq, Ord)
 
+-- | Separate a `StateMod` into a `CheckState` or a `ModifyState`.
+--   Such values will still need to be validated by `validateCheckState`
+--   or `validateModifyState` respectively.
 separateStateMod :: StateMod -> Either CheckState ModifyState
 separateStateMod (ValStateB x b) = Left  (CheckStateB  x b)
 separateStateMod (ValStateV x v) = Left  (CheckStateV  x v)
