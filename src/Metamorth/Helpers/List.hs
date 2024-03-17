@@ -77,6 +77,7 @@ mergeRuns (x:xs) (y:ys)
   | otherwise = y : (mergeRuns (x:xs) ys)
 
 mergeAll :: (Ord a) => [[a]] -> [a]
+mergeAll [] = [] -- need this for safety
 mergeAll [xs] = xs
 mergeAll xss = mergeAll (pairwiseMerge xss)
 
