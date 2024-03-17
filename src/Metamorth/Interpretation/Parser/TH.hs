@@ -190,7 +190,9 @@ testTheParser spi fp = do
             (spiPhoneTypeName spi)
             (spiMkMaj spi)
             (spiMkMin spi)
+            (spiWordTypeNames spi)
             pps
+            "theActualParser"
         )
       
 
@@ -201,9 +203,11 @@ makeTheParser
   -> Name                               -- ^ The name of the type of Phonemes.
   -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an upper-case character.
   -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an lower-case character.
+  -> (Name, (Name, Name))               -- ^ The type/data constructors for the word/punct type.
   -> ParserParsingState                 -- ^ The data from parsing the specification.
+  -> String                             -- ^ Preferred name of the function
   -> Q ([Dec], StaticParserInfo)
-makeTheParser phoneMap aspectMap phoneName mkMaj mkMin pps = do
+makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps theName = do
   let classDictX = ppsClassDictionary pps
       stateDictX = ppsStateDictionary pps
       phonePats  = ppsPhonemePatterns pps
@@ -233,6 +237,7 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin pps = do
               , spiStateTypeName   = stateTypeName
               , spiDefStateName    = defStateName
               , spiStateDictionary = newStateDict
+              , spiWordTypeNames   = wordDataNames
               }
   
   eFuncRslt <- constructFunctionsBothX spi mainTrie
@@ -242,8 +247,9 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin pps = do
       return ([], mkName "funcErr1", mkName "funcErr2")
     (Right (okay, (x1,x2))) -> return  (okay, x1, x2)
   
+  (epDecs, finalName) <- makeEntryPoint spi nm1 nm2 theName
 
-  return (concat [stDecs, clDecs, charPredDecs, funcDecs], spi)
+  return (concat [epDecs, stDecs, clDecs, charPredDecs, funcDecs], spi)
 
 {-
   :: StaticParserInfo
@@ -429,10 +435,45 @@ makeWordEndFunctions theTrie classDec = do
     joinListMaybe (Just xs) = xs
     joinListMaybe _ = []
 
+makeEntryPoint :: StaticParserInfo -> Name -> Name -> String -> Q ([Dec], Name)
+makeEntryPoint spi startWordFunc restWordFunc finalFuncStr = do
+  let defStateVal     = VarE (spiDefStateName spi)
 
-{-
+      startWordFuncQE = pure $ VarE startWordFunc
+      restWordFuncQE  = pure $ VarE restWordFunc
 
--}
+      punctWordQE     = pure $ VarE $ spiIsPunctFunc spi
+
+      (wordType, (wordCstr, puncCstr)) = spiWordTypeNames spi
+      
+      wordTypeQT = pure $ ConT wordType
+      wordCstrQE = pure $ ConE wordCstr
+      puncCstrQE = pure $ ConE puncCstr
+
+  
+  -- Building these up one at a time...
+  funcExp1 <- [| (liftA2 (:)) $startWordFuncQE (AT.many' $restWordFuncQE) |] -- collect a lisst of phones...
+  funcExp2 <- [| concatMap NE.toList <$> $(pure funcExp1) |] -- concat the results...
+  funcExp3 <- [| State.evalStateT $(pure funcExp2) $(pure defStateVal) |] -- run them with the state...
+  funcExp4 <- [| $wordCstrQE <$>  $(pure funcExp3) |] -- store in the proper type.
+  
+  -- Now, the other parsers...
+  -- If using `AT.takeWhile` instead, it would always succeed without consuming.
+  puncExp  <- [| $puncCstrQE <$> AT.takeWhile1 $punctWordQE |] 
+  altrExp  <- [| ($puncCstrQE . T.singleton) <$> AT.anyChar |]
+  
+  -- The final parser...
+  finalExp <- [| AT.many1 ($(pure funcExp4) <|> $(pure puncExp) <|> $(pure altrExp)) |]
+  finalFuncName <- newName finalFuncStr
+
+  -- The declaration...
+  parserType <- [t| AT.Parser [ $wordTypeQT ] |]
+  
+  let parserSign = SigD finalFuncName parserType
+      parserDefn = FunD finalFuncName [Clause [] (NormalB finalExp) []]
+  
+  return ([parserSign, parserDefn], finalFuncName)
+
 
 {-
 createWordStartFunction 
