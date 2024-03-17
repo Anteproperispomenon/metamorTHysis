@@ -1238,16 +1238,6 @@ consumerFuncX :: Name -> Exp
 consumerFuncX funcName
   = infixCont anyCharE (infixBind peekCharE (VarE funcName))
 
-{-
-data CharPattern
-  = PlainChar Char   -- ^ A single `Char`.
-  | CharOptCase Char -- ^ Any case of a `Char`.
-  | CharClass String -- ^ Any member of a class from the header.
-  | WordStart        -- ^ The start of a word.
-  | WordEnd          -- ^ The end of a word.
-  deriving (Show, Eq, Ord)
--}
-
 -- phonemeRet mkMaj mkMin c cs (Just blName) rslts
 
 -- | I hate these functions so much. I keep having to make more.
@@ -1272,7 +1262,6 @@ consumerRetB
 consumerRetB mkMaj mkMin nom cs exprs = infixCont anyCharE (phonemeRetZB mkMaj mkMin cs nom exprs)
 
 -- phonemeRetZB mkMaj mkMin cs peekName rslts
-
 
 consumerRetX
   :: (Exp -> Exp) -- ^ A function to make upper-case constructors.
@@ -1442,10 +1431,6 @@ data PhonemePattern = PhonemePattern
   { isUpperPP  :: Caseness      -- ^ Is this pattern upper-case?
   , charPatsPP :: [CharPattern] -- ^ The pattern of `Char`s for this phoneme.
   } deriving (Show, Eq)
-
-
-
-
 -}
 
 -- :m + Metamorth.Interpretation.Parser.Parsing Metamorth.Interpretation.Parser.Types Data.Either Control.Monad Metamorth.Interpretation.Parser.TH Metamorth.Interpretation.Parser.Parsing.Types
@@ -1564,14 +1549,6 @@ modifyStateExps  sdict mods = do
 -- Pre-Constructed Expressions
 ----------------------------------------------------------------
 
--- | Create the expression
---   @ exp1 >>= exp2 @
-infixBind :: Exp -> Exp -> Exp
-infixBind exp1 exp2 = InfixE (Just exp1) (VarE '(>>=)) (Just exp2)
-
-infixCont :: Exp -> Exp -> Exp
-infixCont exp1 exp2 = InfixE (Just exp1) (VarE '(>>))  (Just exp2)
-
 -- | One expression to be used in case I decide
 --   to change the type to @StateT State Parser a@.
 --   In which case I can change this to @lift AT.anyChar@.
@@ -1589,22 +1566,6 @@ peekCharQ  = [| lift AT.peekChar  |]
 
 peekCharQ' :: Q Exp
 peekCharQ' = [| lift AT.peekChar' |]
-
-trueE :: Exp
-trueE = ConE 'True
-
-falseE :: Exp
-falseE = ConE 'False
-
-boolE :: Bool -> Exp
-boolE True  = trueE
-boolE False = falseE
-
-nothingE :: Exp
-nothingE = ConE 'Nothing
-
-justE :: Exp -> Exp
-justE expr = AppE (ConE 'Just) expr
 
 parserT :: Type
 parserT = ConT ''AT.Parser
@@ -1640,9 +1601,6 @@ eqChar xvar theChar
 otherwiseG :: Exp -> (Guard, Exp)
 otherwiseG exp1 = (NormalG (VarE 'otherwise), exp1)
 
-orE :: Exp -> Exp -> Exp
-orE x y = InfixE (Just x) (VarE '(||)) (Just y)
-
 anyE :: [Exp] -> Exp
 anyE xs  = case (NE.nonEmpty xs) of
   Nothing   -> falseE -- since False is the identity of "or".
@@ -1655,9 +1613,6 @@ anyInfixE ifxE xs expr = anyE $ map (eqE expr) xs
 
 anyEqE :: [Exp] -> Exp -> Exp
 anyEqE = anyInfixE (VarE '(==))
-
-andE :: Exp -> Exp -> Exp
-andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
 
 allE :: [Exp] -> Exp
 allE xs = case (NE.nonEmpty xs) of
@@ -1672,8 +1627,6 @@ allInfixE ifxE xs expr = allE $ map (eqE expr) xs
 allNeqE :: [Exp] -> Exp -> Exp
 allNeqE = allInfixE (VarE '(/=))
 
-
-
 -- | Lift the name of a predicate to one
 --   that works on @Maybe a@.
 liftPred :: Name -> Exp
@@ -1683,12 +1636,6 @@ liftPred funcName = (AppE (VarE 'any) (VarE funcName))
 --   `True` if Nothing.
 liftPredT :: Name -> Exp
 liftPredT funcName = (AppE (VarE 'all) (VarE funcName))
-
-strE :: String -> Exp
-strE str = LitE (StringL str)
-
-retE :: Exp
-retE = VarE 'return
 
 -- | Convert a `MulExp` into a plain `Exp`
 --   by making it a `NonEmpty`.
@@ -1744,21 +1691,6 @@ charPatternGuard' _classMap _endWordFunc _notEndWordFunc NotStart  _charVarName 
 charPatternGuard' _classMap  endWordFunc _notEndWordFunc WordEnd    charVarName = return (AppE (liftPredT endWordFunc   ) (VarE charVarName), False)
 charPatternGuard' _classMap _endWordFunc  notEndWordFunc NotEnd     charVarName = return (AppE (liftPred  notEndWordFunc) (VarE charVarName), False)
 
-{-
-
-data CharPattern
-  = PlainChar Char   -- ^ A single `Char`.
-  | CharOptCase Char -- ^ Any case of a `Char`.
-  | CharClass String -- ^ Any member of a class from the header.
-  | WordStart        -- ^ The start of a word.
-  | WordEnd          -- ^ The end of a word.
-  deriving (Show, Eq, Ord)
-
-
-
-  , spiStateDictionary :: M.Map String (Name, Maybe (Name, M.Map String Name))
--}
-
 exampleInfo :: StaticParserInfo
 exampleInfo
   = StaticParserInfo
@@ -1801,75 +1733,4 @@ exampleInfo2
     subMap1  = [M.fromList $ [("front",mkName "Front"), ("back", mkName "Back")]]
     consMap2 = (M.fromList [("a", subMap1),("o", subMap1),("u", subMap1)])
     consMap3 = M.union consMap2 consMap1
-
-{-
-data StaticParserInfo = StaticParserInfo
-  -- | A `M.Map` from `TrieAnnotation`s to function `Name`s, 
-  --   where the function `Name` refers to the function
-  --   that corresponds to that node in the `TM.TMap`.
-  { spiAnnotationMap  :: M.Map TrieAnnotation Name
-  -- | A `M.Map` from phoneme `String`s to Constructor/Pattern Synonym `Name`s.
-  , spiConstructorMap :: M.Map String Name
-  -- | A `M.Map` from phoneme `String`s to the constructors of the
-  --   arguments (i.e. aspects) of the constructor of that Phoneme. 
-  --   Each argument is represented by a `M.Map` from `String`s to
-  --   `Name`s, where each `Name` refers to a constructor itself.
-  --
-  --   For example, let's say you have the following phoneme and
-  --   aspect definitions:
-  --
-  --   > aspect release : plain labial palatal
-  --   > aspect voice   : voiceless voiced ejective
-  --   >
-  --   > ====
-  --   > 
-  --   > ...
-  --   > k : voice release
-  --   > ...
-  --
-  --   Then the entry for @k@ in @spiAspectMaps` would be
-  --   something like...
-  --   
-  --   > ("k", 
-  --   >   [ fromList [("plain", "Plain"), ("labial", "Labial"), ("palatal", "Palatal")]
-  --   >   , fromList [("voiceless", "Voiceless"), ("voiced", "Voiced"), ("ejective", "Ejective")]
-  --   >   ]
-  --   >  )
-  , spiAspectMaps     :: M.Map String [M.Map String Name]
-  -- | A `M.Map` from class `String` names to function `Name`s.
-  --   These functions will have the type @`Char` -> `Bool`@,
-  --   and just be simple tests of whether the `Char` is one
-  --   of the members of the class. e.g.
-  --
-  --   > isApost :: Char -> Bool
-  --   > isApost x = (x == '\'') || (x == '`') || (x == '\x313')
-  --   
-  --   etc...
-  , spiClassMap       :: M.Map String (Name,[Char])
-  -- | A function to turn a `Phoneme` expression/value into
-  --   a upper-case value. This is represented as a function
-  --   for more flexibility. This should be a very simple function.
-  --   For uncased orthographies, it should just be @`id`@ or the
-  --   same as @`spiMkMin`@. For cased orthographies, it should 
-  --   just be a function like:
-  --
-  --   > mkMaj :: Exp -> Exp
-  --   > mkMaj expr = AppE (ConE upperName) expr
-  --
-  --   where @upperName` is the `Name` for the Upper-case constructor.
-  , spiMkMaj          :: (Exp -> Exp)
-  -- | Same as `spiMkMaj`, but for lower-case instead.
-  , spiMkMin          :: (Exp -> Exp)
-  -- | The `Name` of a function that checks whether a `Char`
-  --   is *NOT* one of the characters that can start a phoneme
-  --   mid-word. If a peeked `Char` satisfies this predicate,
-  --   then we know we are at the end of a word.
-  , spiEndWordFunc    :: Name
-  -- | The `Name` of the `Type` used for phonemes.
-  , spiPhoneTypeName  :: Name
-  }
-
-
--}
-
 

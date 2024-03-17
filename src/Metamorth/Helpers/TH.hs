@@ -16,8 +16,19 @@ module Metamorth.Helpers.TH
   , first
   , second
   -- * Basic helpers
-  , stringExp
   , charE
+  , strE
+  , stringExp
+  , boolE
+  , trueE
+  , falseE
+  , andE
+  , orE
+  , nothingE
+  , justE
+  , retE
+  , infixBind
+  , infixCont
   ) where
 
 import Control.Monad
@@ -76,9 +87,6 @@ recordAdtDecDeriv typeName fields ders =
   where
     con =
       RecC typeName (fmap (\(fieldName, fieldType) -> (fieldName, fieldBang, fieldType)) fields)
-
-stringExp :: String -> Exp
-stringExp = LitE . StringL
 
 -- | Create a `Show` instance for a simple sum
 --   type where each constructor is represented
@@ -241,6 +249,47 @@ groupCaseGuards' (m@(Match ptrn bdy dcs):mtchs)
 charE :: Char -> Exp
 charE = LitE . CharL 
 
+strE :: String -> Exp
+strE = LitE. StringL
+
+stringExp :: String -> Exp
+stringExp = strE
+{-# INLINE stringExp #-}
+
+trueE :: Exp
+trueE = ConE 'True
+
+falseE :: Exp
+falseE = ConE 'False
+
+boolE :: Bool -> Exp
+boolE True  = trueE
+boolE False = falseE
+
+nothingE :: Exp
+nothingE = ConE 'Nothing
+
+justE :: Exp -> Exp
+justE expr = AppE (ConE 'Just) expr
+
+-- | Create the expression
+--   @ exp1 >>= exp2 @
+infixBind :: Exp -> Exp -> Exp
+infixBind exp1 exp2 = InfixE (Just exp1) (VarE '(>>=)) (Just exp2)
+
+-- | Create the expression
+--   @ exp1 >> exp2 @
+infixCont :: Exp -> Exp -> Exp
+infixCont exp1 exp2 = InfixE (Just exp1) (VarE '(>>))  (Just exp2)
+
+orE :: Exp -> Exp -> Exp
+orE x y = InfixE (Just x) (VarE '(||)) (Just y)
+
+andE :: Exp -> Exp -> Exp
+andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
+
+retE :: Exp
+retE = VarE 'return
 
 -- [ConP Data.Either.Right [] [VarP x_1]]
 
