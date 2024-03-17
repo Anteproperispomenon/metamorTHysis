@@ -23,6 +23,7 @@ module Metamorth.Helpers.Trie
   , unifyPaths
   , getSubTries
   , deleteBranch
+  , getFirstSteps
   -- , annotateTrie
   -- , annotifyTrie
   -- , setifyTrie
@@ -100,6 +101,14 @@ getSubTries tm
   where
     keys1c = mapMaybe len1' $ TS.toList $ TS.prefixes $ TM.keysTSet tm
 
+-- | Newer version of `getSubTries`.
+getSubTriesNew :: forall c a. (Ord c) => TM.TMap c a -> [(c,(Maybe a, TM.TMap c a))]
+getSubTriesNew (TMI.TMap (TMI.Node val0 cmap))
+  = map extractNode (M.assocs cmap)
+  where
+    extractNode :: (c, TM.TMap c a) -> (c, (Maybe a, TM.TMap c a))
+    extractNode (cv, tm@(TMI.TMap (TMI.Node valx _tmap))) = (cv, (valx, tm))
+
 len1 :: [a] -> Bool
 len1 [_] = True
 len1 _   = False
@@ -155,4 +164,16 @@ unifyPaths = annotifyTrie
 deleteBranch :: (Ord c) => c -> TM.TMap c a -> TM.TMap c a
 deleteBranch x (TMI.TMap (TMI.Node val0 cmap))
   = TMI.TMap (TMI.Node val0 (M.delete x cmap))
+
+-- | Get the first "steps" of a `TM.TMap`.
+--   i.e. get the first element of any possible
+--   taken in the trie.
+--
+--   e.g. if @`TM.keys` trie == ["about","asdf","back", "enough", "epoxy", "stone", "stop"]@
+--   then @`getFirstSteps` trie == ['a', 'b', 'e', 's']@
+getFirstSteps :: (Ord c) => TM.TMap c a -> [c]
+getFirstSteps (TMI.TMap (TMI.Node _val0 cmap)) = M.keys cmap
+
+
+
 

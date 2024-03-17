@@ -6,7 +6,6 @@ module Metamorth.Helpers.TH
   , maybeType
   , sumAdtDecDeriv
   , recordAdtDecDeriv
-  , stringExp
   , showSumInstance
   , showSumProdInstance
   , showSumProdInstanceAlt
@@ -16,6 +15,9 @@ module Metamorth.Helpers.TH
   , forMap
   , first
   , second
+  -- * Basic helpers
+  , stringExp
+  , charE
   ) where
 
 import Control.Monad
@@ -232,7 +234,12 @@ groupCaseGuards' (m@(Match ptrn bdy dcs):mtchs)
     guardifyBody :: Body -> [(Guard, Exp)]
     guardifyBody (GuardedB grds) = grds
     guardifyBody (NormalB  expr) = [(NormalG otherwiseE,expr)]
-    
+
+------------------------------------------------
+-- More basic functions
+
+charE :: Char -> Exp
+charE = LitE . CharL 
 
 
 -- [ConP Data.Either.Right [] [VarP x_1]]

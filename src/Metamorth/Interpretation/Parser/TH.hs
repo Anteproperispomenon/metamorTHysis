@@ -217,9 +217,7 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin pps = do
     nom <- annFuncName ann
     return (ann, nom)
   
-  -- TEMPORARY!!!
-  endWordName <- newName "isEndChar"
-  notEndName  <- newName "notEndChar"
+  (charPredDecs, (punctName, isEndName, noEndName)) <- makeWordEndFunctions mainTrie newClassDict
 
   let spi = StaticParserInfo
               { spiAnnotationMap   = annNames
@@ -228,8 +226,9 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin pps = do
               , spiClassMap        = newClassDict
               , spiMkMaj           = mkMaj
               , spiMkMin           = mkMin
-              , spiEndWordFunc     = endWordName
-              , spiNotEndWordFunc  = notEndName
+              , spiEndWordFunc     = isEndName
+              , spiNotEndWordFunc  = noEndName
+              , spiIsPunctFunc     = punctName
               , spiPhoneTypeName   = phoneName
               , spiStateTypeName   = stateTypeName
               , spiDefStateName    = defStateName
@@ -244,7 +243,7 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin pps = do
     (Right (okay, (x1,x2))) -> return  (okay, x1, x2)
   
 
-  return (concat [stDecs, clDecs, funcDecs], spi)
+  return (concat [stDecs, clDecs, charPredDecs, funcDecs], spi)
 
 {-
   :: StaticParserInfo
@@ -381,6 +380,59 @@ makeClassDecs sdict = do
       classDecs = map (uncurry $ makeClassDec xvar) decData
   return (concat classDecs, rsltDict)
 
+-- TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
+
+-- | Create the functions that check about the end of a word.
+makeWordEndFunctions 
+  -- | The main trie of the parser
+  :: TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)) 
+  -> M.Map String (Name,[Char])
+  -> Q ([Dec], (Name, Name, Name))
+makeWordEndFunctions theTrie classDec = do
+  let startTrie = snd $ TM.match [WordStart] theTrie
+      notStTrie = snd $ TM.match [NotStart ] theTrie
+      rstOfTrie = deleteBranch NotStart $ deleteBranch WordStart theTrie
+      getOptions :: CharPattern -> [Char]
+      getOptions (PlainChar   _ c) = [c]
+      getOptions (CharOptCase _ c) = getCases c
+      getOptions (CharClass   _ c) = joinListMaybe $ fmap snd $ M.lookup c classDec
+      getOptions _ = []
+
+      -- The chars from each of the three categories.
+      startChars = map charE $ nubSort $ concatMap getOptions $ getFirstSteps startTrie
+      notStChars = map charE $ nubSort $ concatMap getOptions $ getFirstSteps notStTrie
+      rstOfChars = map charE $ nubSort $ concatMap getOptions $ getFirstSteps rstOfTrie
+  
+  punctExp <- [| \x -> $(pure $ allNeqE (startChars ++ rstOfChars) (VarE 'x)) |]
+  isEndExp <- [| \x -> $(pure $ allNeqE (notStChars ++ rstOfChars) (VarE 'x)) |]
+  noEndExp <- [| \x -> $(pure $ anyEqE  (notStChars ++ rstOfChars) (VarE 'x)) |]
+
+  punctName <- newName "isPunctChar"
+  isEndName <- newName "isEndOfWord"
+  noEndName <- newName "notEndOfWord"
+
+  funcSigns <- [t| Char -> Bool |]
+
+  let punctSign = SigD punctName funcSigns
+      isEndSign = SigD isEndName funcSigns
+      noEndSign = SigD noEndName funcSigns
+
+      punctDec  = FunD punctName [Clause [] (NormalB punctExp) []]
+      isEndDec  = FunD isEndName [Clause [] (NormalB isEndExp) []]
+      noEndDec  = FunD noEndName [Clause [] (NormalB noEndExp) []]
+
+      theDecs = [punctSign, punctDec, isEndSign, isEndDec, noEndSign, noEndDec]
+
+  return (theDecs,(punctName, isEndName, noEndName))
+  where
+    joinListMaybe :: Maybe [a] -> [a]
+    joinListMaybe (Just xs) = xs
+    joinListMaybe _ = []
+
+
+{-
+
+-}
 
 {-
 createWordStartFunction 
@@ -578,9 +630,9 @@ data StaticParserInfo = StaticParserInfo
   -- | A `M.Map` from `TrieAnnotation`s to function `Name`s, 
   --   where the function `Name` refers to the function
   --   that corresponds to that node in the `TM.TMap`.
-  { spiAnnotationMap  :: M.Map TrieAnnotation Name
+  { spiAnnotationMap   :: M.Map TrieAnnotation Name
   -- | A `M.Map` from phoneme `String`s to Constructor/Pattern Synonym `Name`s.
-  , spiConstructorMap :: M.Map String Name
+  , spiConstructorMap  :: M.Map String Name
   -- | A `M.Map` from phoneme `String`s to the constructors of the
   --   arguments (i.e. aspects) of the constructor of that Phoneme. 
   --   Each argument is represented by a `M.Map` from `String`s to
@@ -606,7 +658,7 @@ data StaticParserInfo = StaticParserInfo
   --   >   , fromList [("voiceless", "Voiceless"), ("voiced", "Voiced"), ("ejective", "Ejective")]
   --   >   ]
   --   >  )
-  , spiAspectMaps     :: M.Map String [M.Map String Name]
+  , spiAspectMaps      :: M.Map String [M.Map String Name]
   -- | A `M.Map` from class `String` names to function `Name`s.
   --   These functions will have the type @`Char` -> `Bool`@,
   --   and just be simple tests of whether the `Char` is one
@@ -616,7 +668,7 @@ data StaticParserInfo = StaticParserInfo
   --   > isApost x = (x == '\'') || (x == '`') || (x == '\x313')
   --   
   --   etc...
-  , spiClassMap       :: M.Map String (Name,[Char])
+  , spiClassMap        :: M.Map String (Name,[Char])
   -- | A function to turn a `Phoneme` expression/value into
   --   an upper-case value. This is represented as a function
   --   for more flexibility. This should be a very simple function.
@@ -628,23 +680,26 @@ data StaticParserInfo = StaticParserInfo
   --   > mkMaj expr = AppE (ConE upperName) expr
   --
   --   where @upperName` is the `Name` for the Upper-case constructor.
-  , spiMkMaj          :: (Exp -> Exp)
+  , spiMkMaj           :: (Exp -> Exp)
   -- | Same as `spiMkMaj`, but for lower-case instead.
-  , spiMkMin          :: (Exp -> Exp)
+  , spiMkMin           :: (Exp -> Exp)
   -- | The `Name` of a function that checks whether a `Char`
   --   is *NOT* one of the characters that can start a phoneme
   --   mid-word. If a peeked `Char` satisfies this predicate,
   --   then we know we are at the end of a word.
-  , spiEndWordFunc    :: Name
+  , spiEndWordFunc     :: Name
   -- | The `Name` of a function that checks whether a `Char`
   --   *is* one of the characters that can start a phoneme
   --   mid-word. If a peeked `Char` satisfies this predicate,
   --   then we know we are *NOT* at the end of a word.
-  , spiNotEndWordFunc :: Name
+  , spiNotEndWordFunc  :: Name
+  -- | The function to be used while consuming non-grapheme
+  --   characters.
+  , spiIsPunctFunc     :: Name
   -- | The `Name` of the `Type` used for phonemes.
-  , spiPhoneTypeName  :: Name
+  , spiPhoneTypeName   :: Name
   -- | The `Name` of the type of the state value.
-  , spiStateTypeName  :: Name
+  , spiStateTypeName   :: Name
   -- | The `Name` of the default value for the state value.
   , spiDefStateName    :: Name
   -- | The State information dictionary. This is
@@ -654,6 +709,11 @@ data StaticParserInfo = StaticParserInfo
   --   values, then there's also a `M.Map` from
   --   `String`s to `Name`s of constructors.
   , spiStateDictionary :: M.Map String (Name, Maybe (Name, M.Map String Name))
+  -- | The `Name`s of the `Word` Type and the
+  --   `Name`s of its constructors. The first
+  --   constructor is for sequences of phonemes,
+  --   the second is for punctuation etc...
+  , spiWordTypeNames   :: (Name, (Name, Name))
   }
 
 instance Eq StaticParserInfo where
@@ -666,10 +726,12 @@ instance Eq StaticParserInfo where
       && ((spiMkMin' x) == (spiMkMin' y))
       && ((spiEndWordFunc x) == (spiEndWordFunc y))
       && ((spiNotEndWordFunc x) == (spiNotEndWordFunc y))
+      && ((spiIsPunctFunc x) == (spiIsPunctFunc y))
       && ((spiPhoneTypeName x) == (spiPhoneTypeName y))
       && ((spiStateTypeName x) == (spiStateTypeName y))
       && ((spiDefStateName x) == (spiDefStateName y))
       && ((spiStateDictionary x) == (spiStateDictionary y))
+      && ((spiWordTypeNames x) == (spiWordTypeNames y))
     where
       spiMkMaj' z = (spiMkMaj z) (ConE (mkName "Example"))
       spiMkMin' z = (spiMkMin z) (ConE (mkName "Example"))
@@ -684,10 +746,12 @@ instance Show StaticParserInfo where
       <> ", spiMkMin = "           <> show (PP.ppr mkMinRep)
       <> ", spiEndWordFunc = "     <> show (spiEndWordFunc x)
       <> ", spiNotEndWordFunc = "  <> show (spiNotEndWordFunc x)
+      <> ", spiIsPunctFunc = "     <> show (spiIsPunctFunc x)
       <> ", spiPhoneTypeName = "   <> show (spiPhoneTypeName x)
       <> ", spiStateTypeName = "   <> show (spiStateTypeName x)
       <> ", spiDefStateName = "    <> show (spiDefStateName x)
       <> ", spiStateDictionary = " <> show (spiStateDictionary x)
+      <> ", spiWordTypeNames = "   <> show (spiWordTypeNames x)
       <> "}"
     where
       exprNom  = mkName "expr"
@@ -1543,13 +1607,31 @@ anyE xs  = case (NE.nonEmpty xs) of
   Nothing   -> falseE -- since False is the identity of "or".
   (Just ys) -> intersperseInfixRE (VarE '(||)) ys
 
+anyInfixE :: Exp -> [Exp] -> Exp -> Exp
+anyInfixE ifxE xs expr = anyE $ map (eqE expr) xs
+  where
+    eqE e1 e2 = InfixE (Just e1) ifxE (Just e2)
+
+anyEqE :: [Exp] -> Exp -> Exp
+anyEqE = anyInfixE (VarE '(==))
+
 andE :: Exp -> Exp -> Exp
 andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
 
 allE :: [Exp] -> Exp
 allE xs = case (NE.nonEmpty xs) of
-  Nothing   -> trueE
+  Nothing   -> trueE -- since True is the identity of "and".
   (Just ys) -> intersperseInfixRE (VarE '(&&)) ys
+
+allInfixE :: Exp -> [Exp] -> Exp -> Exp
+allInfixE ifxE xs expr = allE $ map (eqE expr) xs
+  where
+    eqE e1 e2 = InfixE (Just e1) ifxE (Just e2)
+
+allNeqE :: [Exp] -> Exp -> Exp
+allNeqE = allInfixE (VarE '(/=))
+
+
 
 -- | Lift the name of a predicate to one
 --   that works on @Maybe a@.
@@ -1648,10 +1730,12 @@ exampleInfo
       id
       (mkName "notSomeChar")
       (mkName "isSomeChar")
+      (mkName "isPunctChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
+      (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
 
 exampleInfo2 :: StaticParserInfo
 exampleInfo2
@@ -1665,10 +1749,12 @@ exampleInfo2
       id
       (mkName "notSomeChar")
       (mkName "isSomeChar")
+      (mkName "isPunctChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")])))]) -- for now.
+      (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
   where
     consMap1 = (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["gh","ts","ch","sh","sep"]) $ \c -> (c, []))
     subMap1  = [M.fromList $ [("front",mkName "Front"), ("back", mkName "Back")]]
