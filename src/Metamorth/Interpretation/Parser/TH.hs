@@ -192,9 +192,36 @@ testTheParser spi fp = do
             (spiMkMin spi)
             (spiWordTypeNames spi)
             pps
-            "theActualParser"
+            defParserOptions
         )
       
+-- | Options for how to procede when
+--   constructing the parser.
+data ParserOptions = ParserOptions
+  -- | Whether to unify intermediate
+  --   parsing branches (See the top
+  --   of this module for an example).
+  --   This should be fine most of the
+  --   time, but it may cause problems
+  --   with compilation if you have some
+  --   weird casing going on.
+  { poUnifyBranches :: Bool
+  -- | Whether to group guards on the same
+  --   pattern together, instead of only
+  --   having one guard per pattern. This
+  --   should work fine in almost any case.
+  , poGroupGuards   :: Bool
+  -- | A `String` representing what you
+  --   want the main function name to be.
+  , poMainFuncName  :: String
+  } deriving (Show, Eq)
+
+defParserOptions :: ParserOptions
+defParserOptions = ParserOptions
+  { poUnifyBranches = True
+  , poGroupGuards   = True
+  , poMainFuncName  = "theActualParser"
+  }
 
 -- | Construct the actual parser code.
 makeTheParser 
@@ -205,13 +232,13 @@ makeTheParser
   -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an lower-case character.
   -> (Name, (Name, Name))               -- ^ The type/data constructors for the word/punct type.
   -> ParserParsingState                 -- ^ The data from parsing the specification.
-  -> String                             -- ^ Preferred name of the function
+  -> ParserOptions                      -- ^ Parser 
   -> Q ([Dec], StaticParserInfo)
-makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps theName = do
+makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = do
   let classDictX = ppsClassDictionary pps
       stateDictX = ppsStateDictionary pps
       phonePats  = ppsPhonemePatterns pps
-      mainTrie   = pathifyTrie phonePats
+      mainTrie   = if (poGroupGuards pops) then (pathifyTrie phonePats) else (dontPathifyTrie phonePats)
   (stDecs, stateTypeName, defStateName, newStateDict) <- createStateDecs "StateType" stateDictX
   (clDecs, newClassDict) <- makeClassDecs classDictX
   -- Getting the annotation map...
@@ -240,14 +267,14 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps theName
               , spiWordTypeNames   = wordDataNames
               }
   
-  eFuncRslt <- constructFunctionsBothX spi mainTrie
+  eFuncRslt <- constructFunctionsBothX spi (poGroupGuards pops) mainTrie
   (funcDecs, nm1, nm2) <- case eFuncRslt of
     (Left errs) -> do 
       qReport True (intercalate "\n" errs)
       return ([], mkName "funcErr1", mkName "funcErr2")
     (Right (okay, (x1,x2))) -> return  (okay, x1, x2)
   
-  (epDecs, finalName) <- makeEntryPoint spi nm1 nm2 theName
+  (epDecs, finalName) <- makeEntryPoint spi nm1 nm2 (poMainFuncName pops)
 
   return (concat [epDecs, stDecs, clDecs, charPredDecs, funcDecs], spi)
 
@@ -829,34 +856,36 @@ createCasesForStart
 
 constructFunctionsBothX
   :: StaticParserInfo
+  -> Bool
   -- -> [CharPattern]
   -- -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
   -> Q (Either [String] ([Dec],(Name, Name)))
-constructFunctionsBothX spi trie
-  = constructFunctionsBoth spi trie "startParser" "restParser"
+constructFunctionsBothX spi bl trie
+  = constructFunctionsBoth spi bl trie "startParser" "restParser"
 
 
 constructFunctionsBoth
   :: StaticParserInfo
+  -> Bool
   -- -> [CharPattern]
   -- -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
   -> String
   -> String
   -> Q (Either [String] ([Dec],(Name, Name)))
-constructFunctionsBoth spi trie funNomStrt funNomRst = do
+constructFunctionsBoth spi bl trie funNomStrt funNomRst = do
   let ((trieS, trieNS), trie2) = splitTrie trie
   -- Construct the 
-  eRslt1 <- constructFunctionsS spi [WordStart] (S.empty, M.empty) trieS
+  eRslt1 <- constructFunctionsSB bl spi [WordStart] (S.empty, M.empty) trieS
   case eRslt1 of
     (Left errs) -> return $ Left errs
     (Right (decs1, st1, nom1)) -> do
-      eRslt2 <- constructFunctionsS spi [NotStart] st1 trieNS
+      eRslt2 <- constructFunctionsSB bl spi [NotStart] st1 trieNS
       case eRslt2 of
         (Left errs) -> return $ Left errs
         (Right (decs2, st2, nom2)) -> do
-          eRslt3 <- constructFunctionsS spi [] st2 trie2
+          eRslt3 <- constructFunctionsSB bl spi [] st2 trie2
           case eRslt3 of
             (Left errs) -> return $ Left errs
             (Right (decs3, _st3, nom3)) -> do
@@ -900,6 +929,15 @@ constructFunctions
   -> Q (Either [String] ([Dec], Name))
 constructFunctions spi trie
   = fmap getIt <$> constructFunctionsS spi [] (S.empty, M.empty) trie
+  where getIt (decs,_,nom) = (decs,nom)
+
+constructFunctionsB
+  :: Bool
+  -> StaticParserInfo
+  -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
+  -> Q (Either [String] ([Dec], Name))
+constructFunctionsB bl spi trie
+  = fmap getIt <$> (constructFunctionsSB bl) spi [] (S.empty, M.empty) trie
   where getIt (decs,_,nom) = (decs,nom)
 
 constructFunctionsS
@@ -1454,6 +1492,8 @@ data PhonemePattern = PhonemePattern
 -- 
 -- fmap (ppr . (fromRight [])) $ (runQ . (constructFunctions exampleInfo)) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample2.thyp")
 
+dontPathifyTrie :: M.Map PhoneResult [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
+dontPathifyTrie = annotateTrie . setupTrie'
 
 pathifyTrie :: M.Map PhoneResult [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
 pathifyTrie = unifyPaths . setupTrie'

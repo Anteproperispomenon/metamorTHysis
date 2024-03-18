@@ -21,6 +21,7 @@ module Metamorth.Helpers.Trie
   ( TrieAnnotation(..)
   , isLeafAnn
   , unifyPaths
+  , annotateTrie
   , getSubTries
   , deleteBranch
   , getFirstSteps
