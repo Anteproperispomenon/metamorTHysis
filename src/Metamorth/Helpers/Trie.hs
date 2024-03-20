@@ -25,6 +25,7 @@ module Metamorth.Helpers.Trie
   , getSubTries
   , deleteBranch
   , getFirstSteps
+  , matchPred
   -- , annotateTrie
   -- , annotifyTrie
   -- , setifyTrie
@@ -175,6 +176,19 @@ deleteBranch x (TMI.TMap (TMI.Node val0 cmap))
 getFirstSteps :: (Ord c) => TM.TMap c a -> [c]
 getFirstSteps (TMI.TMap (TMI.Node _val0 cmap)) = M.keys cmap
 
+-- | Like `TM.match`, but works over a list
+--   of predicates instead of just a list of
+--   values. Since multiple values can now
+--   be matched, the result is returned as a
+--   list instead.
+matchPred :: (Ord c) => [c -> Bool] -> TM.TMap c a -> [(Maybe a, TM.TMap c a)]
+matchPred []     t@(TMI.TMap (TMI.Node ma _)) = [(ma, t)]
+matchPred (p:ps)   (TMI.TMap (TMI.Node _  e))
+  | nods <- M.elems $ M.filterWithKey (\c _ -> p c) e
+  = nods >>= (matchPred ps)
 
-
+-- | Like `matchPred`, but only returns the
+--   values at the resulting nodes.
+matchPred' :: (Ord c) => [c -> Bool] -> TM.TMap c a -> [a]
+matchPred' ps tm = mapMaybe fst $ matchPred ps tm
 

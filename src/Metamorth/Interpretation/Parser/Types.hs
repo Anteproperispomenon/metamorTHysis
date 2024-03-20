@@ -16,6 +16,7 @@ module Metamorth.Interpretation.Parser.Types
 
   , CheckStateX(..)
   , ModifyStateX(..)
+  , stateSubsetOf
   
   , RawPhonemePattern(..)
   , CharPatternRaw(..)
@@ -128,6 +129,56 @@ data CheckStateX
   -- | Boolean check on a value-state.
   | CheckStateVB String Bool
   deriving (Show, Eq, Ord)
+
+checkStateString :: CheckStateX -> String
+checkStateString (CheckStateBB strX _) = strX
+checkStateString (CheckStateVV strX _) = strX
+checkStateString (CheckStateVB strX _) = strX
+
+-- | Check whether one state is a subset of another.
+stateSubsetOf :: [CheckStateX] -> [CheckStateX] -> Bool
+stateSubsetOf [] [] = True
+stateSubsetOf _s [] = True
+stateSubsetOf [] _s = False
+stateSubsetOf xs ys = (stateSubsetOfX xs ys) && (stateSupsetOfX ys xs)
+
+-- | Check whether all of the elements in the first
+--   list are either missing from the second list,
+--   or less general than the equivalent entry in
+--   the second list.
+stateSubsetOfX :: [CheckStateX] -> [CheckStateX] -> Bool
+stateSubsetOfX [] _s = True
+stateSubsetOfX (st:sts) sts2
+  | lst1 <- filter (findStates (checkStateString st)) sts2
+  = (null lst1 || all (stateSubsetOf' st) lst1) && (stateSubsetOfX sts sts2)
+
+-- | Check whether all of the elements in the first list
+--   are at least as general as an equivalent element in
+--   the second list.
+stateSupsetOfX :: [CheckStateX] -> [CheckStateX] -> Bool
+stateSupsetOfX [] _s = True
+stateSupsetOfX (st:sts) sts2
+  | lst1 <- filter (findStates (checkStateString st)) sts2
+  = (notNull lst1 && all (stateSupsetOf' st) lst1) && (stateSupsetOfX sts sts2)
+  where 
+    notNull = not . null
+    stateSupsetOf' = flip stateSubsetOf'
+
+findStates :: String -> CheckStateX -> Bool
+findStates str (CheckStateBB strX _) = str == strX
+findStates str (CheckStateVV strX _) = str == strX
+findStates str (CheckStateVB strX _) = str == strX
+
+stateSubsetOf' :: CheckStateX -> CheckStateX -> Bool
+stateSubsetOf' (CheckStateVV str1 str2) (CheckStateVB strX blY)
+  = (str1 == strX) && blY
+stateSubsetOf' (CheckStateVV str1 str2) (CheckStateVV strX strY)
+  = (str1 == strX) && (str2 == strY)
+stateSubsetOf' (CheckStateBB str1 bl1) (CheckStateBB str2 bl2)
+  = (str1 == str2) && (bl1 == bl2)
+stateSubsetOf' _ _ = False
+
+
 
 -- | Adds `CheckState` info to the first
 --   compatible element in a pattern.
@@ -345,7 +396,6 @@ data StateMod
   -- | Check whether a state is a certain enumerated value.
   | ValStateV String String
   deriving (Show, Eq)
-
 
 --   | ValStateR String (Either String Bool) -- ^ Check that the state is a certain value.
 --   | SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
