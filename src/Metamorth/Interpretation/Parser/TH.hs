@@ -90,6 +90,7 @@ module Metamorth.Interpretation.Parser.TH
   -- * Testing Helpers
   , exampleInfo
   , exampleInfo2
+  , exampleInfo3
   , tempTester
   -- * Debug Functions
   , setupTrie'
@@ -1774,3 +1775,38 @@ exampleInfo2
     consMap2 = (M.fromList [("a", subMap1),("o", subMap1),("u", subMap1)])
     consMap3 = M.union consMap2 consMap1
 
+exampleInfo3 :: StaticParserInfo
+exampleInfo3
+  = StaticParserInfo
+      -- hmm...
+      (M.fromList $ forMap [1..100]   $ \n -> (TrieAnn n, mkName ("trieAnn_" ++ show n)))
+      (M.fromList $ forMap exampleOrth3 $ \c -> (c, mkName $ dataName c))
+      (M.fromList $ forMap exampleOrth3 $ \c -> (c, []))
+      (M.empty) -- filled in by `makeTheParser`
+      id
+      id
+      (mkName "notSomeChar")
+      (mkName "isSomeChar")
+      (mkName "isPunctChar")
+      (mkName "Phoneme")
+      (mkName "PhonemeState")
+      (mkName "defStateVal")
+      M.empty -- filled in by `makeTheParser`
+      -- (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
+      (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
+
+
+exampleOrth3 :: [String]
+exampleOrth3 
+  = [ "a", "e" , "i" , "o" , "u", "aw"
+    , "l", "lg", "r" , "rg"
+    , "s", "sh", "sc", "z" , "zh", "zc"
+    , "g", "gu", "k" , "q"
+    , "t", "ts", "d" , "dz"
+
+    , "tsh", "tsc", "dzh", "dzc"
+    
+    , "t'", "ts'", "tsh'", "tsc'"
+
+    , "w", "j"
+    ]
