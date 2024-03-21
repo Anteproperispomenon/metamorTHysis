@@ -26,6 +26,10 @@ module Metamorth.Helpers.Trie
   , deleteBranch
   , getFirstSteps
   , matchPred
+  , mapBranches
+  , forBranches
+  , insertIfEmpty
+  , insertMaybeIfEmpty
   -- , annotateTrie
   -- , annotifyTrie
   -- , setifyTrie
@@ -192,3 +196,29 @@ matchPred (p:ps)   (TMI.TMap (TMI.Node _  e))
 matchPred' :: (Ord c) => [c -> Bool] -> TM.TMap c a -> [a]
 matchPred' ps tm = mapMaybe fst $ matchPred ps tm
 
+-- | Map over the branches of a `TM.TMap`. This can
+--   be used recursively.
+mapBranches :: (Ord c) => (c -> Maybe a -> TM.TMap c a -> TM.TMap c a) -> TM.TMap c a -> TM.TMap c a
+mapBranches f (TMI.TMap (TMI.Node z e))
+  = TMI.TMap $ TMI.Node z $ M.mapWithKey (\k tm@(TMI.TMap (TMI.Node mx _)) -> f k mx tm) e
+
+-- | The same as `mapBranches`, but with a different
+--   argument order.
+forBranches :: (Ord c) => TM.TMap c a -> (c -> Maybe a -> TM.TMap c a -> TM.TMap c a) -> TM.TMap c a
+forBranches x f = mapBranches f x
+{-# INLINE forBranches #-}
+
+insertIfEmpty :: Ord c => [c] -> a -> TM.TMap c a -> TM.TMap c a
+insertIfEmpty k v = TM.revise (fromMaybe v) k
+
+insertMaybeIfEmpty :: Ord c => [c] -> Maybe a -> TM.TMap c a -> TM.TMap c a
+insertMaybeIfEmpty k v = TM.alter (\case {Nothing -> v ; x -> x}) k
+
+{-
+mapBranches :: (Ord c) => (c -> (Maybe a) -> (TM.TMap c a) -> (Maybe a, TM.TMap c a)) -> TM.TMap c a -> TM.TMap c a
+mapBranches f (TMI.TMap (TMI.Node _ e))
+  = M.mapWithKey (\k tm@(TMI.TMap (TMI.Node mx _)) -> 
+      let (mx', TMI.TMap (TMI.Node _ submap')) = f k mx tm
+      in  (TMI.TMap (TMI.Node mx' submap'))
+      ) e
+-}

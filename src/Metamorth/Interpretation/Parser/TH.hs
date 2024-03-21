@@ -152,6 +152,7 @@ import THLego.Helpers
 import Metamorth.Interpretation.Parser.Parsing (parseOrthographyFile)
 import Metamorth.Interpretation.Parser.Types
 import Metamorth.Interpretation.Parser.Parsing.Types
+import Metamorth.Interpretation.Parser.Parsing.Trie (generaliseStateTrie)
 import Metamorth.Helpers.TH
 
 
@@ -212,6 +213,13 @@ data ParserOptions = ParserOptions
   --   having one guard per pattern. This
   --   should work fine in almost any case.
   , poGroupGuards   :: Bool
+  -- | Try fixing the states so that you
+  --   don't have an issue where a more
+  --   general pattern gets rejected when
+  --   in a more specific state. You'll 
+  --   almost certainly want this on if
+  --   you use states at all.
+  , poCheckStates   :: Bool
   -- | A `String` representing what you
   --   want the main function name to be.
   , poMainFuncName  :: String
@@ -221,6 +229,7 @@ defParserOptions :: ParserOptions
 defParserOptions = ParserOptions
   { poUnifyBranches = True
   , poGroupGuards   = True
+  , poCheckStates   = True
   , poMainFuncName  = "theActualParser"
   }
 
@@ -239,7 +248,8 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = 
   let classDictX = ppsClassDictionary pps
       stateDictX = ppsStateDictionary pps
       phonePats  = ppsPhonemePatterns pps
-      mainTrie   = if (poGroupGuards pops) then (pathifyTrie phonePats) else (dontPathifyTrie phonePats)
+      -- mainTrie  = if (poGroupGuards pops) then (pathifyTrie phonePats) else (dontPathifyTrie phonePats)
+      mainTrie   = setupTrie pops phonePats
   (stDecs, stateTypeName, defStateName, newStateDict) <- createStateDecs "StateType" stateDictX
   (clDecs, newClassDict) <- makeClassDecs classDictX
   -- Getting the annotation map...
@@ -1492,6 +1502,16 @@ data PhonemePattern = PhonemePattern
 -- 
 -- 
 -- fmap (ppr . (fromRight [])) $ (runQ . (constructFunctions exampleInfo)) =<< (fmap (pathifyTrie . ppsPhonemePatterns) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample2.thyp")
+
+-- | Setup the trie according to the `ParserOptions`.
+setupTrie :: ParserOptions -> M.Map PhoneResult [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
+setupTrie pops theMap
+  | (poUnifyBranches pops) = unifyPaths   initialTrie'
+  | otherwise              = annotateTrie initialTrie'
+  where
+    initialTrie  = setupTrie' theMap
+    initialTrie' = if (poCheckStates pops) then (generaliseStateTrie initialTrie) else initialTrie
+
 
 dontPathifyTrie :: M.Map PhoneResult [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
 dontPathifyTrie = annotateTrie . setupTrie'

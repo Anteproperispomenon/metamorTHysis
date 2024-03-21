@@ -4,6 +4,7 @@ module Metamorth.Helpers.List
   , withZip
   , withZipM
   , allUnique
+  , firstJust
   ) where
 
 import Control.Monad (zipWithM)
@@ -97,3 +98,10 @@ withZipM xs ys f = zipWithM f xs ys
 -- | Check that all members of a list are unique
 allUnique :: (Eq a) => [a] -> Bool
 allUnique xs = xs == (L.nub xs)
+
+-- | Return the first non-`Nothing` value
+--   in a list of @`Maybe` a@.
+firstJust :: [Maybe a] -> Maybe a
+firstJust [] = Nothing
+firstJust ((Just x ):_) = Just x
+firstJust (Nothing:xs) = firstJust xs
