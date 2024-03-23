@@ -3,7 +3,9 @@
 ## Introduction
 
 Parsing is how you convert text in a certain orthography to
-a list of phonemes. 
+a list of phonemes. This document describes how to write
+the specification that `metamorTHysis` will use to generate
+such a parser.
 
 ## Specification
 

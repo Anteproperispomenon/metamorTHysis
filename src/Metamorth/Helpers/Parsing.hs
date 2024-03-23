@@ -13,9 +13,15 @@ module Metamorth.Helpers.Parsing
   -- * Re-ordered Functions
   , forParseOnly
   
-  -- * Combinators lifted over `StateT`
+  -- * Combinators lifted over `State.StateT`
   , lookAheadS
   , lookAheadS'
+
+  -- * Combinators lifted over `RWS.RWST`
+  , lookAheadRWS
+  , lookAheadEvalRWS
+  , lookAheadTellRWS
+  , lookAheadTellRWS'
 
   -- * Re-Exports
   , (AT.<?>)
@@ -26,6 +32,7 @@ import Data.Attoparsec.Combinator qualified as AC
 
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict qualified as State
+import Control.Monad.Trans.RWS.CPS      qualified as RWS
 
 import Data.Functor
 import Data.Text qualified as T
@@ -98,4 +105,37 @@ lookAheadS' :: (State.StateT s AT.Parser a) -> (State.StateT s AT.Parser (a,s))
 lookAheadS' prs = do
   st <- State.get
   lift $ AC.lookAhead (State.runStateT prs st)
+
+-- | Lift `AC.lookAhead` over `RWS.RWST`, returning
+--   the value, state, and writer of the computation.
+lookAheadRWS :: (Monoid w) => (RWS.RWST r w s AT.Parser a) -> (RWS.RWST r w s AT.Parser (a, s, w))
+lookAheadRWS prs = do
+  st <- RWS.get
+  rd <- RWS.ask
+  lift $ AC.lookAhead (RWS.runRWST prs rd st)
+
+-- | Lift `AC.lookAhead` over `RWS.RWST`, only returning
+--   the output of the look-ahead.
+lookAheadEvalRWS :: (Monoid w) => (RWS.RWST r w s AT.Parser a) -> (RWS.RWST r w s AT.Parser a)
+lookAheadEvalRWS prs = do
+  (a, _s, _w) <- lookAheadRWS prs
+  return a
+
+-- | Lift `AC.lookAhead` over `RWS.RWST`, writing the
+--   writer output to the main writer, and returning
+--   output but not the state.
+lookAheadTellRWS :: (Monoid w) => (RWS.RWST r w s AT.Parser a) -> (RWS.RWST r w s AT.Parser a)
+lookAheadTellRWS prs = do
+  (a, _s, w) <- lookAheadRWS prs
+  RWS.tell w
+  return a
+
+-- | Like `lookAheadRWS`, but instead of returning
+--   the writer's output, it writes it to the main
+--   writer.
+lookAheadTellRWS' :: (Monoid w) => (RWS.RWST r w s AT.Parser a) -> (RWS.RWST r w s AT.Parser (a,s))
+lookAheadTellRWS' prs = do
+  (a, s, w) <- lookAheadRWS prs
+  RWS.tell w
+  return (a,s)
 

@@ -321,12 +321,86 @@ parseClassDecSection = do
   -- lift AT.skipSpace
   _ <- lift $ many parseEndComment
   _ <- AT.many' $ do
-    parseClassDecS <|> parseStateDecS
+    parseClassDecS <|> parseStateDecS <|> parseUnspecifiedClassOrState
     lift $ AT.many1 parseEndComment
   _ <- lift $ many  parseEndComment
   _ <- lift ("====" <?> "Classes: Separator1")
   _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
   lift parseEndComment
+
+-- | Parse a class/state that's missing the
+--   "class"/"state" keyword at the beginning.
+--   This is to improve error messages.
+parseUnspecifiedClassOrState :: ParserParser ()
+parseUnspecifiedClassOrState = do
+  lift skipHoriz
+  thingName <- T.unpack <$> lift (takeIdentifier isLower isFollowId)
+  lift $ skipHoriz
+  c <- lift $ AT.peekChar'
+  case c of
+    ':' -> do
+      lift $ AT.anyChar
+      lift $ skipHoriz
+      (txt, bl) <- lift $ AT.match classOrStateDecider'
+      let outp = case bl of
+                  (Right  True) -> "  class " <> thingName <> " : " <> (T.unpack txt)
+                  (Right False) -> "  state " <> thingName <> " : " <> (T.unpack txt)
+                  (Left   True) -> "  class/state " <> thingName <> " : " <> (T.unpack txt)
+                  (Left  False) -> "  state " <> thingName
+      tell ["Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n" <> outp <> "\n"]
+      -- lift parseEndComment
+    '#' -> do
+      tell ["Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n  state " <> thingName <> "\n"]
+      -- lift parseEndComment
+    '\n' -> do
+      tell ["Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n  state " <> thingName <> "\n"]
+      -- lift parseEndComment
+    _ -> do
+      txt <- lift $ AT.takeWhile (\x -> (x /= '#') && (x /= '\n'))
+      tell ["Unspecified declaration in Class/State section:\n\n" <> thingName <> " " <> (T.unpack txt) <> "\n"]
+      -- lift parseEndComment
+
+-- see also
+-- parseCodepoint
+-- parseEscaped
+singleChar :: AT.Parser Char
+singleChar = do
+  c <- AT.satisfy (\x -> (x /= '#') && (x /= '\n'))
+  m <- AT.peekChar
+  case m of
+    Nothing  -> return c
+    (Just x) -> if (isSpace x) then (return c) else (fail "not a space")
+
+singleChar' :: AT.Parser (Maybe Bool)
+singleChar' = do
+  _ <- singleChar
+  return Nothing
+
+classChar :: AT.Parser (Maybe Bool)
+classChar = do 
+  _ <- parseCodepoint <|> parseEscaped
+  return (Just True)
+
+stateVal :: AT.Parser (Maybe Bool)
+stateVal = do
+  txt <- takeIdentifier isLower isFollowId
+  return $ if (T.length txt > 1) then (Just False) else Nothing
+
+classOrStateSub :: AT.Parser (Maybe Bool)
+classOrStateSub = singleChar' <|> classChar <|> stateVal
+
+classOrStateDecider :: AT.Parser (Maybe Bool)
+classOrStateDecider = do 
+  firstJust <$> AT.sepBy1' classOrStateSub skipHoriz1
+
+classOrStateDecider' :: AT.Parser (Either Bool Bool)
+classOrStateDecider' = do
+  rslt <- optional classOrStateDecider
+  return $ case rslt of
+    Nothing         -> Left False
+    (Just Nothing)  -> Left True
+    (Just (Just x)) -> Right x
+
 
 ----------------------------------------------------------------
 -- State Info Parsers

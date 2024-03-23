@@ -85,6 +85,7 @@ module Metamorth.Interpretation.Parser.TH
   -- * Parser Generation
   ( makeTheParser
   , testTheParser
+  , testTheParserE
   -- * Output Types
   , StaticParserInfo(..)
   -- * Testing Helpers
@@ -173,6 +174,34 @@ import Metamorth.Helpers.TH
 ----------------------------------------------------------------
 -- Main Constructor
 ----------------------------------------------------------------
+
+testTheParserE
+  :: StaticParserInfo
+  -> String -- File Path
+  -> IO ([Dec], StaticParserInfo)
+testTheParserE spi fp = do
+  theFile <- TIO.readFile fp
+  let eParseRslt = AT.parseOnly parseOrthographyFile theFile
+  case eParseRslt of
+    (Left err) -> fail $ "Couldn't parse input: " ++ err
+    -- (HeaderData, ParserParsingState, [String])
+    (Right (hdr, pps, errStrings)) -> do
+      case errStrings of
+        [] -> return ()
+        xs -> do
+          putStrLn "Encountered errors while parsing patterns:"
+          mapM_ putStrLn errStrings
+      runQ 
+        ( makeTheParser
+            (spiConstructorMap spi)
+            (spiAspectMaps spi)
+            (spiPhoneTypeName spi)
+            (spiMkMaj spi)
+            (spiMkMin spi)
+            (spiWordTypeNames spi)
+            pps
+            defParserOptions
+        )
 
 testTheParser
   :: StaticParserInfo
