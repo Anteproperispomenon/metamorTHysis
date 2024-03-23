@@ -328,10 +328,256 @@ in the class section. This will let you cut down
 on the number of patterns you need to write, since
 you don't have to write one for each possible apostrophe.
 
+#### Overlapping Classes
+
+Note that issues may occur when writing multiple
+classes with overlapping characters.
+
+e.g.
+
+```
+...
+====
+
+class lab  : w v f W V F
+class fric : v f s z V F S Z
+
+====
+...
+```
+
+In this case, the classes `lab` and `fric` share
+the characters `v` and `f`. This can easily cause
+a problem if you have patterns that **start** with
+the two patterns, e.g.
+
+```
+...
+hx : *fric x z
+vx : *lab  x 
+...
+```
+
+These patterns might not work properly, because of
+the underlying structure of the generated parser.
+It might not be a problem if you never have to choose
+between the two patterns, e.g.
+
+```
+tf : t *fric
+df : d *fric
+kw : k *lab
+gw : g *lab
+```
+
+...since the generated parser never has to make a choice
+between the two classes. 
+
+However, in general, it is best to avoid using overlapping
+classes, since they can cause unexpected problems. Only
+use them if you fully understand when it's safe to do so.
+
+If you absolutely must use overlapping classes, you can
+split the classes up into multiple "sub-classes", like so:
+
+```
+class fric     : s z S Z
+class fric_lab : v f V F
+class lab      : w W
+```
+
+and then, with the first example, we can duplicate the
+patterns like so:
+
+```
+...
+hx : *fric x z
+hx : *fric_lab x z
+vx : *lab  x 
+vx : *fric_lab x
+...
+```
+
+In the future, there may be an option in the parser to
+automatically split up overlapping classes like so.
 
 ### States
+
+#### Introduction
+
+`States` are the main way to provide information about
+phonemes earlier in a word to the parser further along
+in the word. For example, let's say you wanted to know
+what the last vowel parsed was. That can be done like so:
+
+```
+...
+====
+# Classes and states
+
+state last_vowel : va ve vi vo vu
+
+====
+
+# Single-phoneme Patterns
+
+a : a !last_vowel=va
+e : e !last_vowel=ve
+i : i !last_vowel=vi
+o : o !last_vowel=vo
+u : u !last_vowel=vu
+...
+```
+
+After which, you could change how other phonemes are
+parsed depending on the previous vowel.
+
+#### Defining States
+
+`States` are defined in the same section as classes,
+except instead of starting with `class`, they start
+with `state`, e.g.
+
+```
+state last_vowel : va ve vi vo vu
+state seen_n
+```
+
+These are the two different kinds of states:
+**enumeration**/**value** states, and **boolean** states
+respectively. **Boolean** states are only ever `on`/`off`,
+while **value** states can be `off` or hold one of the
+values to the right of the colon.
+
+As suggested above, **boolean** states are defined by
+writing `state <state_name>`, and then not including
+a colon or any other text after the state name.
+
+On the other hand, **value** states are defined
+like `classes`, except the line starts with `state`
+instead of `class`, and the right-hand side is a list
+of value names[^2] instead of individual characters.
+Note that you **can** reuse value names in different
+states, but you can't use the same value name twice
+in one state. i.e.
+
+```
+# These two states are fine together
+state last_vowel      : va ve vi vo vu
+state last_last_vowel : va ve vi vo vu
+
+# As are these two
+state last_fric : v f s z th sh zh
+state last_lav  : v f w m p b
+
+# This state is NOT okay
+state not_okay : not not yes
+```
+
+#### Changing States
+
+At the beginning of parsing a word, all states are set
+to `off`. To change the value of any of the current
+states, you end one of your patterns with a string of
+the following form:
+
+```
+!<state_name>=<state_value>
+```
+
+If `state_name` refers to a **boolean** state, then 
+`state_value` must indicate either `on` or `off`. There
+are many acceptable strings to represent this, such
+as `true`, `yes`, `y`, `on`, or `t` to represent `on`,
+and `false`, `no`, `n`, `off`, or `f` to represent `off`.
+
+On the other hand, if `state_name` refers to a **value** state,
+then `state_value` must either be one of the values that state
+can take, or it can be `off`. Again, you can use `false`, `n`,
+etc... to indicate `off`. However, you **can't** just set
+the value to `on`, since there is no default `on` value
+for **value** states. 
+
+Note that you can change multiple states at once simply
+by putting multiple state-change strings in the same
+pattern.
+
+#### Checking States
+
+In order for changing the state to have any meaning, there
+needs to be a way to inspect the state during a pattern.
+To do this, you add a string of the following form
+near[^3] the beginning of the output sequence:
+
+```
+@<state_name>=<state_value>
+```
+
+The form is nearly identical to the change-state strings,
+except that the first character is `@` instead of `!`. The 
+other difference is that you **can** check whether a **value**
+state is `on`, since all it checks is that **value** state in
+question isn't `off`. 
+
+Note that putting multiple state-checks in the same pattern
+means that **all** of the state-checks must hold. If you only
+want **at least one** of the state-checks to hold, you can
+create multiple of the same pattern, with one state-check
+in each.
+
+As an example, the following specification...
+
+```
+...
+
+====
+
+# What the last vowel was
+state last_vowel : va ve vi vo vu
+
+# Whether the last consonant was velar.
+state last_is_velar
+
+====
+
+# Single-phoneme Patterns
+
+a : a !last_vowel=va
+e : e !last_vowel=ve
+i : i !last_vowel=vi
+o : o !last_vowel=vo
+u : u !last_vowel=vu
+
+# Return "lg" if the last vowel was "o" or "u"
+lg : @last_vowel=vo l !last_is_velar=on
+lg : @last_vowel=vu l !last_is_velar=on
+
+# Otherwise, return "l"
+l  : l !last_is_velar=off
+
+g : g !last_is_velar=on
+
+# Return "ng" if the last consonant was velar,
+# and if the vowel was "e" or "i".
+ng : @last_is_velar=on @last_vowel=e n
+ng : @last_is_velar=on @last_vowel=i n
+
+# Otherwise return "n"
+n : n !last_is_velar=off
+
+...
+
+```
+
+uses both `all` state checks (the patterns for `ng`) and 
+`any` state checks (the patterns for `lg` and `ng`).
+
 
 ## Footnotes
 
 [^1]: Note that state checks can come before `^` or `%`, but it only really makes sense
       for `%`, since the state at the beginning of a word is always the default state.
+[^2]: A value name is any string of characters starting with a Latin letter, and followed
+      by a Latin letter, an Arabic numeral, or one of the characters `-`, `_`, or `'`.
+[^3]: Technically, it can be anywhere in the pattern so long as it's after a `+` or `-`
+      character if present.
