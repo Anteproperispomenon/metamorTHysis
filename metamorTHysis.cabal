@@ -28,8 +28,10 @@ library
       Lib
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
+      Metamorth.Helpers.IO
       Metamorth.Helpers.List
       Metamorth.Helpers.Map
+      Metamorth.Helpers.Misc
       Metamorth.Helpers.Ord
       Metamorth.Helpers.Parsing
       Metamorth.Helpers.TH
@@ -54,11 +56,13 @@ library
       LambdaCase
       MultiWayIf
       OverloadedStrings
+      ScopedTypeVariables
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints
   build-depends:
       attoparsec
     , base >=4.7 && <5
+    , bytestring
     , containers
     , template-haskell
     , text
@@ -80,11 +84,13 @@ executable metamorTHysis-exe
       LambdaCase
       MultiWayIf
       OverloadedStrings
+      ScopedTypeVariables
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       attoparsec
     , base >=4.7 && <5
+    , bytestring
     , containers
     , metamorTHysis
     , template-haskell
@@ -108,11 +114,13 @@ test-suite metamorTHysis-test
       LambdaCase
       MultiWayIf
       OverloadedStrings
+      ScopedTypeVariables
       TupleSections
   ghc-options: -Wall -Wcompat -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wmissing-export-lists -Wmissing-home-modules -Wpartial-fields -Wredundant-constraints -threaded -rtsopts -with-rtsopts=-N
   build-depends:
       attoparsec
     , base >=4.7 && <5
+    , bytestring
     , containers
     , metamorTHysis
     , template-haskell
