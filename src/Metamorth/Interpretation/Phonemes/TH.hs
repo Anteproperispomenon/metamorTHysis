@@ -1,7 +1,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Metamorth.Interpretation.Phonemes.TH
-  ( producePropertyData
+  ( PhonemeDatabase(..)
+  , PhonemeInformation(..)
+  , producePropertyData
   , producePhonemeInventory
   , produceVariousData
   , produceVariousDecs
@@ -18,6 +20,8 @@ import Data.Functor
 import Data.Maybe
 import Data.Tuple
 
+import Data.Text qualified as T
+
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
 
@@ -29,7 +33,8 @@ import Metamorth.Interpretation.Phonemes.Types
   , PhonemeProperties(..)
   )
 
-import Data.Map.Strict qualified as M
+import Data.Map.Strict       qualified as M
+import Data.Map.Merge.Strict qualified as MM
 
 import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
@@ -38,12 +43,17 @@ import Metamorth.Helpers.Map
 -- | A type to make understanding the output
 --   of `producePropertyData` easier.
 data PropertyData = PropertyData
+  -- | Table of aspects. Return value is
+  --   @Map of Aspect String -> (Type Name, (Record Name, Map of Option String -> Type Name ))@
   { aspectTable  :: M.Map String (Name, (Name, M.Map String Name))
   , traitTable   :: M.Map String (Name, Maybe (Name, M.Map String Name))
   , traitData    :: Maybe TraitData
   , propertyDecs :: [Dec]
   } deriving (Show, Eq)
 
+-- | Since traits aren't embedded in the types themselves,
+--   information about traits is limited to a function of
+--   type @Phoneme -> TraitInfo@, or something like that.
 data TraitData = TraitData
   { traitInfoName  :: Name
   , traitTypeTable :: M.Map String (Name, Type)
@@ -65,16 +75,119 @@ produceVariousDecs pps = do
 [Dec])
 -}
 
+-- | A type representing much of the information about an
+--   individual phoneme. This type is intended to be used
+--   as the value of a `M.Map`, i.e. @M.Map String `PhonemeInformation`@.
+--
+--   Using `fmap` or `M.map`, you can easily convert a `M.Map`
+--   of this type to a `M.Map` of an individual field. e.g.
+--
+--   @ fmap phiPatternName :: M.Map String PhonemeInformation -> M.Map String Name @
+data PhonemeInformation = PhonemeInformation
+  -- | The name of the top-level Pattern Synonym.
+  { phiPatternName :: Name
+  -- | A list of the aspect options of the Phoneme.
+  --   This is necessary to be able to build a 
+  --   constructor.
+  --
+  --   e.g. Consider the following specification:
+  -- 
+  --   @
+  --   aspect length : short long
+  --   aspect nasal  : plain nasalised
+  --   ...
+  --   ====
+  --   ...
+  --   * vowel
+  --     a : length nasal
+  --   ...
+  --   @
+  --   
+  --   Then the argument list for phoneme 'a'
+  --   would look something like...
+  --
+  --   @
+  --   [ M.fromList 
+  --      [ ("long" , mkName "Long" )
+  --      , ("short", mkName "Short")
+  --      ]
+  --   , M.fromList
+  --      [ ("nasalised", mkName "Nasalised")
+  --      , ("plain"    , mkName "Plain"    )
+  --      ]
+  --   ]
+  --   @
+  --
+  , phiArgumentOptions :: [M.Map String Name]
+  } deriving (Show, Eq)
 
-produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name, M.Map (String, String) Name), [Dec])
+-- | A type containing everything that you'd need
+--   from this module (I hope).
+data PhonemeDatabase = PhonemeDatabase
+  { pdbPropertyData   :: PropertyData
+  -- | A `M.Map` from Strings of Phonemes to the
+  --   `Name`s of their constructors.
+  , pdbPhonemeInfo    :: M.Map String PhonemeInformation
+  -- | The top-type of the Phonemes.
+  , pdbTopPhonemeType :: Name
+  -- | The `Name` of the "Word" type, along
+  --   with its two constructors.
+  , pdbWordTypeNames  :: (Name, (Name, Name))
+  -- | Make an uncased expression an upper-case expression.
+  , pdbMkMaj :: Exp -> Exp
+  -- | Make an uncased expression a  lower-case expression.
+  , pdbMkMin :: Exp -> Exp
+  
+  }
+
+-- combinePhoneMaps :: M.Map String PhonemeHierarchy -> M.Map String Name -> M.Map String PhonemeInformation
+-- combinePhoneMaps = MM.merge MM.dropMissing
+
+producePhonemeDatabase :: PhonemeParsingStructure -> Q (PhonemeDatabase, [Dec])
+producePhonemeDatabase pps = do
+  ((propData, phoneDats, patNoms, isFuncNames, mainTypeName), theDecs) <- produceVariousData pps
+
+  let thisMkMaj = id -- Temporary
+      thisMkMin = id -- Temporary
+  
+  wordTypeName  <- newName "CasedWord"
+  wordConsName1 <- newName "WordPh"
+  wordConsName2 <- newName "WordPunct"
+  
+  wordConsType1 <- [t| [ $(pure $ ConT mainTypeName) ] |]
+  wordConsType2 <- [t| T.Text |]
+
+  -- sumAdtDecDeriv :: Name -> [(Name, [Type])] -> [Type] -> Dec
+  
+  -- Classes already of type `Type`.
+  eqC   <- [t|  Eq  |]
+  showC <- [t| Show |]
+
+  -- The newest type declarations.
+  let wordTypeDecs = sumAdtDecDeriv wordTypeName [(wordConsName1, [wordConsType1]), (wordConsName2, [wordConsType2])] [eqC, showC]
+
+  let finalDB = PhonemeDatabase
+        { pdbPropertyData   = propData
+        , pdbPhonemeInfo    = M.empty -- TEMPORARY
+        , pdbTopPhonemeType = mainTypeName
+        , pdbWordTypeNames  = (wordTypeName, (wordConsName1, wordConsName2))
+        , pdbMkMaj = thisMkMaj
+        , pdbMkMin = thisMkMin
+        }
+  
+  -- 
+  return (finalDB, wordTypeDecs : theDecs)
+
+-- | Produce most of the data generated by this module.
+produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name, M.Map (String, String) Name, Name), [Dec])
 produceVariousData pps = do
   propData <- producePropertyData pps
   let propDecs = propertyDecs propData
       phoneInv = ppsPhonemeInventory pps
-  (phonDats, phonGrps, patNoms, isFuncNames, phonDecs) <- producePhonemeInventory propData phoneInv
+  (phonDats, phonGrps, patNoms, isFuncNames, mainTypeName, phonDecs) <- producePhonemeInventory propData phoneInv
   -- let phonDecs = snd phonData
   --     phonDats = fst phonData
-  return ((propData, phonDats, patNoms, isFuncNames), (propDecs <> phonDecs))
+  return ((propData, phonDats, patNoms, isFuncNames, mainTypeName), (propDecs <> phonDecs))
 
 
 
@@ -255,7 +368,7 @@ producePhonemePatterns mp = do
         patRslt = PatSynD patName (PrefixPatSyn patVars) ImplBidir (nestedConPat cstrList baseConstr (map VarP patVars))
     return (patName, patRslt)
 
-producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, [Dec])
+producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, Name, [Dec])
 producePhonemeInventory propData phi = do
   mainName <- newName "Phoneme"
   ((phoneHi, groupProps, decs), isGroupFuncsStuff) <- runStateT (producePhonemeInventory' "Phoneme" mainName propData phi) M.empty
@@ -264,7 +377,7 @@ producePhonemeInventory propData phi = do
       patNoms = M.map fst patMap
 
 
-  return (phoneHi, groupProps, patNoms, isGroupFuncsStuff, decs <> patDecs)
+  return (phoneHi, groupProps, patNoms, isGroupFuncsStuff, mainName, decs <> patDecs)
 
 
 -- producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
