@@ -20,19 +20,25 @@ extra-source-files:
 description:         Please see the README on GitHub at <https://github.com/Anteproperispomenon/metamorTHysis#readme>
 
 default-extensions:
+- FlexibleInstances
 - ImportQualifiedPost
 - LambdaCase
+- MultiWayIf
 - OverloadedStrings
+- ScopedTypeVariables
 - TupleSections
 
 dependencies:
 - base >= 4.7 && < 5
 - attoparsec
+- bytestring
 - containers
 - template-haskell
 - text
 - th-lego
 - transformers
+- trie-simple
+- witherable
 
 ghc-options:
 - -Wall

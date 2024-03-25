@@ -1,0 +1,40 @@
+
+aspect length : short long
+
+=====
+* vowel
+  i : length
+  u : length
+  a : length
+  ai
+
+* consonant
+  p 
+  t 
+  k 
+  h 
+  g 
+  m 
+  n 
+  s' # s / h 
+  l 
+  lh 
+  j 
+  rh # ř
+  v 
+  r 
+  q 
+  jj
+  nng
+  qq
+
+  glot
+
+  # Rarer consonants
+  b
+  hx
+
+  # New Codepoint Chars
+  shr # š
+  h'  # Natsilingmiutut h
+  

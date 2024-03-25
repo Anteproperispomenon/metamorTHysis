@@ -6,14 +6,29 @@ module Metamorth.Helpers.TH
   , maybeType
   , sumAdtDecDeriv
   , recordAdtDecDeriv
-  , stringExp
   , showSumInstance
   , showSumProdInstance
   , showSumProdInstanceAlt
+  , intersperseInfixRE
   , nestedConPat
+  , groupCaseGuards
   , forMap
   , first
   , second
+  -- * Basic helpers
+  , charE
+  , strE
+  , stringExp
+  , boolE
+  , trueE
+  , falseE
+  , andE
+  , orE
+  , nothingE
+  , justE
+  , retE
+  , infixBind
+  , infixCont
   ) where
 
 import Control.Monad
@@ -22,7 +37,7 @@ import Data.Char
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty (NonEmpty(..))
 
-import Data.List (intersperse)
+import Data.List (intersperse, partition)
 
 import Language.Haskell.TH.Syntax
 
@@ -64,20 +79,18 @@ varName (x:xs) = (toLower x : xs)
 
 sumAdtDecDeriv :: Name -> [(Name, [Type])] -> [Type] -> Dec
 sumAdtDecDeriv a b ders =
-  DataD [] a [] Nothing (fmap (uncurry sumCon) b) (map (\cl -> DerivClause Nothing [cl]) ders)
+  DataD [] a [] Nothing (fmap (uncurry sumCon) b) [DerivClause Nothing ders]
 
 recordAdtDecDeriv :: Name -> [(Name, Type)] -> [Type] -> Dec
 recordAdtDecDeriv typeName fields ders =
-  DataD [] typeName [] Nothing [con] (map (\cl -> DerivClause Nothing [cl]) ders)
+  DataD [] typeName [] Nothing [con] [DerivClause Nothing ders]
   where
     con =
       RecC typeName (fmap (\(fieldName, fieldType) -> (fieldName, fieldBang, fieldType)) fields)
 
-stringExp :: String -> Exp
-stringExp = LitE . StringL
-
 -- | Create a `Show` instance for a simple sum
---   type where each 
+--   type where each constructor is represented
+--   by a given `String`.
 showSumInstance :: Name -> [(Name, String)] -> [Dec]
 showSumInstance typeName prs = 
   [InstanceD Nothing [] (AppT (ConT ''Show) (ConT typeName) )
@@ -156,6 +169,127 @@ nestedConPat :: [Name] -> Name -> [Pat] -> Pat
 nestedConPat [] nom pats     = ConP nom [] pats
 nestedConPat (c:cs) nom pats = ConP   c [] [nestedConPat cs nom pats]
 
+-- | Essentially the same as `THLego.Helpers.intersperseInfixRE`, but
+--   with a right-fold instead of a left-fold. For example, this means
+--   that 
+--
+--   @
+--   intersperseInfixRE (||) [x,y,z,w]
+--   == (x || (y || (z || w)))
+--   @
+-- 
+--   Instead of:
+-- 
+--   @
+--   intersperseInfixE  (||) [x,y,z,w]
+--   == (((x || y) || z) || w)
+--   @
+intersperseInfixRE :: Exp -> NonEmpty Exp -> Exp
+intersperseInfixRE op =
+  foldr1 (\l r -> InfixE (Just l) op (Just r))
+
+-- | Group guarded values in a case-expression.
+--   Useful if the code you generate has multiple
+--   cases for the same pattern, e.g.
+--
+--   @
+--   case c of 
+--     'a' | (val1 == z && val2 == y) -> ...
+--     ...
+--     'a' | (val1 == z) -> ...
+--     ...
+--     'a' | (val3 == r) -> ...
+--     ...
+--     'a' -> ...
+--   @
+--
+--   This function should group together such cases
+--   into something like
+--
+--   @
+--   case c of
+--     'a' | (val1 == z && val2 == y) -> ...
+--         | (val1 == z)              -> ...
+--         | (val3 == r)              -> ...
+--         | otherwise                -> ...
+--   @
+--
+--   At present, it will only group together conditions
+--   with @where@ statements if the `Decs` of the @where@
+--   statement are identical.
+--
+--   Note that this function runs in O(n^2).
+groupCaseGuards :: Exp -> Exp
+groupCaseGuards (CaseE expr mtchs) = CaseE expr (groupCaseGuards' mtchs)
+groupCaseGuards expr = expr
+
+groupCaseGuards' :: [Match] -> [Match]
+groupCaseGuards' []  = []
+groupCaseGuards' [m] = [m]
+groupCaseGuards' (m@(Match ptrn bdy dcs):mtchs)
+  | null sameMatches = m : (groupCaseGuards' mtchs)
+  | otherwise = (Match ptrn (GuardedB newGuards) dcs) : (groupCaseGuards' restMatches)
+  where
+    checkMatch (Match ptrn' _bdy dcs') = (ptrn == ptrn') && (dcs' == dcs)
+    (sameMatches, restMatches) = partition checkMatch mtchs
+    newGuards = concatMap (guardifyBody . getBody) (m:sameMatches)
+    
+    -- Modifying the remaining Matches
+    getBody :: Match -> Body
+    getBody (Match _ bdy _) = bdy
+    otherwiseE :: Exp
+    otherwiseE = VarE 'otherwise
+    guardifyBody :: Body -> [(Guard, Exp)]
+    guardifyBody (GuardedB grds) = grds
+    guardifyBody (NormalB  expr) = [(NormalG otherwiseE,expr)]
+
+------------------------------------------------
+-- More basic functions
+
+charE :: Char -> Exp
+charE = LitE . CharL 
+
+strE :: String -> Exp
+strE = LitE. StringL
+
+stringExp :: String -> Exp
+stringExp = strE
+{-# INLINE stringExp #-}
+
+trueE :: Exp
+trueE = ConE 'True
+
+falseE :: Exp
+falseE = ConE 'False
+
+boolE :: Bool -> Exp
+boolE True  = trueE
+boolE False = falseE
+
+nothingE :: Exp
+nothingE = ConE 'Nothing
+
+justE :: Exp -> Exp
+justE expr = AppE (ConE 'Just) expr
+
+-- | Create the expression
+--   @ exp1 >>= exp2 @
+infixBind :: Exp -> Exp -> Exp
+infixBind exp1 exp2 = InfixE (Just exp1) (VarE '(>>=)) (Just exp2)
+
+-- | Create the expression
+--   @ exp1 >> exp2 @
+infixCont :: Exp -> Exp -> Exp
+infixCont exp1 exp2 = InfixE (Just exp1) (VarE '(>>))  (Just exp2)
+
+orE :: Exp -> Exp -> Exp
+orE x y = InfixE (Just x) (VarE '(||)) (Just y)
+
+andE :: Exp -> Exp -> Exp
+andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
+
+retE :: Exp
+retE = VarE 'return
 
 -- [ConP Data.Either.Right [] [VarP x_1]]
 

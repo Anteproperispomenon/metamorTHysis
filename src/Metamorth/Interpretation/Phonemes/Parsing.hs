@@ -439,9 +439,6 @@ parseEndLine = do
     AT.skipWhile (/= '\n')
   AT.endOfLine
 
-isFollowId :: Char -> Bool
-isFollowId x = isAlphaNum x || (x == '_') || (x == '-') || (x == '\'')
-
 parseSeparator :: AT.Parser ()
 parseSeparator = 
   (skipHoriz1 *> ((takeSeparator *> skipHoriz) <|> (pure ())))
