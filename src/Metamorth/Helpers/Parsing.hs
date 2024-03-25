@@ -8,6 +8,7 @@ module Metamorth.Helpers.Parsing
   -- * Parsing identifiers
   , takeIdentifier
   , isFollowId
+  , isFileId
   , consProd
   
   -- * Re-ordered Functions
@@ -22,6 +23,9 @@ module Metamorth.Helpers.Parsing
   , lookAheadEvalRWS
   , lookAheadTellRWS
   , lookAheadTellRWS'
+
+  -- * Other Parsers
+  , parseFileName
 
   -- * Re-Exports
   , (AT.<?>)
@@ -72,6 +76,33 @@ takeIdentifier p1 p2 = T.cons <$> AT.satisfy p1 <*> AT.takeWhile p2
 --   of `takeIdentifier`. 
 isFollowId :: Char -> Bool
 isFollowId x = isAlphaNum x || (x == '_') || (x == '-') || (x == '\'')
+
+-- | Like `isFollowId`, but meant for filenames.
+isFileId :: Char -> Bool
+isFileId x = isAlphaNum x || (x == '_') || (x == '-') || (x == '.')
+
+-- | Parse a file name that may be in quotations.
+parseFileName :: AT.Parser T.Text
+parseFileName = do
+  c <- AT.peekChar'
+  case c of
+    '\"' -> parseFileName1 AT.<?> "Encountered bad character before closing quotation mark"
+    _    -> parseFileName2 AT.<?> "Couldn't parse file name"
+
+parseFileName1 :: AT.Parser T.Text
+parseFileName1 = do
+  _ <- AT.char '\"'
+  txt <- AT.takeWhile1 chk
+  _ <- AT.char '\"'
+  return txt
+  where
+    chk c = (isAlphaNum c) || (c == '_') || (c == '-') || (c == '/') || (c == '\\') || (c == '.') || (c == ' ')
+
+parseFileName2 :: AT.Parser T.Text
+parseFileName2 = AT.takeWhile $ \c -> (isAlphaNum c) || (c == '_') || (c == '-') || (c == '/') || (c == '\\') || (c == '.')
+
+
+
 
 -- | The same as `AT.parseOnly` but with a different argument order.
 forParseOnly :: T.Text -> AT.Parser a -> Either String a

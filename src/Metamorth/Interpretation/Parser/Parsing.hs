@@ -451,7 +451,7 @@ parseOrthographyName = do
   skipHoriz
   _ <- AT.char ':' <?> "Orthography name declaration is missing ':'"
   skipHoriz
-  T.unpack <$> takeIdentifier isAlpha isFollowId
+  T.unpack <$> (parseFileName <|> (takeIdentifier isAlpha isFollowId))
 
 -- | Parse the name of the set of phonemes
 --   that this orthography will use.
@@ -466,7 +466,7 @@ parseOrthographyChoice = do
   skipHoriz
   _ <- AT.char ':' <?> "Phoneme set declaration is missing ':'."
   skipHoriz
-  (T.unpack <$> takeIdentifier isAlpha isFollowId) <?> "Phoneme Set Name"
+  (T.unpack <$> (parseFileName <|> (takeIdentifier isAlpha isFollowId))) <?> "Phoneme Set Name"
 
 -- Place other phoneme property parsers here.
 
@@ -474,17 +474,15 @@ parseOrthographyChoice = do
 --   the separator.
 parseOrthographyProps :: AT.Parser HeaderData
 parseOrthographyProps = do
-  AT.skipSpace <?> "Header: skipSpace 1"
-  nom <- parseOrthographyName <?> "Header: parseOrthographyName"
-  AT.skipSpace <?> "Header: skipSpace 2"
+  (many parseEndComment) <?> "Header: skipSpace 1"
+  -- AT.skipSpace 
+  nom <- (parseOrthographyName) <?> "Header: parseOrthographyName"
+  (AT.many1 parseEndComment) <?> "Header: skipSpace 2"
   pho <- parseOrthographyChoice <?> "Header: parseOrthographyChoice"
-  skipHoriz    <?> "Header: skipHoriz 1"
-  AT.endOfLine <?> "Header: endOfLine 1"
-  AT.skipSpace <?> "Header: skipSpace 3"
+  (AT.many1 parseEndComment) <?> "Header: skipSpace 3"
   _ <- "===="  <?> "Header: Separator"
   _ <- (AT.takeWhile (== '=')) <?> "Separator"
-  skipHoriz <?> "Header: skipHoriz 2"
-  AT.endOfLine <?> "Header: endOfLine 2"
+  parseEndComment <?> "Header: skipSpace 4"
   return $ HeaderData nom pho
 
 ----------------------------------------------------------------

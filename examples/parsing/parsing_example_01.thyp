@@ -1,0 +1,106 @@
+# This is an example experimental orthography
+# for Mongolian. It takes advantage of vowel
+# harmony to only have four main vowel letters,
+# of which three have "back" and "front" variations
+# (these three are hereafter referred to as the
+# "harmonic" vowels). Only the first harmonic vowel 
+# in a word needs to indicate whether it is a "front"
+# or "back" vowel; the remaining harmonic vowels in
+# a word take on the position of the first harmonic
+# vowel.
+#
+# In this orthography, front vowels are marked by
+# a grave accent (e.g. "à"), while back vowels are
+# marked by an acute accent (e.g. "á"). The
+# mnemonic is that a grave accent point to the
+# "front" of the letter, while an acute accent
+# points to the "back" of a letter.
+
+
+orthography : test_latin
+phoneme set : mongolian
+
+====
+
+state position : front back
+
+====
+
+# Vowels
+
+i : i
+
+# àá
+# à = U+00E0
+# á = U+00E1
+# i.e. Using U+00E0 in a pattern is equivalent
+# to using the character 'à'. 
+
+
+# If the current position is "front", output
+# a front "a".
+a front : @position=front a
+a back  : @position=back  a
+a front : @position=off   a
+a front : @position=off U+00E0 !position=front
+a front : @position=off e      !position=front
+a back  : @position=off U+00E1 !position=back
+a front : U+00E0
+a front : e
+a back  : U+00E1
+
+# òó
+# ó = U+00F3 
+# ò = U+00F2
+o front : @position=front o
+o back  : @position=back  o
+o front : @position=off   o
+o front : @position=off ò !position=front
+o back  : @position=off ó !position=back
+o front : ò
+o back  : ó
+
+# ùú
+u front : @position=front u
+u back  : @position=back  u
+u front : @position=off   u
+u front : @position=off ù !position=front
+u back  : @position=off ú !position=back
+
+# For loanwords.
+u front : ù
+u back  : ú
+
+# Consonants
+
+m : m
+n : n
+p : p
+b : b
+t : t
+d : d
+g : g
+k : k
+l : l
+r : r
+ts : t s
+ch : c h
+sh : s h
+s : s
+x : x
+gh : g h
+gh : ĝ
+r : r
+w : w
+f : f
+
+# Other
+
+# Since compound words can "reset" the vowel
+# harmony, we need a way to indicate the
+# internal boundaries of compound words.
+# Also: need to escape '-' since it's a 
+# special character.
+sep : % \- !position=off
+
+
