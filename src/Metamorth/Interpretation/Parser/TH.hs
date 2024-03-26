@@ -84,11 +84,13 @@ the total number of generated functions.
 module Metamorth.Interpretation.Parser.TH
   -- * Parser Generation
   ( makeTheParser
-  , testTheParser
-  , testTheParserE
+  , ParserOptions(..)
+  , defParserOptions
   -- * Output Types
   , StaticParserInfo(..)
   -- * Testing Helpers
+  , testTheParser
+  , testTheParserE
   , exampleInfo
   , exampleInfo2
   , exampleInfo3

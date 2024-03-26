@@ -36,6 +36,7 @@ library
       Metamorth.Helpers.Parsing
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
+      Metamorth.Interaction.TH
       Metamorth.Interpretation.Parser.Parsing
       Metamorth.Interpretation.Parser.Parsing.Trie
       Metamorth.Interpretation.Parser.Parsing.Types
@@ -64,6 +65,7 @@ library
     , base >=4.7 && <5
     , bytestring
     , containers
+    , directory
     , template-haskell
     , text
     , th-lego
@@ -92,6 +94,7 @@ executable metamorTHysis-exe
     , base >=4.7 && <5
     , bytestring
     , containers
+    , directory
     , metamorTHysis
     , template-haskell
     , text
@@ -122,6 +125,7 @@ test-suite metamorTHysis-test
     , base >=4.7 && <5
     , bytestring
     , containers
+    , directory
     , metamorTHysis
     , template-haskell
     , text
