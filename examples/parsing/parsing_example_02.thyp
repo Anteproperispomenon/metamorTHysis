@@ -184,13 +184,14 @@ q (u long) : ᖂ
 q (a long) : ᖄ
 q ai : ᙯ
 
-qq (i short) : ᖅᑭ
-qq (u short) : ᖅᑯ
-qq (a short) : ᖅᑲ
-qq (i long) : ᖅᑮ
-qq (u long) : ᖅᑰ
-qq (a long) : ᖅᑳ
-qq ai : ᖅᑫ
+# THESE were the culprit!
+qq (i short) : ᖅ ᑭ
+qq (u short) : ᖅ ᑯ
+qq (a short) : ᖅ ᑲ
+qq (i long) : ᖅ ᑮ
+qq (u long) : ᖅ ᑰ
+qq (a long) : ᖅ ᑳ
+qq ai : ᖅ ᑫ
 
 ng (i short) : ᖏ
 ng (u short) : ᖑ
@@ -200,12 +201,23 @@ ng (u long) : ᖒ
 ng (a long) : ᖔ
 ng ai : ᙰ
 
+# Hopefully these will work?
+# ng (i short) : U+158F
+# ng (u short) : U+1591
+# ng (a short) : U+1593
+# ng (i long) : U+1590
+# ng (u long) : U+1592
+# ng (a long) : U+1594
+# ng ai : U+1670
+
+# ["U+1671","U+1673","U+1675","U+1672","U+1674","U+1676"]
 nng (i short) : ᙱ
 nng (u short) : ᙳ
 nng (a short) : ᙵ
 nng (i long) : ᙲ
 nng (u long) : ᙴ
 nng (a long) : ᙶ
+nng ai : ᖖ ᒉ
 
 lh (i short) : ᖠ
 lh (u short) : ᖢ

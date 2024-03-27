@@ -3,7 +3,7 @@
 module Metamorth.Interaction.TH
   ( createParsers
   , declareParsers
-  , ExtraParserDetails
+  , ExtraParserDetails(..)
   , defExtraParserDetails
   , ExtraOutputDetails
   , defExtraOutputDetails
@@ -17,6 +17,8 @@ import Control.Monad
 import Data.Maybe
 
 import Data.Attoparsec.Text qualified as AT
+
+import Metamorth.Helpers.TH
 
 import Metamorth.Interpretation.Parser.TH   qualified as Parser
 import Metamorth.Interpretation.Phonemes.TH qualified as Phonemes
@@ -82,9 +84,13 @@ defExtraOutputDetails  = ExtraOutputDetails
 
 declareParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
 declareParsers fp1 fps2 fps3 = do
+  -- Maybe this will help?
+  let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
+  mapM_ addLocalDependentFile allFps
   (GeneratedDecs d1 ds2 ds3) <- createParsers fp1 fps2 fps3
   return (d1 ++ (concat ds2) ++ (concat ds3))
 
+-- I wonder why addLocalDependentFile doesn't work?
 
 -- | Create a `GeneratedDecs` from the desired input files.
 createParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q GeneratedDecs
@@ -92,6 +98,7 @@ createParsers phonemePath parserPaths _outputPaths = do
   
   -- Be careful running IO here...
   ePhoneData <- runIO $ readPhonemeFile phonemePath
+  addLocalDependentFile phonemePath
   phoneText <- case ePhoneData of
     (Left err)  -> fail err
     (Right txt) -> return txt
@@ -116,7 +123,9 @@ createParsers phonemePath parserPaths _outputPaths = do
   parserResults <- fmap catMaybes $ forM eParseFiles $ \(eParseFile) -> do
     case eParseFile of
       (Left err)        -> (qReport True (err)) >> return Nothing
-      (Right (txt,epd)) -> Just <$> getParserData pdb txt epd
+      (Right (txt,epd,fp)) -> do
+        addLocalDependentFile fp
+        Just <$> getParserData pdb txt epd
 
   return $ GeneratedDecs phoneDecs (map fst parserResults) []
 
@@ -127,14 +136,14 @@ readPhonemeFile fp = do
     False -> return $ Left $ "Could not find file \"" ++ fp ++ "\"."
     True  -> Right <$> readFileUTF8 fp
 
-readParserFile :: (FilePath, ExtraParserDetails) -> IO (Either String (Text, ExtraParserDetails))
+readParserFile :: (FilePath, ExtraParserDetails) -> IO (Either String (Text, ExtraParserDetails, FilePath))
 readParserFile (fp, epd) = do
   bl <- doesFileExist fp
   case bl of
     False -> return $ Left $ "Could not find file \"" ++ fp ++ "\"."
     True  -> do
       txt <- readFileUTF8 fp -- for now...
-      return $ Right (txt, epd)
+      return $ Right (txt, epd, fp)
 
 
 getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q ([Dec], StaticParserInfo)

@@ -15,6 +15,8 @@ module Metamorth.Helpers.TH
   , forMap
   , first
   , second
+  -- * IO Helpers
+  , addLocalDependentFile
   -- * Unusual helpers
   , newerName
   -- * Basic helpers
@@ -42,11 +44,19 @@ import Data.List.NonEmpty (NonEmpty(..))
 
 import Data.List (intersperse, partition)
 
-import Language.Haskell.TH.Syntax
+import Language.Haskell.TH.Syntax hiding (lift)
 
 import THLego.Helpers (sumCon, fieldBang, intersperseInfixE)
 
 import GHC.Show qualified as GHCShow
+
+import System.Directory
+
+-- | Add a local file
+addLocalDependentFile :: FilePath -> Q ()
+addLocalDependentFile fp = do
+  absFp <- runIO $ makeAbsolute fp
+  addDependentFile absFp
 
 maybeType :: Type -> Type
 maybeType typ = AppT (ConT ''Maybe) typ

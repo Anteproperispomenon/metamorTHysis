@@ -8,6 +8,7 @@ module Test.TH.Basic
 
 import Metamorth.Interaction.TH
 
+import Metamorth.Interpretation.Parser.TH (ParserOptions(..))
 
 {-
 phonemeFile :: String
@@ -19,9 +20,15 @@ parserFile = "examples/parsing/parsing_example_02.thyp"
 {-# INLINE parserFile #-}
 -}
 
+-- add this after to turn off unifyBranches:
+-- {epdParserOptions = defParserOptions {poUnifyBranches = False}}
+
+-- Doesn't seem like "addDependentFile" is working...
+-- ...annoying... argh...
+
 declareParsers 
   "examples/phonemes/example_inuktitut_02.thyt"
-  [("examples/parsing/parsing_example_02.thyp", defExtraParserDetails)]
+  [("examples/parsing/parsing_example_02.thyp", defExtraParserDetails )]
   []
 
 {-
