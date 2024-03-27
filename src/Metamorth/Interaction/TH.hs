@@ -158,13 +158,14 @@ getParserData pdb txt epd = do
       case errStrings of
         [] -> return ()
         xs -> do
-          qReport True "Encountered errors while parsing patterns:"
-          mapM_ (qReport True) errStrings 
+          -- reportError "Encountered errors while parsing patterns:"
+          mapM_ reportError errStrings 
       case warnStrings of
         [] -> return ()
         xs -> do
-          qReport False "Encountered warnings while parsing patterns:"
-          mapM_ (qReport False) errStrings 
+          -- reportWarning "Encountered warnings while parsing patterns:"
+          mapM_ reportWarning warnStrings 
+          return ()
       makeTheParser
             (fmap phiPatternName     $ pdbPhonemeInfo pdb)
             (fmap phiArgumentOptions $ pdbPhonemeInfo pdb)

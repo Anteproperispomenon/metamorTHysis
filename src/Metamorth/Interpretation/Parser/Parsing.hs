@@ -145,13 +145,50 @@ parseClassNameRS = do
 -- | The main character selector parser, after
 --   all the specialised ones have been run.
 parseNonSpace :: AT.Parser Char
-parseNonSpace = AT.satisfy (\x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!'))
+parseNonSpace = AT.satisfy isNonSpace
+
+isNonSpace :: Char -> Bool
+isNonSpace = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!')
+
+isNonSpace' :: Char -> Bool
+isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*')
 
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
 
 parseNonSpaceRS :: ParserParser CharPatternRaw
 parseNonSpaceRS = lift parseNonSpaceR
+
+
+parseMultiNonSpace :: AT.Parser (Either T.Text Char)
+parseMultiNonSpace = do
+  c1 <- AT.satisfy isNonSpace'
+  nxt <- AT.peekChar
+  case nxt of
+    Nothing  -> return $ Right c1
+    (Just x) -> case x of
+      y | isNonSpace' y -> Left . (T.cons c1) <$> AT.takeWhile1 isNonSpace
+      _ -> return $ Right c1
+
+parseMultiNonSpaceS :: ParserParser (Either T.Text Char)
+parseMultiNonSpaceS = do
+  rslt <- lift parseMultiNonSpace
+  case rslt of
+    (Left txt) -> do
+      phone <- ask
+      warn $ "Phoneme \"" <> phone <> "\" is missing spaces in one of its patterns: ... " <> (T.unpack txt) <> " ..."
+      return rslt
+    _ -> return rslt
+
+parseMultiNonSpaceRS :: ParserParser [CharPatternRaw]
+parseMultiNonSpaceRS = do
+  rslt <- parseMultiNonSpaceS
+  case rslt of
+    (Left txt) -> return $ map PlainCharR $ T.unpack txt
+    (Right ch) -> return $ [PlainCharR ch]
+
+mkList :: (Functor f) => f a -> f [a]
+mkList fx = (:[]) <$> fx
 
 --------------------------------
 -- "State-must-be" Parser(s)
@@ -299,6 +336,8 @@ parseClassDec = do
   skipHoriz
   -- Previously, there would be an issue here if "\ " occurred
   -- in the text. Now, it is interpreted as "\\ ".
+  -- TODO : Check for characters with no spaces between them
+  -- and report a warning.
   chrs <- AT.sepBy1' (parseCodepoint <|> parseEscaped <|> parseNonSpace) (skipHoriz1)
   return $ (T.unpack className, S.fromList chrs)
 
@@ -539,18 +578,19 @@ parsePhonemePatS = do
   
   -- Set the internal phoneme name to phoneName.
   runOnPhoneme phoneName $ do
-    thePats <- AT.sepBy1' 
-      ( parseCodepointRS 
-        <|> parseClassNameRS 
-        <|> parseEscapedRS 
-        <|> parseStartPointS 
-        <|> parseEndPointS 
-        <|> parseNotStartS
-        <|> parseNotEndS
-        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go (almost) last.
+    thePats <- concat <$> AT.sepBy1' 
+      ( (mkList parseCodepointRS)
+        <|> (mkList parseClassNameRS) 
+        <|> (mkList parseEscapedRS  )
+        <|> (mkList parseStartPointS)
+        <|> (mkList parseEndPointS  )
+        <|> (mkList parseNotStartS  )
+        <|> (mkList parseNotEndS    )
+        <|> (parseMultiNonSpaceRS   )
+        <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
-        <|> parseStateValRS'
-        <|> parseStateSetRS'
+        <|> (mkList parseStateValRS')
+        <|> (mkList parseStateSetRS')
       ) 
       (lift skipHoriz1)
     -- hmm...
@@ -573,18 +613,19 @@ parsePhonemePatMulti = do
   
   -- Set the internal phoneme name to phoneName.
   runOnPhoneme phoneName $ do
-    thePats <- AT.sepBy1' 
-      ( parseCodepointRS 
-        <|> parseClassNameRS 
-        <|> parseEscapedRS 
-        <|> parseStartPointS
-        <|> parseEndPointS
-        <|> parseNotStartS
-        <|> parseNotEndS
-        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go (almost) last.
+    thePats <- concat <$> AT.sepBy1' 
+      ( (mkList parseCodepointRS )
+        <|> (mkList parseClassNameRS)
+        <|> (mkList parseEscapedRS  )
+        <|> (mkList parseStartPointS)
+        <|> (mkList parseEndPointS  )
+        <|> (mkList parseNotStartS  )
+        <|> (mkList parseNotEndS    )
+        <|> (parseMultiNonSpaceRS   )
+        <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
-        <|> parseStateValRS'
-        <|> parseStateSetRS'
+        <|> (mkList parseStateValRS')
+        <|> (mkList parseStateSetRS')
       ) 
       (lift skipHoriz1)
     -- hmm...
