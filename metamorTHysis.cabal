@@ -108,6 +108,7 @@ test-suite metamorTHysis-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Test.TH.Basic
       Paths_metamorTHysis
   hs-source-dirs:
       test

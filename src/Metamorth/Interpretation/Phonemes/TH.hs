@@ -358,7 +358,7 @@ producePropertyData' pps = do
   -- Create the record type declaration.
   let trtRecordDec = case trtRecOutput of
         Nothing -> []
-        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeName (M.elems prs) [eqClass, showClass] ]
+        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeName traitRecTypeName (M.elems prs) [eqClass, showClass] ]
   
 
   -- (The type on the next line may be out of date)
@@ -569,49 +569,6 @@ data GroupProps = GroupProps
         , isGroupBottom       = False
         }
 
-
-
-
-  {-
-  -- This is WAY too complicated...
-  subFuncs <- sequence $ forIntersectionWithKey subPats subGrps $ \str (sumNom,typs) subGroupsMap -> do
-    -- For the top-level stuff...
-    funName <- newName $ "is" <> (dataName str) <> "_" <> (nameBase nm)
-    let funType = THL.arrowChainT [ConT nm] (ConT ''Bool)
-        funSign = SigD funName funType
-        -- funMain = (FunD funName [Clause [ConP sumNom [] [WildP]] (NormalB (ConE 'True)) []])
-        -- funElse = (FunD funName [Clause [WildP] (NormalB (ConE 'False)) []])
-        funMain = Clause [ConP sumNom [] [WildP]] (NormalB (ConE 'True)) []
-        funElse = Clause [WildP] (NormalB (ConE 'False)) []
-        funDefn = (FunD funName [funMain, funElse])
-    -- For the next level down stuff...
-    lowerStuff <- forWithKey subGroupsMap $ \grpString grpProps -> do
-      newVar  <- newName "x"
-      let funTypeZ = THL.arrowChainT [ConT nm] (ConT ''Bool)
-          
-      subsubStuff <- forWithKey (isGroupSubFuncs grpProps) $ \strZ subsubName -> do
-        funNameZ <- newName $ "is" <> (dataName strZ) <> "_" <> (nameBase nm)
-        let funSignZ = SigD funNameZ funTypeZ
-            funMainZ = Clause [ConP sumNom [] [VarP newVar]] (NormalB (AppE (VarE subsubName) (VarE newVar))) []
-            funElseZ = Clause [WildP] (NormalB (ConE 'False)) []
-            funDefnZ = [funSignZ, (FunD funNameZ [funMainZ, funElseZ])]
-        return (funNameZ, funDefnZ)
-      
-      return subsubStuff
-    
-    let lowerStuff' = M.unions lowerStuff
-        -- unsure what to insert... 
-        lowerNames  = M.insert str funName $ M.map fst lowerStuff'
-        lowerDecls  = concat $ M.elems $ M.map snd lowerStuff'
-      
-      -- (FunD nm 
-      --   [ Clause [ConP sumNom [] [VarP newVar]] (NormalB (AppE (VarE funName23) (VarE newVar))) []
-      --   , Clause [WildP] (NormalB (ConE 'False)) []]])
-
-    let rsltGroupProps = GroupProps (nameBase nm) lowerNames funType
-
-    return (rsltGroupProps, ([funSign, funDefn] <> lowerDecls))
-    -}
 -- 
 
 
@@ -671,7 +628,7 @@ producePhonemeSet propData subName phoneSet = do
 
   -- The name to map from phonemes to traits
   -- STILL TODO.
-  funcName <- newName ((nameBase subName) <> "_traits")
+  -- funcName <- newName ((nameBase subName) <> "_traits")
 
 
   -- isGroupFuncName

@@ -15,6 +15,8 @@ module Metamorth.Helpers.TH
   , forMap
   , first
   , second
+  -- * Unusual helpers
+  , newerName
   -- * Basic helpers
   , charE
   , strE
@@ -81,12 +83,12 @@ sumAdtDecDeriv :: Name -> [(Name, [Type])] -> [Type] -> Dec
 sumAdtDecDeriv a b ders =
   DataD [] a [] Nothing (fmap (uncurry sumCon) b) [DerivClause Nothing ders]
 
-recordAdtDecDeriv :: Name -> [(Name, Type)] -> [Type] -> Dec
-recordAdtDecDeriv typeName fields ders =
+recordAdtDecDeriv :: Name -> Name -> [(Name, Type)] -> [Type] -> Dec
+recordAdtDecDeriv typeName consName fields ders =
   DataD [] typeName [] Nothing [con] [DerivClause Nothing ders]
   where
     con =
-      RecC typeName (fmap (\(fieldName, fieldType) -> (fieldName, fieldBang, fieldType)) fields)
+      RecC consName (fmap (\(fieldName, fieldType) -> (fieldName, fieldBang, fieldType)) fields)
 
 -- | Create a `Show` instance for a simple sum
 --   type where each constructor is represented
@@ -290,6 +292,10 @@ andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
 
 retE :: Exp
 retE = VarE 'return
+
+-- | Generates a new name using a new name.
+newerName :: String -> Q Name
+newerName str = newName . show =<< newName str
 
 -- [ConP Data.Either.Right [] [VarP x_1]]
 

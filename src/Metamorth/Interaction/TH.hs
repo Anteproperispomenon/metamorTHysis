@@ -1,5 +1,12 @@
+{-# LANGUAGE TemplateHaskell #-}
+
 module Metamorth.Interaction.TH
   ( createParsers
+  , declareParsers
+  , ExtraParserDetails
+  , defExtraParserDetails
+  , ExtraOutputDetails
+  , defExtraOutputDetails
   -- * Re-Exports
   , ParserOptions(..)
   , defParserOptions
@@ -13,6 +20,10 @@ import Data.Attoparsec.Text qualified as AT
 
 import Metamorth.Interpretation.Parser.TH   qualified as Parser
 import Metamorth.Interpretation.Phonemes.TH qualified as Phonemes
+
+import Metamorth.Interpretation.Phonemes.Parsing (parsePhonemeFile)
+
+import Metamorth.Interpretation.Phonemes.Parsing.Types 
 
 import Metamorth.Interpretation.Parser.Parsing
 
@@ -35,6 +46,7 @@ import Language.Haskell.TH.Syntax hiding (lift)
 
 import Metamorth.Helpers.IO
 
+import System.IO
 import System.Directory
 
 import Data.Text qualified as T
@@ -51,43 +63,69 @@ data GeneratedDecs = GeneratedDecs
 -- | Options to go along with each parser file.
 data ExtraParserDetails = ExtraParserDetails
   { epdParserOptions :: ParserOptions
+  , epdParserName    :: String
   } deriving (Show, Eq)
 
 defExtraParserDetails :: ExtraParserDetails
 defExtraParserDetails  = ExtraParserDetails
   { epdParserOptions = defParserOptions
+  , epdParserName    = "anotherParser"
   }
 
 data ExtraOutputDetails = ExtraOutputDetails {} deriving (Show, Eq)
 
-defExtraoutputDetails :: ExtraOutputDetails
-defExtraoutputDetails  = ExtraOutputDetails
+defExtraOutputDetails :: ExtraOutputDetails
+defExtraOutputDetails  = ExtraOutputDetails
   {}
+
+-- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
+
+declareParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
+declareParsers fp1 fps2 fps3 = do
+  (GeneratedDecs d1 ds2 ds3) <- createParsers fp1 fps2 fps3
+  return (d1 ++ (concat ds2) ++ (concat ds3))
+
 
 -- | Create a `GeneratedDecs` from the desired input files.
 createParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q GeneratedDecs
 createParsers phonemePath parserPaths _outputPaths = do
   
+  -- Be careful running IO here...
+  ePhoneData <- runIO $ readPhonemeFile phonemePath
+  phoneText <- case ePhoneData of
+    (Left err)  -> fail err
+    (Right txt) -> return txt
+
+  -- hmm...
+  let ePhonemeRslt = execPhonemeParser parsePhonemeFile phoneText
+  pps <- case ePhonemeRslt of
+    (Left err) -> fail $ "Error(s) parsing \"" ++ phonemePath ++ "\":\n" ++ err
+    (Right pb) -> return pb
+  
+  -- Get the phoneme database and the decs.
+  (pdb, phoneDecs) <- producePhonemeDatabase pps
+
   -- get the parser files
   -- Note that this is probably fairly inefficient;
   -- all the text files are read into memory before
   -- being processed. This should change in the future.
-  rslts@(mPhoneData, eParseFiles, _) <- runIO $ do
+  rslts@(eParseFiles, _) <- runIO $ do
     eParsers <- mapM readParserFile parserPaths
-
-    return (Nothing, eParsers, Nothing)
-
-  (pdb, phoneDecs) <- case mPhoneData of
-    Nothing  -> fail "Couldn't parse/find phoneme file."
-    (Just z) -> return z
+    return (eParsers, Nothing)
 
   parserResults <- fmap catMaybes $ forM eParseFiles $ \(eParseFile) -> do
     case eParseFile of
       (Left err)        -> (qReport True (err)) >> return Nothing
       (Right (txt,epd)) -> Just <$> getParserData pdb txt epd
 
-  return $ GeneratedDecs [] (map fst parserResults) []
+  return $ GeneratedDecs phoneDecs (map fst parserResults) []
 
+readPhonemeFile :: FilePath -> IO (Either String (Text))
+readPhonemeFile fp = do
+  bl <- doesFileExist fp
+  case bl of
+    False -> return $ Left $ "Could not find file \"" ++ fp ++ "\"."
+    True  -> Right <$> readFileUTF8 fp
 
 readParserFile :: (FilePath, ExtraParserDetails) -> IO (Either String (Text, ExtraParserDetails))
 readParserFile (fp, epd) = do
@@ -103,7 +141,8 @@ getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q ([Dec], Stat
 getParserData pdb txt epd = do
   -- here
   let eParseRslt = AT.parseOnly parseOrthographyFile txt
-  case eParseRslt of
+      newNameStr = epdParserName epd
+  (dcs1, spi, funcNom) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
     (Right (hdr, pps, errStrings)) -> do
@@ -121,6 +160,11 @@ getParserData pdb txt epd = do
             (pdbWordTypeNames pdb)
             (pps)
             (epdParserOptions epd)
+  -- back here now
+  let newNameNom = mkName newNameStr
+  newDec <- [d| $(pure $ VarP newNameNom) = $(pure $ VarE funcNom) |]
+
+  return ((newDec<>dcs1), spi)
 
 
 
