@@ -1496,14 +1496,16 @@ condCase blName mkMaj mkMin exprs
   where
     ret = VarE 'return
 
+-- Found an error here:
 condCaseExp :: Exp -> (Exp -> Exp) -> (Exp -> Exp) -> MulExp -> Exp
 condCaseExp blExpr mkMaj mkMin exprs
-  | (fmap mkMaj exprs == fmap mkMin exprs) = formMulExp $ fmap (\expr -> AppE ret (mkMaj expr)) exprs
+  -- | (fmap mkMaj exprs == fmap mkMin exprs) = formMulExp $ fmap (\expr -> AppE ret (mkMaj expr)) exprs
+  | (fmap mkMaj exprs == fmap mkMin exprs) = returnExp $ formMulExp $ fmap (\expr -> mkMaj expr) exprs
   | otherwise = 
     CondE 
       blExpr 
-      (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMaj expr) 
-      (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMin expr)
+      (returnExp $ formMulExp $ forMap exprs $ \expr -> mkMaj expr) 
+      (returnExp $ formMulExp $ forMap exprs $ \expr -> mkMin expr)
   where
     ret = VarE 'return
 

@@ -2,7 +2,9 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 module Test.TH.Basic
-  () where
+  ( theActualParser
+  , Phoneme(..)
+  ) where
 
 import Metamorth.Interaction.TH
 
@@ -18,7 +20,7 @@ parserFile = "examples/parsing/parsing_example_02.thyp"
 -}
 
 declareParsers 
-  "examples/phonemes/example_inuktitut.thyt"
+  "examples/phonemes/example_inuktitut_02.thyt"
   [("examples/parsing/parsing_example_02.thyp", defExtraParserDetails)]
   []
 

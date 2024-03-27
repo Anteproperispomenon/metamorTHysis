@@ -29,6 +29,7 @@ module Metamorth.Helpers.TH
   , nothingE
   , justE
   , retE
+  , returnExp
   , infixBind
   , infixCont
   ) where
@@ -292,6 +293,11 @@ andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
 
 retE :: Exp
 retE = VarE 'return
+
+-- | A version of `return` that uses `($)` to
+--   get the "right" answer.
+returnExp :: Exp -> Exp
+returnExp expr = InfixE (Just (VarE 'return)) (VarE '($)) (Just expr)
 
 -- | Generates a new name using a new name.
 newerName :: String -> Q Name
