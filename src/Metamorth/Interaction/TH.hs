@@ -154,12 +154,18 @@ getParserData pdb txt epd = do
   (dcs1, spi, funcNom) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, errStrings)) -> do
+    (Right (hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of
         [] -> return ()
         xs -> do
-          qReport True "Encountered errors while parsing patterns:"
-          mapM_ (qReport True) errStrings 
+          -- reportError "Encountered errors while parsing patterns:"
+          mapM_ reportError errStrings 
+      case warnStrings of
+        [] -> return ()
+        xs -> do
+          -- reportWarning "Encountered warnings while parsing patterns:"
+          mapM_ reportWarning warnStrings 
+          return ()
       makeTheParser
             (fmap phiPatternName     $ pdbPhonemeInfo pdb)
             (fmap phiArgumentOptions $ pdbPhonemeInfo pdb)

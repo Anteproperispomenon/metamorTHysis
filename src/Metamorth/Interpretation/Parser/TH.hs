@@ -188,12 +188,17 @@ testTheParserE spi fp = do
   (x,y,z) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, errStrings)) -> do
+    (Right (hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of
         [] -> return ()
         xs -> do
           putStrLn "Encountered errors while parsing patterns:"
           mapM_ putStrLn errStrings
+      case warnStrings of
+        [] -> return ()
+        xs -> do
+          putStrLn "Encountered warnings while parsing patterns:"
+          mapM_ putStrLn warnStrings
       runQ 
         ( makeTheParser
             (spiConstructorMap spi)
@@ -217,7 +222,7 @@ testTheParser spi fp = do
   (x,y,z) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, someStrings)) -> do
+    (Right (hdr, pps, someStrings, warnStrings)) -> do
       runQ 
         ( makeTheParser
             (spiConstructorMap spi)
