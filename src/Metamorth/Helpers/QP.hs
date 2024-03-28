@@ -22,8 +22,8 @@ module Metamorth.Helpers.QP
  , runQP
  , runQP2
  , liftQP
- , qaNewName
- , qaPlainNewName
+ , qpNewName
+ , qpPlainNewName
  ) where
 
 
@@ -82,16 +82,16 @@ liftQP action = QP $ lift action
 --   However, you don't have to worry
 --   about ensuring that the `String` is
 --   upper-case or lower-case, since the
---   `qaNewName` function will automatically
+--   `qpNewName` function will automatically
 --   handle conversions. However, empty
 --   strings are accepted.
 runQP :: String -> QP a -> Q a
-runQP []  qa = do
+runQP []  qp = do
   reportWarning "Running a QP action with the empty string."  
-  runReaderT (getQP qa) ([], [])
-runQP str@(c:cs) qa
+  runReaderT (getQP qp) ([], [])
+runQP str@(c:cs) qp
   -- Prefix must work for 
-  | ((isAsciiUpper c) || (isAsciiLower c)) = runReaderT (getQP qa) (str, [])
+  | ((isAsciiUpper c) || (isAsciiLower c)) = runReaderT (getQP qp) (str, [])
   | otherwise = fail $ "Can't run QP with a prefix that doesn't start with an ASCII letter; given \"" <> str <> "\"."
 
 -- | Like `runQP`, but also specifies a prefix
@@ -99,19 +99,19 @@ runQP str@(c:cs) qa
 --   to define any infix operators, or don't want
 --   them to use a prefix, just use `runQP` instead.
 runQP2 :: String -> String -> QP a -> Q a
-runQP2 [] []  qa = do
+runQP2 [] []  qp = do
   reportWarning "Running a QP action with two empty strings."
-  runReaderT (getQP qa) ([], [])
-runQP2 [] infPre qa
-  | (all isOpChar infPre) = runReaderT (getQP qa) ([], infPre)
+  runReaderT (getQP qp) ([], [])
+runQP2 [] infPre qp
+  | (all isOpChar infPre) = runReaderT (getQP qp) ([], infPre)
   | otherwise = fail $ "Can't run QP with an operator prefix that has disallowed characters; given \"" ++ infPre ++ "\"."
-runQP2 str@(c:_) [] qa
+runQP2 str@(c:_) [] qp
   -- Prefix must work for 
-  | ((isAsciiUpper c) || (isAsciiLower c)) = runReaderT (getQP qa) (str, [])
+  | ((isAsciiUpper c) || (isAsciiLower c)) = runReaderT (getQP qp) (str, [])
   | otherwise = fail $ "Can't run QP with a prefix that doesn't start with an ASCII letter; given \"" <> str <> "\"."
-runQP2 str@(c:_) infPre qa
+runQP2 str@(c:_) infPre qp
   | (((isAsciiUpper c) || (isAsciiLower c)) && (all isOpChar infPre))
-  = runReaderT (getQP qa) (str, infPre)
+  = runReaderT (getQP qp) (str, infPre)
   -- str works but infPre doesn't:
   | ((isAsciiUpper c) || (isAsciiLower c))
   = fail $ "Can't run QP with an operator prefix that has disallowed characters; given \"" ++ infPre ++ "\"."
@@ -126,20 +126,20 @@ runQP2 str@(c:_) infPre qa
 -- | Create a new `Name` without the
 --   designated prefix. In case you
 --   don't want to include the prefix.
-qaPlainNewName :: String -> QP Name
-qaPlainNewName str = QP $ lift $ newName str
+qpPlainNewName :: String -> QP Name
+qpPlainNewName str = QP $ lift $ newName str
 
 -- | The main function to create a new `Name`
 --   with a prefix. You don't actually have
 --   to use this function directly; `newName` 
 --   and `qNewName` just call this function.
-qaNewName :: String -> QP Name
-qaNewName []  = QP $ do
+qpNewName :: String -> QP Name
+qpNewName []  = QP $ do
   lift $ reportError "Trying to create a Name from the empty string."
   -- Not adding the prefix since there's no way
   -- to know which kind of name is needed.
   lift $ newName ""
-qaNewName str
+qpNewName str
   = QP $ do
     (pref, pref') <- ask
     let (strModule, strName) = getLastName str
@@ -233,7 +233,7 @@ opChars :: String
 opChars = "!#$%&*+./<=>?@\\^|-~:"
 
 instance Quasi QP where
-  qNewName = qaNewName
+  qNewName = qpNewName
   qRecover m1 m2           = QP $ do
     val <- ask
     lift $ qRecover (runReaderT (getQP m1) val) (runReaderT (getQP m2) val)
@@ -264,7 +264,7 @@ instance Quasi QP where
   qGetDoc dloc             = QP $ lift $ qGetDoc dloc
 
 instance Quote QP where
-  newName = qaNewName
+  newName = qpNewName
 
 instance (Semigroup a) => Semigroup (QP a) where
   (<>) = liftA2 (<>)
