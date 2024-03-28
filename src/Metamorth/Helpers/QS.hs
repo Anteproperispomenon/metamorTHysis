@@ -42,6 +42,8 @@ import Data.Coerce (coerce)
 import Data.Char 
 import Data.List (span, break, dropWhile)
 
+import Metamorth.Helpers.Q
+
 -- | @QS@ is a `ReaderT` over `Q` that automatically adds
 --   suffixes to Names created with `newName` or `qNewName`.
 --   To run it, just use `runQS` or `runQS2`. e.g.
@@ -178,41 +180,6 @@ addSuffixO :: String -> String -> String
 addSuffixO []  str = str
 addSuffixO sfx str = str ++ sfx
 
--- | Split a `String` after the last dot.
-getLastName :: String -> (String, String)
-getLastName "" = ("","")
-getLastName str
-  -- Note the reversed order in the result;
-  -- (x, y) -> (reverse y, reverse x)
-  | (rpfx, rsfx) <- break (== '.') rstr
-  = (reverse rsfx, reverse rpfx)
-  where rstr = reverse str
-
--- In the future, will extend this function
--- or similar function to include unicode
--- symbols.
-isOpChar :: Char -> Bool
-isOpChar x = 
-    (x == '!')
-      || (x == '#')
-      || (x == '$')
-      || (x == '%')
-      || (x == '&')
-      || (x == '*')
-      || (x == '+')
-      || (x == '.')
-      || (x == '/')
-      || (x == '<')
-      || (x == '=')
-      || (x == '>')
-      || (x == '?')
-      || (x == '@')
-      || (x == '\\')
-      || (x == '^')
-      || (x == '|')
-      || (x == '-')
-      || (x == '~')
-      || (x == ':')
 
 instance Quasi QS where
   qNewName = qsNewName

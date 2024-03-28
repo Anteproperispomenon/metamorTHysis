@@ -42,6 +42,8 @@ import Data.Coerce (coerce)
 import Data.Char 
 import Data.List (span, break, dropWhile)
 
+import Metamorth.Helpers.Q
+
 -- | @QP@ is a `ReaderT` over `Q` that automatically adds
 --   prefices to Names created with `newName` or `qNewName`.
 --   To run it, just use `runQP` or `runQP2`. e.g.
@@ -192,45 +194,6 @@ addPrefixO prf@(x:_) str@(':':_)
   | otherwise  = ':' : (prf ++ str)
 addPrefixO prf str
   = (dropWhile (== ':') prf) ++ str -- remove ALL colons.
-
--- | Split a `String` after the last dot.
-getLastName :: String -> (String, String)
-getLastName "" = ("","")
-getLastName str
-  -- Note the reversed order in the result;
-  -- (x, y) -> (reverse y, reverse x)
-  | (rpfx, rsfx) <- break (== '.') rstr
-  = (reverse rsfx, reverse rpfx)
-  where rstr = reverse str
-
--- In the future, will extend this function
--- or similar function to include unicode
--- symbols.
-isOpChar :: Char -> Bool
-isOpChar x = 
-    (x == '!')
-      || (x == '#')
-      || (x == '$')
-      || (x == '%')
-      || (x == '&')
-      || (x == '*')
-      || (x == '+')
-      || (x == '.')
-      || (x == '/')
-      || (x == '<')
-      || (x == '=')
-      || (x == '>')
-      || (x == '?')
-      || (x == '@')
-      || (x == '\\')
-      || (x == '^')
-      || (x == '|')
-      || (x == '-')
-      || (x == '~')
-      || (x == ':')
-
-opChars :: String 
-opChars = "!#$%&*+./<=>?@\\^|-~:"
 
 instance Quasi QP where
   qNewName = qpNewName
