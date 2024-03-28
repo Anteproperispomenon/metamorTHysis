@@ -35,6 +35,7 @@ library
       Metamorth.Helpers.Ord
       Metamorth.Helpers.Parsing
       Metamorth.Helpers.QP
+      Metamorth.Helpers.QS
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
       Metamorth.Interaction.TH
