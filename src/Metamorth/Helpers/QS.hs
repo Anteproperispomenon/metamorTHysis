@@ -19,13 +19,13 @@ generate the same names each time.
 
 module Metamorth.Helpers.QS
  ( QS
+ , QST
  , runQS
  , runQS2
  , liftQS
  , qsNewName
  , qsPlainNewName
  ) where
-
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
@@ -58,7 +58,13 @@ import Metamorth.Helpers.Q
 --   createFunc pfx myName = runQS pfx $ makeFunc myName
 --   
 --   @
-newtype QS a = QS { getQS :: ReaderT (String, String) Q a}
+type QS = QST Q
+
+-- | @QST` is a variant of `QS` that works over any
+--   instance of `Quasi` and `Quote`.
+--   Note that `runQS` and `runQS2` work on both
+--   `QS` and `QST`.
+newtype QST q a = QS { getQS :: ReaderT (String, String) q a}
   deriving newtype 
     ( Functor
     , Applicative
@@ -73,7 +79,7 @@ newtype QS a = QS { getQS :: ReaderT (String, String) Q a}
 -- | Lift an operation in `Q` to one in `QS`.
 --   Note that if the action calls `newName`,
 --   it won't add the prefix to it.
-liftQS :: Q a -> QS a
+liftQS :: (Quote q, Quasi q) => q a -> QST q a
 liftQS action = QS $ lift action
 
 -- | The main way to run a QS function.
@@ -87,9 +93,9 @@ liftQS action = QS $ lift action
 --   `qsNewName` function will automatically
 --   handle conversions. However, empty
 --   strings are accepted.
-runQS :: String -> QS a -> Q a
+runQS :: (Quasi q, Quote q) => String -> QST q a -> q a
 runQS []  qs = do
-  reportWarning "Running a QS action with the empty string."  
+  qReportWarning "Running a QS action with the empty string."  
   runReaderT (getQS qs) ([], [])
 runQS str@(c:cs) qs
   -- Should add better conditions on the allowed `Char`s.
@@ -99,9 +105,9 @@ runQS str@(c:cs) qs
 --   for infix operators. If you aren't planning
 --   to define any infix operators, or don't want
 --   them to use a prefix, just use `runQS` instead.
-runQS2 :: String -> String -> QS a -> Q a
+runQS2 :: (Quasi q, Quote q) => String -> String -> QST q a -> q a
 runQS2 [] []  qs = do
-  reportWarning "Running a QS action with two empty strings."
+  qReportWarning "Running a QS action with two empty strings."
   runReaderT (getQS qs) ([], [])
 runQS2 [] infPre qs
   | (all isOpChar infPre) = runReaderT (getQS qs) ([], infPre)
@@ -122,42 +128,42 @@ runQS2 str infPre qs
 -- | Create a new `Name` without the
 --   designated suffix. In case you
 --   don't want to include the suffix.
-qsPlainNewName :: String -> QS Name
+qsPlainNewName :: (Quasi q, Quote q) => String -> QST q Name
 qsPlainNewName str = QS $ lift $ newName str
 
 -- | The main function to create a new `Name`
 --   with a prefix. You don't actually have
 --   to use this function directly; `newName` 
 --   and `qNewName` just call this function.
-qsNewName :: String -> QS Name
+qsNewName :: (Quasi q) => String -> QST q Name
 qsNewName []  = QS $ do
-  lift $ reportError "Trying to create a Name from the empty string."
+  lift $ qReportError "Trying to create a Name from the empty string."
   -- Not adding the prefix since there's no way
   -- to know which kind of name is needed.
-  lift $ newName ""
+  lift $ qNewName ""
 qsNewName str
   = QS $ do
     (suff, suff') <- ask
     let (strModule, strName) = getLastName str
     case strName of
       [] -> lift $ do
-        reportError $ "Trying to create invalid Name: \"" ++ str ++ "\"."
-        newName str
+        qReportError $ "Trying to create invalid Name: \"" ++ str ++ "\"."
+        qNewName str
       (c:cs)
         | isOpChar c -> lift $ do
             case (all isOpChar cs) of
               False -> do 
-                reportError $ "Trying to create operator Name with letters and/or disallowed symbols: \"" ++ str ++ "\"."
-                newName str
-              True  -> newName (strModule ++ (addSuffixO suff' strName))
+                qReportError $ "Trying to create operator Name with letters and/or disallowed symbols: \"" ++ str ++ "\"."
+                qNewName str
+              True  -> qNewName (strModule ++ (addSuffixO suff' strName))
         | otherwise  -> do
             case suff of
               -- Just use the same string when prefix is empty.
-              [] -> lift $ newName str
+              [] -> lift $ qNewName str
               _  -> do
                 -- Add the prefix to the string.
                 let newStr = addSuffixW suff strName
-                lift $ newName (strModule ++ newStr)
+                lift $ qNewName (strModule ++ newStr)
 
 -- Add a prefix to a word (not an operator).
 addSuffixW :: String -> String -> String
@@ -181,7 +187,7 @@ addSuffixO []  str = str
 addSuffixO sfx str = str ++ sfx
 
 
-instance Quasi QS where
+instance (Quasi q) => Quasi (QST q) where
   qNewName = qsNewName
   qRecover m1 m2           = QS $ do
     val <- ask
@@ -212,12 +218,12 @@ instance Quasi QS where
   qPutDoc dloc str         = QS $ lift $ qPutDoc dloc str
   qGetDoc dloc             = QS $ lift $ qGetDoc dloc
 
-instance Quote QS where
+instance (Quasi q, Quote q) => Quote (QST q) where
   newName = qsNewName
 
-instance (Semigroup a) => Semigroup (QS a) where
+instance (Semigroup a, Applicative q) => Semigroup (QST q a) where
   (<>) = liftA2 (<>)
 
-instance (Monoid a) => Monoid (QS a) where
+instance (Monoid a, Applicative q) => Monoid (QST q a) where
   mempty = pure mempty
 

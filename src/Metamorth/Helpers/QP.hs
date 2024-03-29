@@ -19,13 +19,13 @@ generate the same names each time.
 
 module Metamorth.Helpers.QP
  ( QP
+ , QPT
  , runQP
  , runQP2
  , liftQP
  , qpNewName
  , qpPlainNewName
  ) where
-
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
@@ -58,7 +58,15 @@ import Metamorth.Helpers.Q
 --   createFunc pfx myName = runQP pfx $ makeFunc myName
 --   
 --   @
-newtype QP a = QP { getQP :: ReaderT (String, String) Q a}
+type QP = QPT Q
+-- Need to write it like this and not `type QP a = QPT Q a`, since
+-- that would cause problems when using it with Monad transformers.
+
+-- | @QPT` is a variant of `QP` that works over any
+--   instance of `Quasi` and `Quote`.
+--   Note that `runQP` and `runQP2` work on both
+--   `QP` and `QPT`.
+newtype QPT q a = QP { getQP :: ReaderT (String, String) q a}
   deriving newtype 
     ( Functor
     , Applicative
@@ -73,7 +81,7 @@ newtype QP a = QP { getQP :: ReaderT (String, String) Q a}
 -- | Lift an operation in `Q` to one in `QP`.
 --   Note that if the action calls `newName`,
 --   it won't add the prefix to it.
-liftQP :: Q a -> QP a
+liftQP :: (Quote q, Quasi q) => q a -> QPT q a
 liftQP action = QP $ lift action
 
 -- | The main way to run a QP function.
@@ -87,9 +95,9 @@ liftQP action = QP $ lift action
 --   `qpNewName` function will automatically
 --   handle conversions. However, empty
 --   strings are accepted.
-runQP :: String -> QP a -> Q a
+runQP :: (Quasi q, Quote q) => String -> QPT q a -> q a
 runQP []  qp = do
-  reportWarning "Running a QP action with the empty string."  
+  qReportWarning "Running a QP action with the empty string."  
   runReaderT (getQP qp) ([], [])
 runQP str@(c:cs) qp
   -- Prefix must work for 
@@ -100,9 +108,9 @@ runQP str@(c:cs) qp
 --   for infix operators. If you aren't planning
 --   to define any infix operators, or don't want
 --   them to use a prefix, just use `runQP` instead.
-runQP2 :: String -> String -> QP a -> Q a
+runQP2 :: (Quasi q, Quote q) => String -> String -> QPT q a -> q a
 runQP2 [] []  qp = do
-  reportWarning "Running a QP action with two empty strings."
+  qReportWarning "Running a QP action with two empty strings."
   runReaderT (getQP qp) ([], [])
 runQP2 [] infPre qp
   | (all isOpChar infPre) = runReaderT (getQP qp) ([], infPre)
@@ -128,43 +136,45 @@ runQP2 str@(c:_) infPre qp
 -- | Create a new `Name` without the
 --   designated prefix. In case you
 --   don't want to include the prefix.
-qpPlainNewName :: String -> QP Name
+qpPlainNewName :: (Quote q) => String -> QPT q Name
 qpPlainNewName str = QP $ lift $ newName str
 
 -- | The main function to create a new `Name`
 --   with a prefix. You don't actually have
 --   to use this function directly; `newName` 
 --   and `qNewName` just call this function.
-qpNewName :: String -> QP Name
+qpNewName :: (Quasi q) => String -> QPT q Name
 qpNewName []  = QP $ do
-  lift $ reportError "Trying to create a Name from the empty string."
+  lift $ qReportError "Trying to create a Name from the empty string."
   -- Not adding the prefix since there's no way
   -- to know which kind of name is needed.
-  lift $ newName ""
+  lift $ qNewName ""
 qpNewName str
   = QP $ do
     (pref, pref') <- ask
     let (strModule, strName) = getLastName str
     case strName of
       [] -> lift $ do
-        reportError $ "Trying to create invalid Name: \"" ++ str ++ "\"."
-        newName str
+        qReportError $ "Trying to create invalid Name: \"" ++ str ++ "\"."
+        qNewName str
       (c:cs)
         | isOpChar c -> lift $ do
             case (all isOpChar cs) of
               False -> do 
-                reportError $ "Trying to create operator Name with letters and/or disallowed symbols: \"" ++ str ++ "\"."
-                newName str
-              True  -> newName (strModule ++ (addPrefixO pref' strName))
+                qReportError $ "Trying to create operator Name with letters and/or disallowed symbols: \"" ++ str ++ "\"."
+                qNewName str
+              True  -> qNewName (strModule ++ (addPrefixO pref' strName))
         | otherwise  -> do
             case pref of
               -- Just use the same string when prefix is empty.
-              [] -> lift $ newName str
+              [] -> lift $ qNewName str
               _  -> do
                 -- Add the prefix to the string.
                 let (newStr, gotError) = addPrefixW pref strName
-                when gotError $ lift $ reportWarning $ "Encountered unusual Name in QP : \"" <> str <> "\"."
-                lift $ newName (strModule ++ newStr)
+                when gotError $ lift $ qReportWarning $ "Encountered unusual Name in QP : \"" <> str <> "\"."
+                lift $ qNewName (strModule ++ newStr)
+
+
 
 -- Add a prefix to a word (not an operator).
 addPrefixW :: String -> String -> (String, Bool)
@@ -195,7 +205,7 @@ addPrefixO prf@(x:_) str@(':':_)
 addPrefixO prf str
   = (dropWhile (== ':') prf) ++ str -- remove ALL colons.
 
-instance Quasi QP where
+instance (Quasi q) => Quasi (QPT q) where
   qNewName = qpNewName
   qRecover m1 m2           = QP $ do
     val <- ask
@@ -226,12 +236,12 @@ instance Quasi QP where
   qPutDoc dloc str         = QP $ lift $ qPutDoc dloc str
   qGetDoc dloc             = QP $ lift $ qGetDoc dloc
 
-instance Quote QP where
+instance (Quote q, Quasi q) => Quote (QPT q) where
   newName = qpNewName
 
-instance (Semigroup a) => Semigroup (QP a) where
+instance (Semigroup a, Applicative q) => Semigroup (QPT q a) where
   (<>) = liftA2 (<>)
 
-instance (Monoid a) => Monoid (QP a) where
+instance (Monoid a, Applicative q) => Monoid (QPT q a) where
   mempty = pure mempty
 

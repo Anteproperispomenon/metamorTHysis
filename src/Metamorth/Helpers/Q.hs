@@ -2,7 +2,11 @@ module Metamorth.Helpers.Q
   ( isOpChar
   , opChars
   , getLastName
+  , qReportError
+  , qReportWarning
   ) where
+
+import Language.Haskell.TH.Syntax (Quasi, qReport)
 
 -- In the future, will extend this function
 -- or similar function to include unicode
@@ -86,4 +90,10 @@ getLastOp str
 
   where 
     (rpfx, rsfx) = span (isOpChar) (reverse str)
+
+qReportError :: (Quasi q) => String -> q ()
+qReportError = qReport True
+
+qReportWarning :: (Quasi q) => String -> q ()
+qReportWarning = qReport False
 
