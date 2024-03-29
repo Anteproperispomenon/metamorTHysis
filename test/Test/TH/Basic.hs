@@ -28,7 +28,7 @@ parserFile = "examples/parsing/parsing_example_02.thyp"
 
 declareParsers 
   "examples/phonemes/example_inuktitut_02.thyt"
-  [("examples/parsing/parsing_example_02.thyp", defExtraParserDetails )]
+  [("examples/parsing/parsing_example_02.thyp", defExtraParserDetails' {epdParserName = "theActualParser"} )]
   []
 
 {-
