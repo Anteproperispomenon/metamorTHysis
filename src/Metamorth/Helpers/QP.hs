@@ -245,3 +245,7 @@ instance (Semigroup a, Applicative q) => Semigroup (QPT q a) where
 instance (Monoid a, Applicative q) => Monoid (QPT q a) where
   mempty = pure mempty
 
+-- Lifting from the bottom:
+instance (QL q) => QL (QPT q) where
+  fromQ f = QP $ lift $ fromQ f
+

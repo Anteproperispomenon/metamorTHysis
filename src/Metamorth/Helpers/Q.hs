@@ -1,12 +1,15 @@
 module Metamorth.Helpers.Q
-  ( isOpChar
+  -- * Lifting from `Q`
+  ( QL(..)
+  -- * Other Functions
+  , isOpChar
   , opChars
   , getLastName
   , qReportError
   , qReportWarning
   ) where
 
-import Language.Haskell.TH.Syntax (Quasi, qReport)
+import Language.Haskell.TH.Syntax (Quasi, Quote, qReport, Q)
 
 -- In the future, will extend this function
 -- or similar function to include unicode
@@ -97,3 +100,14 @@ qReportError = qReport True
 qReportWarning :: (Quasi q) => String -> q ()
 qReportWarning = qReport False
 
+-- | Types that can be lifted from the Q.
+--   This is similar to the `MonadIO` class,
+--   but over `Q` instead of `IO`.
+class (Quasi q, Quote q) => QL q where
+  -- | Lift a computation from `Q` into a monad
+  --   with `Q` as the base.
+  fromQ :: Q a -> q a
+
+-- Base instance
+instance QL Q where
+  fromQ f = f

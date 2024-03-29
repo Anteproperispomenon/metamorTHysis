@@ -59,6 +59,8 @@ import Metamorth.Helpers.Q
 --   
 --   @
 type QS = QST Q
+-- Need to write it like this and not `type QS a = QST Q a`, since
+-- that would cause problems when using it with Monad transformers.
 
 -- | @QST` is a variant of `QS` that works over any
 --   instance of `Quasi` and `Quote`.
@@ -226,4 +228,8 @@ instance (Semigroup a, Applicative q) => Semigroup (QST q a) where
 
 instance (Monoid a, Applicative q) => Monoid (QST q a) where
   mempty = pure mempty
+
+-- Lifting from the bottom:
+instance (QL q) => QL (QST q) where
+  fromQ f = QS $ lift $ fromQ f
 
