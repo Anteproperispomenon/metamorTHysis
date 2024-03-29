@@ -74,6 +74,7 @@ newtype QST q a = QS { getQS :: ReaderT (String, String) q a}
     , MonadIO
     , MonadFix
     , MonadFail
+    , MonadTrans
     -- , Semigroup
     -- , Monoid
     )
