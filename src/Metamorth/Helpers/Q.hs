@@ -1,15 +1,19 @@
 module Metamorth.Helpers.Q
   -- * Lifting from `Q`
   ( QL(..)
+  , newTopName
   -- * Other Functions
   , isOpChar
+  , isSpecChar
+  , notNameChar
+  , isNameChar
   , opChars
   , getLastName
   , qReportError
   , qReportWarning
   ) where
 
-import Language.Haskell.TH.Syntax (Quasi, Quote, qReport, Q)
+import Language.Haskell.TH.Syntax (Quasi, Quote, qReport, Q, Name, newName)
 
 -- In the future, will extend this function
 -- or similar function to include unicode
@@ -39,6 +43,22 @@ isOpChar x =
 
 opChars :: String 
 opChars = "!#$%&*+./<=>?@\\^|-~:"
+
+isSpecChar :: Char -> Bool
+isSpecChar x =
+    (x == '[')
+      || (x == ']')
+      || (x == '(')
+      || (x == ')')
+      || (x == '{')
+      || (x == '}')
+      || (x == ';')
+
+notNameChar :: Char -> Bool
+notNameChar x = (isSpecChar x) || (isOpChar x)
+
+isNameChar :: Char -> Bool
+isNameChar x = not $ notNameChar x
 
 -- | Split a `String` after the last module separator.
 --   Note that this is not the same as splitting after
@@ -111,3 +131,10 @@ class (Quasi q, Quote q) => QL q where
 -- Base instance
 instance QL Q where
   fromQ f = f
+
+-- | Make a new `Name` without any
+--   prefixes or suffixes. Useful when
+--   you want to create a name that will
+--   be exported.
+newTopName :: (QL q) => String -> q Name
+newTopName str = fromQ $ newName str

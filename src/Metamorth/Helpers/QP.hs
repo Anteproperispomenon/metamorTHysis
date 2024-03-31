@@ -18,10 +18,12 @@ generate the same names each time.
 -}
 
 module Metamorth.Helpers.QP
+ -- * Main Monad
  ( QP
  , QPT
  , runQP
  , runQP2
+ -- * Additional Helpers
  , liftQP
  , qpNewName
  , qpPlainNewName
@@ -32,15 +34,15 @@ import Language.Haskell.TH.Syntax hiding (lift)
 
 import Control.Monad
 import Control.Monad.Fix
-import Control.Monad.Fail
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.Reader
 import Control.Monad.IO.Class
+-- import Control.Monad.Fail
 
-import Data.Coerce (coerce)
+-- import Data.Coerce (coerce)
 
 import Data.Char 
-import Data.List (span, break, dropWhile)
+-- import Data.List (span, break, dropWhile)
 
 import Metamorth.Helpers.Q
 
@@ -100,7 +102,7 @@ runQP :: (Quasi q, Quote q) => String -> QPT q a -> q a
 runQP []  qp = do
   qReportWarning "Running a QP action with the empty string."  
   runReaderT (getQP qp) ([], [])
-runQP str@(c:cs) qp
+runQP str@(c:_cs) qp
   -- Prefix must work for 
   | ((isAsciiUpper c) || (isAsciiLower c)) = runReaderT (getQP qp) (str, [])
   | otherwise = fail $ "Can't run QP with a prefix that doesn't start with an ASCII letter; given \"" <> str <> "\"."
@@ -133,10 +135,14 @@ runQP2 str@(c:_) infPre qp
   | otherwise
   = fail $ "Trying to run QP with failing prefices; given \"" ++ str ++ "\" and \"" ++ infPre ++ "\"."
 
-
 -- | Create a new `Name` without the
 --   designated prefix. In case you
 --   don't want to include the prefix.
+--
+--   Note that this function only goes
+--   one level up; if you want to generate
+--   a top-level name, use `newTopName`
+--   instead.
 qpPlainNewName :: (Quote q) => String -> QPT q Name
 qpPlainNewName str = QP $ lift $ newName str
 
@@ -179,8 +185,8 @@ qpNewName str
 
 -- Add a prefix to a word (not an operator).
 addPrefixW :: String -> String -> (String, Bool)
-addPrefixW pfx "" = ("", False) -- already covered
-addPrefixW pfx str@(c:_)
+addPrefixW _pfx "" = ("", False) -- already covered
+addPrefixW  pfx str@(c:_)
   | (isAsciiLower c) = (makeLower1 pfx ++ str, False)
   | (isAsciiUpper c) = (makeUpper1 pfx ++ str, False)
   | (isLowerCase  c) = (makeLower1 pfx ++ str, True)
