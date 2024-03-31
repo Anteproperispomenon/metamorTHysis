@@ -27,6 +27,9 @@ library
   exposed-modules:
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
+      Metamorth.Helpers.Error
+      Metamorth.Helpers.Error.RWS
+      Metamorth.Helpers.Error.Writer
       Metamorth.Helpers.IO
       Metamorth.Helpers.List
       Metamorth.Helpers.Map
