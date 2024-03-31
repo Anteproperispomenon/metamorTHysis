@@ -4,6 +4,7 @@
 
 import Test.TH.Basic
 import Test.TH.TwoOrths as Two
+import Test.TH.Grouped qualified as G
 
 import System.IO
 
@@ -22,6 +23,8 @@ main = do
   print $ AT.parseOnly Two.latinParser exampleText2
   putStrLn "Parsing \"ᓄᓇᑦᓯᐊᕗᑦ\" with other parser:"
   print $ AT.parseOnly Two.syllabicParser "ᓄᓇᑦᓯᐊᕗᑦ"
+  putStrLn "Parsing \"ᓄᓇᑦᓯᐊᕗᑦ\" with grouped parser:"
+  print $ AT.parseOnly G.theActualParser "ᓄᓇᑦᓯᐊᕗᑦ"
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.

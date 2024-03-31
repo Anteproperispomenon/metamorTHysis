@@ -111,6 +111,7 @@ test-suite metamorTHysis-test
   main-is: Spec.hs
   other-modules:
       Test.TH.Basic
+      Test.TH.Grouped
       Test.TH.TwoOrths
       Paths_metamorTHysis
   hs-source-dirs:

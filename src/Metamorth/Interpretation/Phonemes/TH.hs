@@ -541,7 +541,8 @@ data GroupProps = GroupProps
       let newFuncSign = SigD newFuncName (THL.arrowChainT [ConT nm] (ConT ''Bool))
           -- produceSubMapClause constr (Just funcName) var
           -- newFuncBod1 = Clause [ConP subGrpNom [] [VarP newVar]] (NormalB (AppE (VarE subFuncNom) (VarE newVar))) []
-          newFuncBod1 = produceSubMapClause subGrpNom subFuncNom newVar
+          -- newFuncBod1 = produceSubMapClause subGrpNom subFuncNom newVar
+          newFuncBod1 = produceSubMapClause conName subFuncNom newVar
           newFuncBod2 = Clause [WildP] (NormalB (ConE 'False)) []
           newFuncDefn = FunD newFuncName [newFuncBod1, newFuncBod2]
           newFuncDecl = [newFuncSign, newFuncDefn]
