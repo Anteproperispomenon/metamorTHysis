@@ -5,6 +5,7 @@ module Metamorth.Interaction.TH
   , declareParsers
   , ExtraParserDetails(..)
   , defExtraParserDetails
+  , defExtraParserDetails'
   , ExtraOutputDetails
   , defExtraOutputDetails
   -- * Re-Exports
@@ -33,6 +34,7 @@ import Metamorth.Interpretation.Parser.TH
   ( makeTheParser
   , ParserOptions(..)
   , defParserOptions
+  , defParserOptions'
   , StaticParserInfo(..)
   )
 
@@ -68,9 +70,15 @@ data ExtraParserDetails = ExtraParserDetails
   , epdParserName    :: String
   } deriving (Show, Eq)
 
-defExtraParserDetails :: ExtraParserDetails
-defExtraParserDetails  = ExtraParserDetails
-  { epdParserOptions = defParserOptions
+defExtraParserDetails' :: ExtraParserDetails
+defExtraParserDetails'  = ExtraParserDetails
+  { epdParserOptions = defParserOptions'
+  , epdParserName    = "anotherParser"
+  }
+
+defExtraParserDetails :: String -> ExtraParserDetails
+defExtraParserDetails str = ExtraParserDetails
+  { epdParserOptions = defParserOptions str
   , epdParserName    = "anotherParser"
   }
 

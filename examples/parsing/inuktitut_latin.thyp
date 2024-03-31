@@ -1,0 +1,69 @@
+# This is a simple Latin orthography
+# for Inuktitut. 
+orthography : inuktitut_syllabics
+phoneme set : "../phonemes/example_inuktitut.thyt"
+
+
+====
+
+# No classes or states.
+
+====
+
+# Source : https://en.wikipedia.org/wiki/Inuktitut_syllabics
+
+# Vowels
+
+a short : a
+a long  : a a
+i short : i
+i long  : i i
+u short : u
+u long  : u u
+ai : a i
+ai : e
+
+# Consonants
+
+p  : p
+t  : t
+k  : k
+h  : h
+g  : g
+m  : m
+n  : n
+s' : ŝ # s/h
+s' : s U+0302
+
+l  : l
+j  : j
+jj : j j
+rh : ř # U+0159
+rh : U+0072 U+030C
+v  : v 
+r  : r
+q  : q
+qq : q q
+
+ng  : n g
+ng  : ŋ
+nng : n n g
+
+lh : ł
+lh : - ɬ
+lh : + Ɬ # U+A7AD
+
+glot : '
+glot : ʔ
+
+shr : š
+# H-circumflex
+h'  : U+0125
+h'  : U+0068 U+0302
+
+# I don't know how commonly used
+# the "hx" phoneme is, since it
+# only seems to be used as a final
+# character. Using h-wedge to represent it.
+hx : U+0068 U+030C
+

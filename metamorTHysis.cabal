@@ -34,6 +34,9 @@ library
       Metamorth.Helpers.Misc
       Metamorth.Helpers.Ord
       Metamorth.Helpers.Parsing
+      Metamorth.Helpers.Q
+      Metamorth.Helpers.QP
+      Metamorth.Helpers.QS
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
       Metamorth.Interaction.TH
@@ -109,6 +112,7 @@ test-suite metamorTHysis-test
   main-is: Spec.hs
   other-modules:
       Test.TH.Basic
+      Test.TH.TwoOrths
       Paths_metamorTHysis
   hs-source-dirs:
       test
