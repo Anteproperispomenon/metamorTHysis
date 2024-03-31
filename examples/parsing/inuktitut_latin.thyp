@@ -15,11 +15,23 @@ phoneme set : "../phonemes/example_inuktitut.thyt"
 # Vowels
 
 a short : a
+a short : ă
+a short : a U+0306
 a long  : a a
+a long  : ā
+a long  : a U+0304
 i short : i
+i short : ĭ
+i short : i U+0306
 i long  : i i
+i long  : ī
+i long  : i U+0304
 u short : u
+u short : ŭ
+u short : u U+0306
 u long  : u u
+u long  : ū
+u long  : u U+0304
 ai : a i
 ai : e
 
