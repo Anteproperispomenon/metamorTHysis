@@ -408,7 +408,7 @@ data GroupProps = GroupProps
   -- all the lower-down "is<Subsubgroup>" functions.
   , isGroupSubFuncs :: M.Map String (Maybe Name)
   -- , groupType :: Type
-  , phonemeConstructors :: M.Map String ((Int, Name), [Name])
+  , phonemeConstructors :: M.Map String (([Type], Name), [Name])
   , isGroupBottom :: Bool
   -- 
   -- , isGroupFuncType :: Type
@@ -449,24 +449,30 @@ makeNodes  = M.map $ \(nm, nods) -> PhoneNode nm nods
 --    * A pattern synonym to cut through the nested layers
 --    * An integer giving the number of arguments it has.
 
-producePhonemePatterns :: M.Map String ((Int, Name), [Name]) -> Q (M.Map String (Name, Dec))
-producePhonemePatterns mp = do
+-- Note: the "cstrList" is just the list of constructors that
+-- make the final constructor; e.g.
+--
+-- Letter (Consonant (Labial P))
+-- would bde ["Letter", "Consonant", "Labial", "P"]
+producePhonemePatterns :: Name -> M.Map String (([Type], Name), [Name]) -> Q (M.Map String (Name, [Dec]))
+producePhonemePatterns topType mp = do
   -- Only create as many vars as needed.
-  let maxLen = if (M.null mp) then 0 else maximum $ M.map (\((n,_),_) -> n) mp
-  necVars <- replicateM maxLen $ newName "x"
-  forWithKey mp $ \phoneStr ((numArgs, baseConstr), cstrList) -> do
+  let maxLen = if (M.null mp) then 0 else maximum $ M.map (\((ts,_),_) -> length ts) mp
+  necVars <- forM (take maxLen [1..]) $ \n -> newName ("x" ++ (show n))
+  forWithKey mp $ \phoneStr ((argList, baseConstr), cstrList) -> do
     -- hmm...
     patName <- newName $ (dataName phoneStr) <> "PhonePat"
-    let patVars = take numArgs necVars
+    let patVars = take (length argList) necVars
+        patSign = PatSynSigD patName $ THL.arrowChainT argList (ConT topType)
         patRslt = PatSynD patName (PrefixPatSyn patVars) ImplBidir (nestedConPat cstrList baseConstr (map VarP patVars))
-    return (patName, patRslt)
+    return (patName, [patSign, patRslt])
 
 producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, Name, [Dec])
 producePhonemeInventory propData phi = do
   mainName <- newName "Phoneme"
   ((phoneHi, groupProps, decs), isGroupFuncsStuff) <- runStateT (producePhonemeInventory' "Phoneme" mainName propData phi) M.empty
-  patMap <- producePhonemePatterns (phonemeConstructors groupProps)
-  let patDecs = M.elems $ M.map snd patMap
+  patMap <- producePhonemePatterns mainName (phonemeConstructors groupProps)
+  let patDecs = concat $ M.elems $ M.map snd patMap
       patNoms = M.map fst patMap
 
   return (phoneHi, groupProps, patNoms, isGroupFuncsStuff, mainName, decs <> patDecs)
@@ -662,7 +668,7 @@ producePhonemeSet propData subName phoneSet = do
 
   -- Getting the last few group properties...
   let phoneConstructors = forMap phoneMap $ \(phoneNom, argList) -> 
-        ((length argList, phoneNom), [])
+        ((argList, phoneNom), [])
 
   let groupProps = GroupProps
         { groupStringName = groupStr

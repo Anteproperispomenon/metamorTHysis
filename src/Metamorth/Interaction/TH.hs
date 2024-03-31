@@ -165,12 +165,12 @@ getParserData pdb txt epd = do
     (Right (hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of
         [] -> return ()
-        xs -> do
+        _  -> do
           -- reportError "Encountered errors while parsing patterns:"
           mapM_ reportError errStrings 
       case warnStrings of
         [] -> return ()
-        xs -> do
+        _  -> do
           -- reportWarning "Encountered warnings while parsing patterns:"
           mapM_ reportWarning warnStrings 
           return ()
@@ -185,9 +185,8 @@ getParserData pdb txt epd = do
             (epdParserOptions epd)
   -- back here now
   let newNameNom = mkName newNameStr
+  newSig <- SigD newNameNom <$> [t| AT.Parser [$(pure $ ConT $ fst $ pdbWordTypeNames pdb)]  |]
   newDec <- [d| $(pure $ VarP newNameNom) = $(pure $ VarE funcNom) |]
 
-  return ((newDec<>dcs1), spi)
-
-
+  return ((newSig:newDec<>dcs1), spi)
 
