@@ -33,6 +33,7 @@ dependencies:
 - attoparsec
 - bytestring
 - containers
+- directory
 - template-haskell
 - text
 - th-lego

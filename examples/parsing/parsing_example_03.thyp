@@ -5,6 +5,9 @@
 # most characters represent more than one
 # phoneme.
 
+# This version will generate some warnings
+# when compiled.
+
 orthography : inuktitut_syllabics
 phoneme set : "../phonemes/example_inuktitut.thyt"
 
@@ -185,12 +188,12 @@ q (a long) : ᖄ
 q ai : ᙯ
 
 # THESE were the culprit!
-qq (i short) : ᖅ ᑭ
-qq (u short) : ᖅ ᑯ
-qq (a short) : ᖅ ᑲ
-qq (i long) : ᖅ ᑮ
-qq (u long) : ᖅ ᑰ
-qq (a long) : ᖅ ᑳ
+qq (i short) : ᖅᑭ
+qq (u short) : ᖅᑯ
+qq (a short) : ᖅᑲ
+qq (i long) : ᖅᑮ
+qq (u long) : ᖅᑰ
+qq (a long) : ᖅᑳ
 qq ai : ᖅ ᑫ
 
 ng (i short) : ᖏ

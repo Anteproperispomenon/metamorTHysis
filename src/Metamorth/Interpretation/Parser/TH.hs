@@ -84,11 +84,14 @@ the total number of generated functions.
 module Metamorth.Interpretation.Parser.TH
   -- * Parser Generation
   ( makeTheParser
-  , testTheParser
-  , testTheParserE
+  , ParserOptions(..)
+  , defParserOptions
+  , defParserOptions'
   -- * Output Types
   , StaticParserInfo(..)
   -- * Testing Helpers
+  , testTheParser
+  , testTheParserE
   , exampleInfo
   , exampleInfo2
   , exampleInfo3
@@ -123,7 +126,9 @@ import Data.Char
 import Metamorth.Helpers.Char
 import Metamorth.Helpers.Either
 import Metamorth.Helpers.List
+import Metamorth.Helpers.QS
 
+import Data.Unique
 import Data.Either
 import Data.Maybe
 
@@ -178,19 +183,24 @@ import Metamorth.Helpers.TH
 testTheParserE
   :: StaticParserInfo
   -> String -- File Path
-  -> IO ([Dec], StaticParserInfo)
+  -> IO ([Dec], (StaticParserInfo, Name))
 testTheParserE spi fp = do
   theFile <- TIO.readFile fp
   let eParseRslt = AT.parseOnly parseOrthographyFile theFile
-  case eParseRslt of
+  (x,y,z) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, errStrings)) -> do
+    (Right (hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of
         [] -> return ()
         xs -> do
           putStrLn "Encountered errors while parsing patterns:"
           mapM_ putStrLn errStrings
+      case warnStrings of
+        [] -> return ()
+        xs -> do
+          putStrLn "Encountered warnings while parsing patterns:"
+          mapM_ putStrLn warnStrings
       runQ 
         ( makeTheParser
             (spiConstructorMap spi)
@@ -200,20 +210,21 @@ testTheParserE spi fp = do
             (spiMkMin spi)
             (spiWordTypeNames spi)
             pps
-            defParserOptions
+            defParserOptions'
         )
+  return (x, (y,z))
 
 testTheParser
   :: StaticParserInfo
   -> String -- File Path
-  -> IO ([Dec], StaticParserInfo)
+  -> IO ([Dec], (StaticParserInfo, Name))
 testTheParser spi fp = do
   theFile <- TIO.readFile fp
   let eParseRslt = AT.parseOnly parseOrthographyFile theFile
-  case eParseRslt of
+  (x,y,z) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, someStrings)) -> do
+    (Right (hdr, pps, someStrings, warnStrings)) -> do
       runQ 
         ( makeTheParser
             (spiConstructorMap spi)
@@ -223,8 +234,9 @@ testTheParser spi fp = do
             (spiMkMin spi)
             (spiWordTypeNames spi)
             pps
-            defParserOptions
+            defParserOptions'
         )
+  return (x,(y,z))
       
 -- | Options for how to procede when
 --   constructing the parser.
@@ -252,18 +264,32 @@ data ParserOptions = ParserOptions
   -- | A `String` representing what you
   --   want the main function name to be.
   , poMainFuncName  :: String
+  -- | The suffix appended to names generated
+  --   for this parser
+  , poNameSuffix    :: String
   } deriving (Show, Eq)
 
-defParserOptions :: ParserOptions
-defParserOptions = ParserOptions
+defParserOptions' :: ParserOptions
+defParserOptions' = ParserOptions
   { poUnifyBranches = True
   , poGroupGuards   = True
   , poCheckStates   = True
   , poMainFuncName  = "theActualParser"
+  , poNameSuffix    = "_test"
+  }
+
+-- | Needs a `String` for the suffix
+defParserOptions :: String -> ParserOptions
+defParserOptions sfx = ParserOptions
+  { poUnifyBranches = True
+  , poGroupGuards   = True
+  , poCheckStates   = True
+  , poMainFuncName  = "theActualParser"
+  , poNameSuffix    = sfx
   }
 
 -- | Construct the actual parser code.
-makeTheParser 
+makeTheParser
   :: M.Map String Name                  -- ^ A `M.Map` from `String`s to Pattern Synonym `Name`s.
   -> M.Map String ([M.Map String Name]) -- ^ A list of `M.Map`s for the constructors of each argument of the Phoneme.
   -> Name                               -- ^ The name of the type of Phonemes.
@@ -272,14 +298,28 @@ makeTheParser
   -> (Name, (Name, Name))               -- ^ The type/data constructors for the word/punct type.
   -> ParserParsingState                 -- ^ The data from parsing the specification.
   -> ParserOptions                      -- ^ Parser 
-  -> Q ([Dec], StaticParserInfo)
-makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = do
+  -> Q ([Dec], StaticParserInfo, Name)
+makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops
+  = runQS (poNameSuffix pops) $ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops
+
+-- | Construct the actual parser code.
+makeTheParser' 
+  :: M.Map String Name                  -- ^ A `M.Map` from `String`s to Pattern Synonym `Name`s.
+  -> M.Map String ([M.Map String Name]) -- ^ A list of `M.Map`s for the constructors of each argument of the Phoneme.
+  -> Name                               -- ^ The name of the type of Phonemes.
+  -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an upper-case character.
+  -> (Exp -> Exp)                       -- ^ How to convert a Pattern synonym to an lower-case character.
+  -> (Name, (Name, Name))               -- ^ The type/data constructors for the word/punct type.
+  -> ParserParsingState                 -- ^ The data from parsing the specification.
+  -> ParserOptions                      -- ^ Parser 
+  -> QS ([Dec], StaticParserInfo, Name)
+makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = do
   let classDictX = ppsClassDictionary pps
       stateDictX = ppsStateDictionary pps
       phonePats  = ppsPhonemePatterns pps
       -- mainTrie  = if (poGroupGuards pops) then (pathifyTrie phonePats) else (dontPathifyTrie phonePats)
       mainTrie   = setupTrie pops phonePats
-  (stDecs, stateTypeName, defStateName, newStateDict) <- createStateDecs "StateType" stateDictX
+  (stDecs, stateTypeName, stateConsName, defStateName, newStateDict) <- createStateDecs "StateType" "StateCons" stateDictX
   (clDecs, newClassDict) <- makeClassDecs classDictX
   -- Getting the annotation map...
   let annots' = map fst $ TM.elems mainTrie
@@ -302,6 +342,7 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = 
               , spiIsPunctFunc     = punctName
               , spiPhoneTypeName   = phoneName
               , spiStateTypeName   = stateTypeName
+              , spiStateConsName   = stateConsName
               , spiDefStateName    = defStateName
               , spiStateDictionary = newStateDict
               , spiWordTypeNames   = wordDataNames
@@ -316,7 +357,7 @@ makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = 
   
   (epDecs, finalName) <- makeEntryPoint spi nm1 nm2 (poMainFuncName pops)
 
-  return (concat [epDecs, stDecs, clDecs, charPredDecs, funcDecs], spi)
+  return (concat [epDecs, stDecs, clDecs, charPredDecs, funcDecs], spi, finalName)
 
 {-
   :: StaticParserInfo
@@ -362,11 +403,12 @@ data ParserParsingState = ParserParsingState
 
 -- | Create the state types and produce a `M.Map` of
 --   information about the types.
-createStateDecs :: String -> M.Map String (Maybe (S.Set String)) -> Q ([Dec], Name, Name, (M.Map String (Name, Maybe (Name, M.Map String Name))))
-createStateDecs stateTypeString theMap = do
+createStateDecs :: String -> String -> M.Map String (Maybe (S.Set String)) -> QS ([Dec], Name, Name, Name, (M.Map String (Name, Maybe (Name, M.Map String Name))))
+createStateDecs stateTypeString stateConsString theMap = do
   -- Will use the same `Name` for both the type
   -- constructor and the data constructor.
   stateTypeName <- newName $ dataName stateTypeString
+  stateConsName <- newName $ dataName stateConsString
   rslt1 <- forWithKey theMap $ \stateStr mSet -> do
     recFieldName <- newName $ varName stateStr
     case mSet of
@@ -403,16 +445,16 @@ createStateDecs stateTypeString theMap = do
   -- Okay, now the final dec...
   let (recTypes, restDecs') = unzip decsInfo
       (restDecs, defValues) = unzip restDecs'
-      recTypeDec = recordAdtDecDeriv stateTypeName recTypes [ConT ''Eq, ConT ''Ord, ConT ''Show]
+      recTypeDec = recordAdtDecDeriv stateTypeName stateConsName recTypes [ConT ''Eq, ConT ''Ord, ConT ''Show]
 
   -- Setting up the default value declaration...
-  defValueName <- newName $ "def" ++ stateTypeString
-  let defRecordVal = multiAppE (ConE stateTypeName) defValues
+  defValueName <- newName $ "def" ++ stateConsString
+  let defRecordVal = multiAppE (ConE stateConsName) defValues
       defValueSign = SigD defValueName (ConT stateTypeName)
       defValueDefn = ValD (VarP defValueName) (NormalB defRecordVal) []
       defValueDecs = [defValueSign, defValueDefn]
 
-  return ((recTypeDec:(defValueDecs ++ concat restDecs)), stateTypeName, defValueName, rslt1)
+  return ((recTypeDec:(defValueDecs ++ concat restDecs)), stateTypeName, stateConsName, defValueName, rslt1)
         
 -- fmap (\(x,_,_,_) -> ppr x) $ join (fmap (runQ . (createStateDecs "StateType") . ppsStateDictionary) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample8.thyp")
 
@@ -421,7 +463,7 @@ createStateDecs stateTypeString theMap = do
 -- Top-Level Function Generator
 ----------------------------------------------------------------
 
-makeTrieAnnNames :: TM.TMap CharPattern (TrieAnnotation, Maybe a) -> Q (M.Map TrieAnnotation Name)
+makeTrieAnnNames :: TM.TMap CharPattern (TrieAnnotation, Maybe a) -> QS (M.Map TrieAnnotation Name)
 makeTrieAnnNames theTrie = do
   let anns = map fst $ TM.elems theTrie
   prs <- for anns $ \ann -> do
@@ -441,7 +483,7 @@ makeClassDec xvar nom chrSet
 
 -- M.Map String (Name,[Char])
 
-makeClassDecs :: M.Map String (S.Set Char) -> Q ([Dec], M.Map String (Name,[Char]))
+makeClassDecs :: M.Map String (S.Set Char) -> QS ([Dec], M.Map String (Name,[Char]))
 makeClassDecs sdict = do
   xvar <- newName "x"
   -- The output value
@@ -460,7 +502,7 @@ makeWordEndFunctions
   -- | The main trie of the parser
   :: TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)) 
   -> M.Map String (Name,[Char])
-  -> Q ([Dec], (Name, Name, Name))
+  -> QS ([Dec], (Name, Name, Name))
 makeWordEndFunctions theTrie classDec = do
   let startTrie = snd $ TM.match [WordStart] theTrie
       notStTrie = snd $ TM.match [NotStart ] theTrie
@@ -502,7 +544,7 @@ makeWordEndFunctions theTrie classDec = do
     joinListMaybe (Just xs) = xs
     joinListMaybe _ = []
 
-makeEntryPoint :: StaticParserInfo -> Name -> Name -> String -> Q ([Dec], Name)
+makeEntryPoint :: StaticParserInfo -> Name -> Name -> String -> QS ([Dec], Name)
 makeEntryPoint spi startWordFunc restWordFunc finalFuncStr = do
   let defStateVal     = VarE (spiDefStateName spi)
 
@@ -808,6 +850,8 @@ data StaticParserInfo = StaticParserInfo
   , spiPhoneTypeName   :: Name
   -- | The `Name` of the type of the state value.
   , spiStateTypeName   :: Name
+  -- | The `Name` of the data constructor of the state value.
+  , spiStateConsName   :: Name
   -- | The `Name` of the default value for the state value.
   , spiDefStateName    :: Name
   -- | The State information dictionary. This is
@@ -837,6 +881,7 @@ instance Eq StaticParserInfo where
       && ((spiIsPunctFunc x) == (spiIsPunctFunc y))
       && ((spiPhoneTypeName x) == (spiPhoneTypeName y))
       && ((spiStateTypeName x) == (spiStateTypeName y))
+      && ((spiStateConsName x) == (spiStateConsName y))
       && ((spiDefStateName x) == (spiDefStateName y))
       && ((spiStateDictionary x) == (spiStateDictionary y))
       && ((spiWordTypeNames x) == (spiWordTypeNames y))
@@ -857,6 +902,7 @@ instance Show StaticParserInfo where
       <> ", spiIsPunctFunc = "     <> show (spiIsPunctFunc x)
       <> ", spiPhoneTypeName = "   <> show (spiPhoneTypeName x)
       <> ", spiStateTypeName = "   <> show (spiStateTypeName x)
+      <> ", spiStateConsName = "   <> show (spiStateConsName x)
       <> ", spiDefStateName = "    <> show (spiDefStateName x)
       <> ", spiStateDictionary = " <> show (spiStateDictionary x)
       <> ", spiWordTypeNames = "   <> show (spiWordTypeNames x)
@@ -875,7 +921,7 @@ type MultiPhoneName = NonEmpty PhoneName
 type MulExp = NonEmpty Exp
 
 
-annFuncName :: TrieAnnotation -> Q Name
+annFuncName :: TrieAnnotation -> QS Name
 annFuncName ann = newName $ varName $ show ann
 
 eitherToRWST :: (Monoid w, Monad m) => Either w a -> RWST r w s m (Maybe a)
@@ -900,7 +946,7 @@ constructFunctionsBothX
   -- -> [CharPattern]
   -- -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
-  -> Q (Either [String] ([Dec],(Name, Name)))
+  -> QS (Either [String] ([Dec],(Name, Name)))
 constructFunctionsBothX spi bl trie
   = constructFunctionsBoth spi bl trie "startParser" "restParser"
 
@@ -913,7 +959,7 @@ constructFunctionsBoth
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
   -> String
   -> String
-  -> Q (Either [String] ([Dec],(Name, Name)))
+  -> QS (Either [String] ([Dec],(Name, Name)))
 constructFunctionsBoth spi bl trie funNomStrt funNomRst = do
   let ((trieS, trieNS), trie2) = splitTrie trie
   -- Construct the 
@@ -941,7 +987,8 @@ constructFunctionsBoth spi bl trie funNomStrt funNomRst = do
                 [| do { st <- State.get ; pkc <- $(peekCharQ') ; ($(return $ VarE nom2) st pkc) <|> ( $(return $ VarE nom3) st pkc) } |]
               let phoneType = spiPhoneTypeName spi
                   stateType = spiStateTypeName spi
-              functionType    <- [t| $(parserTQ (VarT stateType)) (NonEmpty $(return $ VarT phoneType)) |]
+                  stateCons = spiStateConsName spi
+              functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty $(return $ ConT phoneType)) |]
               -- Might want to check these strings are valid...
               funNom1 <- newName $ varName funNomStrt
               funNom2 <- newName $ varName funNomRst
@@ -958,7 +1005,7 @@ constructFunctionsPat
   -> [CharPattern]
   -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
-  -> Q (Either [String] ([Dec],Name))
+  -> QS (Either [String] ([Dec],Name))
 constructFunctionsPat spi cps stVals trie
   = fmap getIt <$> constructFunctionsS spi cps stVals trie
   where getIt (decs,_,nom) = (decs,nom)
@@ -966,7 +1013,7 @@ constructFunctionsPat spi cps stVals trie
 constructFunctions 
   :: StaticParserInfo
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
-  -> Q (Either [String] ([Dec], Name))
+  -> QS (Either [String] ([Dec], Name))
 constructFunctions spi trie
   = fmap getIt <$> constructFunctionsS spi [] (S.empty, M.empty) trie
   where getIt (decs,_,nom) = (decs,nom)
@@ -975,7 +1022,7 @@ constructFunctionsB
   :: Bool
   -> StaticParserInfo
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
-  -> Q (Either [String] ([Dec], Name))
+  -> QS (Either [String] ([Dec], Name))
 constructFunctionsB bl spi trie
   = fmap getIt <$> (constructFunctionsSB bl) spi [] (S.empty, M.empty) trie
   where getIt (decs,_,nom) = (decs,nom)
@@ -985,7 +1032,7 @@ constructFunctionsS
   -> [CharPattern]
   -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
-  -> Q (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool), Name))
+  -> QS (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool), Name))
 constructFunctionsS = constructFunctionsSB True
 
 constructFunctionsSB
@@ -994,13 +1041,14 @@ constructFunctionsSB
   -> [CharPattern]
   -> (S.Set TrieAnnotation, M.Map TrieAnnotation Bool)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
-  -> Q (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool), Name))
+  -> QS (Either [String] ([Dec],(S.Set TrieAnnotation, M.Map TrieAnnotation Bool), Name))
 constructFunctionsSB toReduce spi xcp stVals trie = do
+  uniqInt  <- qRunIO $ hashUnique <$> newUnique
   blName   <- newName "isCharMaj"
   peekName <- newName "peekedChar"
   grdName  <- newName "c"
   stateNom <- newName "parseState"
-  topFuncName <- newName "mainParse"
+  topFuncName <- newName ("mainParse" <> (show uniqInt))
   let rslts = forMap subTries $ \(cp, ((tann, mval), subTrie )) -> createCasesForStart grdName stateNom spi cp tann mval 
   case (liftEitherList rslts) of
     (Left errs)    -> return (Left $ concat errs)
@@ -1022,7 +1070,8 @@ constructFunctionsSB toReduce spi xcp stVals trie = do
           casePrime = CaseE (VarE peekName) matches
           caseStuff = if toReduce then (groupCaseGuards casePrime) else casePrime
           stateType = spiStateTypeName spi
-      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (VarT stateType)) (NonEmpty $(return $ VarT phoneType)) ) |]
+          stateCons = spiStateConsName spi
+      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty $(return $ ConT phoneType)) ) |]
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP stateNom, VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
@@ -1051,7 +1100,7 @@ constructFunctions'
   -> [CharPattern]
   -> TrieAnnotation
   -> Maybe (PhoneResult, Caseness)
-  -> RWST () [String] (S.Set TrieAnnotation, M.Map TrieAnnotation Bool) Q [Dec] -- ?
+  -> RWST () [String] (S.Set TrieAnnotation, M.Map TrieAnnotation Bool) QS [Dec] -- ?
 constructFunctions' _ _ _ _ _ _ TrieLeaf _ = return []
 constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal = do
   -- uh...
@@ -1482,14 +1531,16 @@ condCase blName mkMaj mkMin exprs
   where
     ret = VarE 'return
 
+-- Found an error here:
 condCaseExp :: Exp -> (Exp -> Exp) -> (Exp -> Exp) -> MulExp -> Exp
 condCaseExp blExpr mkMaj mkMin exprs
-  | (fmap mkMaj exprs == fmap mkMin exprs) = formMulExp $ fmap (\expr -> AppE ret (mkMaj expr)) exprs
+  -- | (fmap mkMaj exprs == fmap mkMin exprs) = formMulExp $ fmap (\expr -> AppE ret (mkMaj expr)) exprs
+  | (fmap mkMaj exprs == fmap mkMin exprs) = returnExp $ formMulExp $ fmap (\expr -> mkMaj expr) exprs
   | otherwise = 
     CondE 
       blExpr 
-      (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMaj expr) 
-      (AppE ret $ formMulExp $ forMap exprs $ \expr -> mkMin expr)
+      (returnExp $ formMulExp $ forMap exprs $ \expr -> mkMaj expr) 
+      (returnExp $ formMulExp $ forMap exprs $ \expr -> mkMin expr)
   where
     ret = VarE 'return
 
@@ -1651,10 +1702,10 @@ peekCharE = AppE (VarE 'lift) (VarE 'AT.peekChar)
 peekCharE' :: Exp
 peekCharE' = AppE (VarE 'lift) (VarE 'AT.peekChar')
 
-peekCharQ :: Q Exp
+peekCharQ :: Quote q => q Exp
 peekCharQ  = [| lift AT.peekChar  |]
 
-peekCharQ' :: Q Exp
+peekCharQ' :: Quote q => q Exp
 peekCharQ' = [| lift AT.peekChar' |]
 
 parserT :: Type
@@ -1670,10 +1721,10 @@ parserT' styp typ = AppT (AppT (AppT (ConT ''State.StateT) styp) (ConT ''AT.Pars
 
 -- AppT (AppT (ConT ''State.StateT) styp) (ConT ''AT.Parser)
 
-parserTQ :: Type -> Q Type
+parserTQ :: Quote q => Type -> q Type
 parserTQ theType = [t| State.StateT $(pure theType) AT.Parser |]
 
-parserTQ' :: Type -> Type -> Q Type
+parserTQ' :: Quote q => Type -> Type -> q Type
 parserTQ' stType outType = [t| State.StateT $(pure stType) AT.Parser $(pure outType) |]
 
 eqJustCon :: Exp -> Name -> Exp
@@ -1796,6 +1847,7 @@ exampleInfo
       (mkName "isPunctChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
+      (mkName "PhonemeState2")
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
@@ -1815,6 +1867,7 @@ exampleInfo2
       (mkName "isPunctChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
+      (mkName "PhonemeState2")
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")])))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
@@ -1839,6 +1892,7 @@ exampleInfo3
       (mkName "isPunctChar")
       (mkName "Phoneme")
       (mkName "PhonemeState")
+      (mkName "PhonemeState2")
       (mkName "defStateVal")
       M.empty -- filled in by `makeTheParser`
       -- (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.

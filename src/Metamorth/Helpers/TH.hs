@@ -15,6 +15,10 @@ module Metamorth.Helpers.TH
   , forMap
   , first
   , second
+  -- * IO Helpers
+  , addLocalDependentFile
+  -- * Unusual helpers
+  , newerName
   -- * Basic helpers
   , charE
   , strE
@@ -27,6 +31,7 @@ module Metamorth.Helpers.TH
   , nothingE
   , justE
   , retE
+  , returnExp
   , infixBind
   , infixCont
   ) where
@@ -39,11 +44,19 @@ import Data.List.NonEmpty (NonEmpty(..))
 
 import Data.List (intersperse, partition)
 
-import Language.Haskell.TH.Syntax
+import Language.Haskell.TH.Syntax hiding (lift)
 
 import THLego.Helpers (sumCon, fieldBang, intersperseInfixE)
 
 import GHC.Show qualified as GHCShow
+
+import System.Directory
+
+-- | Add a local file
+addLocalDependentFile :: FilePath -> Q ()
+addLocalDependentFile fp = do
+  absFp <- runIO $ makeAbsolute fp
+  addDependentFile absFp
 
 maybeType :: Type -> Type
 maybeType typ = AppT (ConT ''Maybe) typ
@@ -81,12 +94,12 @@ sumAdtDecDeriv :: Name -> [(Name, [Type])] -> [Type] -> Dec
 sumAdtDecDeriv a b ders =
   DataD [] a [] Nothing (fmap (uncurry sumCon) b) [DerivClause Nothing ders]
 
-recordAdtDecDeriv :: Name -> [(Name, Type)] -> [Type] -> Dec
-recordAdtDecDeriv typeName fields ders =
+recordAdtDecDeriv :: Name -> Name -> [(Name, Type)] -> [Type] -> Dec
+recordAdtDecDeriv typeName consName fields ders =
   DataD [] typeName [] Nothing [con] [DerivClause Nothing ders]
   where
     con =
-      RecC typeName (fmap (\(fieldName, fieldType) -> (fieldName, fieldBang, fieldType)) fields)
+      RecC consName (fmap (\(fieldName, fieldType) -> (fieldName, fieldBang, fieldType)) fields)
 
 -- | Create a `Show` instance for a simple sum
 --   type where each constructor is represented
@@ -290,6 +303,15 @@ andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
 
 retE :: Exp
 retE = VarE 'return
+
+-- | A version of `return` that uses `($)` to
+--   get the "right" answer.
+returnExp :: Exp -> Exp
+returnExp expr = InfixE (Just (VarE 'return)) (VarE '($)) (Just expr)
+
+-- | Generates a new name using a new name.
+newerName :: String -> Q Name
+newerName str = newName . show =<< newName str
 
 -- [ConP Data.Either.Right [] [VarP x_1]]
 

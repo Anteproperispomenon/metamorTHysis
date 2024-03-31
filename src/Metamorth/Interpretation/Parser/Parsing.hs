@@ -138,20 +138,57 @@ parseClassNameRS = do
   case (M.lookup nm theMap) of
     Nothing -> do
         phoneName <- ask
-        tell ["Error with phoneme \"" <> phoneName <> "\": Calls for undefined class \"" <> nm <> "\"."]
+        mkError $ "Error with phoneme \"" <> phoneName <> "\": Calls for undefined class \"" <> nm <> "\"."
         return $ CharClassR nm
     (Just _) -> return $ CharClassR nm
 
 -- | The main character selector parser, after
 --   all the specialised ones have been run.
 parseNonSpace :: AT.Parser Char
-parseNonSpace = AT.satisfy (\x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!'))
+parseNonSpace = AT.satisfy isNonSpace
+
+isNonSpace :: Char -> Bool
+isNonSpace = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!')
+
+isNonSpace' :: Char -> Bool
+isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*')
 
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
 
 parseNonSpaceRS :: ParserParser CharPatternRaw
 parseNonSpaceRS = lift parseNonSpaceR
+
+
+parseMultiNonSpace :: AT.Parser (Either T.Text Char)
+parseMultiNonSpace = do
+  c1 <- AT.satisfy isNonSpace'
+  nxt <- AT.peekChar
+  case nxt of
+    Nothing  -> return $ Right c1
+    (Just x) -> case x of
+      y | isNonSpace' y -> Left . (T.cons c1) <$> AT.takeWhile1 isNonSpace
+      _ -> return $ Right c1
+
+parseMultiNonSpaceS :: ParserParser (Either T.Text Char)
+parseMultiNonSpaceS = do
+  rslt <- lift parseMultiNonSpace
+  case rslt of
+    (Left txt) -> do
+      phone <- ask
+      warn $ "Phoneme \"" <> phone <> "\" is missing spaces in one of its patterns: ... " <> (T.unpack txt) <> " ..."
+      return rslt
+    _ -> return rslt
+
+parseMultiNonSpaceRS :: ParserParser [CharPatternRaw]
+parseMultiNonSpaceRS = do
+  rslt <- parseMultiNonSpaceS
+  case rslt of
+    (Left txt) -> return $ map PlainCharR $ T.unpack txt
+    (Right ch) -> return $ [PlainCharR ch]
+
+mkList :: (Functor f) => f a -> f [a]
+mkList fx = (:[]) <$> fx
 
 --------------------------------
 -- "State-must-be" Parser(s)
@@ -179,18 +216,18 @@ parseStateValRS = do
   let mVal = M.lookup st stDict
   case mVal of
     Nothing -> do 
-      tell ["Couldn't find state name \"" <> st <> "\" in dictionary."]
+      mkError $ "Couldn't find state name \"" <> st <> "\" in dictionary."
       return Nothing
     (Just Nothing) -> case (checkBoolString val) of
       Nothing -> do 
-        tell ["Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."]
+        mkError $ "Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."
         return Nothing
       (Just bl) -> return $ Just (ValStateR st (Right bl))
     (Just (Just valSet)) -> if (val' `S.member` valSet)
       then (return $ Just $ ValStateR st (Left val'))
       else case (checkBoolString val) of
         Nothing -> do
-          tell ["Couldn't find \"" <> val' <> "\" as an option for state \"" <> st <> "\"."]
+          mkError $ "Couldn't find \"" <> val' <> "\" as an option for state \"" <> st <> "\"."
           return Nothing
         (Just bl) -> return $ Just (ValStateR st (Right bl))
 
@@ -201,7 +238,7 @@ parseStateValRS' = do
   case cpat of
     Nothing -> case wrtr of
       Nothing    -> fail "Couldn't parse a state-val expression"
-      (Just err) -> fail err
+      (Just err) -> fail $ show err
     (Just cptrn) -> return cptrn
 
 safeHead :: [a] -> Maybe a
@@ -247,11 +284,11 @@ parseStateSetRS = do
   let mVal = M.lookup st stDict
   case mVal of
     Nothing -> do 
-      tell ["Couldn't find state name \"" <> st <> "\" in dictionary."]
+      mkError $ "Couldn't find state name \"" <> st <> "\" in dictionary."
       return Nothing
     (Just Nothing) -> case (checkBoolString val) of
       Nothing -> do 
-        tell ["Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."]
+        mkError $ "Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."
         return Nothing
       (Just bl) -> return $ Just (SetStateR st (Right bl))
     (Just (Just valSet)) -> if (val' `S.member` valSet)
@@ -261,7 +298,7 @@ parseStateSetRS = do
       -- set it to.
       else case (checkOffString val) of
         Nothing -> do
-          tell ["Couldn't find \"" <> val' <> "\" as an option for state \"" <> st <> "\"."]
+          mkError $ "Couldn't find \"" <> val' <> "\" as an option for state \"" <> st <> "\"."
           return Nothing
         (Just bl) -> return $ Just (SetStateR st (Right bl))
 
@@ -271,7 +308,7 @@ parseStateSetRS' = do
   case cpat of
     Nothing -> case wrtr of
       Nothing    -> fail "Couldn't parse a state-set expression"
-      (Just err) -> fail err
+      (Just err) -> fail $ show err
     (Just cptrn) -> return cptrn
 
 
@@ -299,6 +336,8 @@ parseClassDec = do
   skipHoriz
   -- Previously, there would be an issue here if "\ " occurred
   -- in the text. Now, it is interpreted as "\\ ".
+  -- TODO : Check for characters with no spaces between them
+  -- and report a warning.
   chrs <- AT.sepBy1' (parseCodepoint <|> parseEscaped <|> parseNonSpace) (skipHoriz1)
   return $ (T.unpack className, S.fromList chrs)
 
@@ -309,7 +348,7 @@ parseClassDecS = do
   (clName, clSet) <- lift $ parseClassDec
   theMap <- gets ppsClassDictionary
   case (M.lookup clName theMap) of
-    (Just _) -> tell ["Error: class \"" <> clName <> "\" has multiple definitions."]
+    (Just _) -> mkError $ "Error: class \"" <> clName <> "\" has multiple definitions."
     Nothing  -> do
         let newMap = M.insert clName clSet theMap
         modify $ \x -> x {ppsClassDictionary = newMap}
@@ -347,17 +386,17 @@ parseUnspecifiedClassOrState = do
                   (Right False) -> "  state " <> thingName <> " : " <> (T.unpack txt)
                   (Left   True) -> "  class/state " <> thingName <> " : " <> (T.unpack txt)
                   (Left  False) -> "  state " <> thingName
-      tell ["Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n" <> outp <> "\n"]
+      mkError $ "Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n" <> outp <> "\n"
       -- lift parseEndComment
     '#' -> do
-      tell ["Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n  state " <> thingName <> "\n"]
+      mkError $ "Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n  state " <> thingName <> "\n"
       -- lift parseEndComment
     '\n' -> do
-      tell ["Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n  state " <> thingName <> "\n"]
+      mkError $ "Unspecified declaration \"" <> thingName <> "\" in Class/State section; did you mean to write\n\n  state " <> thingName <> "\n"
       -- lift parseEndComment
     _ -> do
       txt <- lift $ AT.takeWhile (\x -> (x /= '#') && (x /= '\n'))
-      tell ["Unspecified declaration in Class/State section:\n\n" <> thingName <> " " <> (T.unpack txt) <> "\n"]
+      mkError $ "Unspecified declaration in Class/State section:\n\n" <> thingName <> " " <> (T.unpack txt) <> "\n"
       -- lift parseEndComment
 
 -- see also
@@ -430,7 +469,7 @@ parseStateDecS = do
   (stName, stSet) <- lift $ parseStateDec
   theMap <- gets ppsStateDictionary
   case (M.lookup stName theMap) of
-    (Just _) -> tell ["Error: state \"" <> stName <> "\" has multiple definitions."]
+    (Just _) -> mkError $ "Error: state \"" <> stName <> "\" has multiple definitions."
     Nothing  -> do
         let newMap = M.insert stName stSet theMap
         modify $ \x -> x {ppsStateDictionary = newMap}
@@ -539,25 +578,26 @@ parsePhonemePatS = do
   
   -- Set the internal phoneme name to phoneName.
   runOnPhoneme phoneName $ do
-    thePats <- AT.sepBy1' 
-      ( parseCodepointRS 
-        <|> parseClassNameRS 
-        <|> parseEscapedRS 
-        <|> parseStartPointS 
-        <|> parseEndPointS 
-        <|> parseNotStartS
-        <|> parseNotEndS
-        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go (almost) last.
+    thePats <- concat <$> AT.sepBy1' 
+      ( (mkList parseCodepointRS)
+        <|> (mkList parseClassNameRS) 
+        <|> (mkList parseEscapedRS  )
+        <|> (mkList parseStartPointS)
+        <|> (mkList parseEndPointS  )
+        <|> (mkList parseNotStartS  )
+        <|> (mkList parseNotEndS    )
+        <|> (parseMultiNonSpaceRS   )
+        <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
-        <|> parseStateValRS'
-        <|> parseStateSetRS'
+        <|> (mkList parseStateValRS')
+        <|> (mkList parseStateSetRS')
       ) 
       (lift skipHoriz1)
     -- hmm...
     sdict <- gets ppsStateDictionary
     let ePhonePats = processRawPhonePattern sdict (RawPhonemePattern specs thePats)
     case ePhonePats of
-      (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
+      (Left  errs) -> mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemePattern pn rslt
 
 parsePhonemePatMulti :: ParserParser ()
@@ -573,35 +613,36 @@ parsePhonemePatMulti = do
   
   -- Set the internal phoneme name to phoneName.
   runOnPhoneme phoneName $ do
-    thePats <- AT.sepBy1' 
-      ( parseCodepointRS 
-        <|> parseClassNameRS 
-        <|> parseEscapedRS 
-        <|> parseStartPointS
-        <|> parseEndPointS
-        <|> parseNotStartS
-        <|> parseNotEndS
-        <|> parseNonSpaceRS -- this will consume almost any individual `Char`, so it must go (almost) last.
+    thePats <- concat <$> AT.sepBy1' 
+      ( (mkList parseCodepointRS )
+        <|> (mkList parseClassNameRS)
+        <|> (mkList parseEscapedRS  )
+        <|> (mkList parseStartPointS)
+        <|> (mkList parseEndPointS  )
+        <|> (mkList parseNotStartS  )
+        <|> (mkList parseNotEndS    )
+        <|> (parseMultiNonSpaceRS   )
+        <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
-        <|> parseStateValRS'
-        <|> parseStateSetRS'
+        <|> (mkList parseStateValRS')
+        <|> (mkList parseStateSetRS')
       ) 
       (lift skipHoriz1)
     -- hmm...
     sdict <- gets ppsStateDictionary
     let ePhonePats = processRawPhonePattern sdict (RawPhonemePattern specs thePats)
     case ePhonePats of
-      (Left  errs) -> tell $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
+      (Left  errs) -> mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemesPattern phones rslt
 
 ----------------------------------------------------------------
 -- Full File Parsers
 ----------------------------------------------------------------
 
-parseOrthographyFile :: AT.Parser (HeaderData, ParserParsingState, [String])
+parseOrthographyFile :: AT.Parser (HeaderData, ParserParsingState, [String], [String])
 parseOrthographyFile = do
   hdr <- parseOrthographyProps
-  (_rslt, stt, errs) <- embedParserParser $ do
+  (_rslt, stt, msgs) <- embedParserParser $ do
     -- Parse the class instances
     parseClassDecSection
     void $ lift $ many parseEndComment
@@ -626,13 +667,14 @@ parseOrthographyFile = do
     -- hmm...
 
   
-  let phonePatsM  = ppsPhonemePatterns stt
+  let (errs, wrns, notes) = partitionMessages msgs
+      phonePatsM  = ppsPhonemePatterns stt
       phoneNames  = M.keys phonePatsM
       phoneNames' = concatMap (NE.toList . prPhonemes) phoneNames
       phoneGroups = groupBy eqOnPN phoneNames'
       wrongPhones = filter (not . sameArgsPN) phoneGroups
       phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
-  return (hdr,stt,errs ++ phoneErrs)
+  return (hdr,stt,errs ++ phoneErrs, wrns)
 
 getStrPN :: [PhoneName] -> String
 getStrPN [] = "<??>"

@@ -5,6 +5,7 @@ module Metamorth.Helpers.Map
   , forMaybeMap
   , forMaybeMapWithKey
   , forIntersectionWithKey
+  , lookupE
   ) where
 
 import Data.Functor.Identity
@@ -43,6 +44,13 @@ forMaybeMap mp f = M.mapMaybe f mp
 
 forMaybeMapWithKey :: M.Map k a -> (k -> a -> Maybe b) -> M.Map k b
 forMaybeMapWithKey mp f = M.mapMaybeWithKey f mp
+
+-- | Lookup an item, returning @Left $ show key@ if the
+--   key isn't present.
+lookupE :: (Ord k, Show k) => k -> M.Map k a -> Either String a
+lookupE k mp = case (M.lookup k mp) of
+  (Nothing) -> Left $ show k
+  (Just  x) -> Right x
 
 {- whoops
 mapMapMaybeWithKey :: (k -> a -> Maybe b) -> M.Map k a -> M.Map k b

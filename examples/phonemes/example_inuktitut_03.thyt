@@ -9,6 +9,7 @@ aspect length : short long
   ai
 
 * consonant
+  ** common
   p 
   t 
   k 
@@ -30,7 +31,7 @@ aspect length : short long
   qq
 
   glot
-
+  ** rare
   # Rarer consonants
   b
   hx

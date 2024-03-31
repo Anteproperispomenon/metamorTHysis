@@ -25,7 +25,6 @@ source-repository head
 
 library
   exposed-modules:
-      Lib
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
       Metamorth.Helpers.IO
@@ -34,8 +33,12 @@ library
       Metamorth.Helpers.Misc
       Metamorth.Helpers.Ord
       Metamorth.Helpers.Parsing
+      Metamorth.Helpers.Q
+      Metamorth.Helpers.QP
+      Metamorth.Helpers.QS
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
+      Metamorth.Interaction.TH
       Metamorth.Interpretation.Parser.Parsing
       Metamorth.Interpretation.Parser.Parsing.Trie
       Metamorth.Interpretation.Parser.Parsing.Types
@@ -64,6 +67,7 @@ library
     , base >=4.7 && <5
     , bytestring
     , containers
+    , directory
     , template-haskell
     , text
     , th-lego
@@ -92,6 +96,7 @@ executable metamorTHysis-exe
     , base >=4.7 && <5
     , bytestring
     , containers
+    , directory
     , metamorTHysis
     , template-haskell
     , text
@@ -105,6 +110,9 @@ test-suite metamorTHysis-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Test.TH.Basic
+      Test.TH.Grouped
+      Test.TH.TwoOrths
       Paths_metamorTHysis
   hs-source-dirs:
       test
@@ -122,6 +130,7 @@ test-suite metamorTHysis-test
     , base >=4.7 && <5
     , bytestring
     , containers
+    , directory
     , metamorTHysis
     , template-haskell
     , text

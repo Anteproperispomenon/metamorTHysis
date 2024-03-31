@@ -218,7 +218,7 @@ stParseGroups = do
       let inv = PhonemeGroup $ M.fromList grps
       modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
     (Just _) -> do
-      phons <- catMaybes <$> some stParsePhoneme
+      phons <- catMaybes <$> some (stParsePhoneme <* (some stParseBlankLine) )
       let inv = PhonemeSet $ M.fromList phons
       modifyStructure $ \pps -> Right $ pps { ppsPhonemeInventory = inv }
 
@@ -247,7 +247,7 @@ stParseGroups' = do
       return inv
 
 -- | The top-level parser for parsing (groups of) phonemes.
---   This version modifies the state *and returns
+--   This version modifies the state *and* returns
 --   the `PhonemeInventory`.
 stParseGroupsB :: PhonemeParser PhonemeInventory
 stParseGroupsB = do

@@ -1,6 +1,15 @@
 module Metamorth.Interpretation.Parser.Parsing.Types
+  -- * Parser Types
   ( ParserParser
   , ParserParsingState(..)
+  , ParserMessage(..)
+  , mkError
+  , mkErrors
+  , warn
+  , warns
+  , message
+  , messages
+  , partitionMessages
   , addPhonemePattern
   , addPhonemesPattern
   , PhoneName(..)
@@ -32,17 +41,70 @@ import Control.Monad.Trans.RWS.CPS
 import Metamorth.Helpers.Parsing
 import Metamorth.Interpretation.Parser.Types
 
+import Data.String (IsString(..))
+
 -- Based heavily on Metamorth.Interpretation.Phonemes.Parsing.Types 
 
 --------------------------------
 -- Types for Parsing
+
+-- | An error type for Parsers. There are multiple
+--   levels of messages, from simple messages, to
+--   warnings, to errors.
+data ParserMessage
+   = ParserError   String
+   | ParserWarning String
+   | ParserMessage String
+   deriving (Eq)
+
+warn :: String -> ParserParser ()
+warn str = tell [ParserWarning str]
+
+warns :: [String] -> ParserParser ()
+warns strs = tell $ map ParserWarning strs
+
+message :: String -> ParserParser ()
+message str = tell [ParserMessage str]
+
+messages :: [String] -> ParserParser ()
+messages strs = tell $ map ParserMessage strs
+
+mkError :: String -> ParserParser ()
+mkError str = tell [ParserError str]
+
+mkErrors :: [String] -> ParserParser ()
+mkErrors strs = tell $ map ParserError strs
+
+instance Show ParserMessage where
+  show (ParserError   str) = "Error: "   ++ str
+  show (ParserWarning str) = "Warning: " ++ str
+  show (ParserMessage str) = "Message: " ++ str
+
+-- There's probably a better way to do this.
+
+-- | Partition `ParserMessage`s into three lists,
+--   in the order @(errors, warnings, messages)@.
+partitionMessages :: [ParserMessage] -> ([String], [String], [String])
+partitionMessages [] = ([],[],[])
+partitionMessages ((ParserError   str):msgs) = cons1 str (partitionMessages msgs)
+partitionMessages ((ParserWarning str):msgs) = cons2 str (partitionMessages msgs)
+partitionMessages ((ParserMessage str):msgs) = cons3 str (partitionMessages msgs)
+
+cons1, cons2, cons3 :: String -> ([String], [String], [String]) -> ([String], [String], [String])
+cons1 x (xs,ys,zs) = (x:xs,ys,zs)
+cons2 y (xs,ys,zs) = (xs,y:ys,zs)
+cons3 z (xs,ys,zs) = (xs,ys,z:zs)
+
+-- In order to allow backwards-compatibility.
+instance IsString ParserMessage where
+  fromString str = ParserError str
 
 -- | A `AT.Parser` wrapped in an `RWST`.
 -- 
 --   * The reader holds the name of the phoneme being processed.
 --   * The writer is used to collect error messages
 --   * The state will hold stateful info.
-type ParserParser a = RWST String [String] ParserParsingState AT.Parser a
+type ParserParser a = RWST String [ParserMessage] ParserParsingState AT.Parser a
 
 -- | Use this when running a function that might
 --   error with a phoneme name. e.g.
@@ -98,19 +160,21 @@ data PhoneResult = PhoneResult
 --   errors if any occurred.
 runParserParser :: ParserParser a -> T.Text -> Either String a
 runParserParser prs txt = forParseOnly txt $ do
-  (rslt, _stt, errs) <- runRWST prs "N/A" defParseState
+  (rslt, _stt, msgs) <- runRWST prs "N/A" defParseState
+  let (errs, wrns, nts) = partitionMessages msgs
   case errs of
     [] -> return rslt
     xs -> fail $ intercalate "\n" xs
 
 execParserParser :: ParserParser a -> T.Text -> Either String ParserParsingState
 execParserParser prs txt = forParseOnly txt $ do
-  (_rslt, stt, errs) <- runRWST prs "N/A" defParseState
+  (_rslt, stt, msgs) <- runRWST prs "N/A" defParseState
+  let (errs, wrns, nts) = partitionMessages msgs
   case errs of
     [] -> return stt
     xs -> fail $ intercalate "\n" xs
 
-embedParserParser :: ParserParser a -> AT.Parser (a, ParserParsingState, [String])
+embedParserParser :: ParserParser a -> AT.Parser (a, ParserParsingState, [ParserMessage])
 embedParserParser prs = runRWST prs "N/A" defParseState
 
 -- | A constructor for how phoneme names
