@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -25,6 +25,7 @@ source-repository head
 
 library
   exposed-modules:
+      Metamorth.ForOutput.Char
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
       Metamorth.Helpers.Error
@@ -42,6 +43,9 @@ library
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
       Metamorth.Interaction.TH
+      Metamorth.Interpretation.Output.Parsing
+      Metamorth.Interpretation.Output.Parsing.Types
+      Metamorth.Interpretation.Output.Types
       Metamorth.Interpretation.Parser.Parsing
       Metamorth.Interpretation.Parser.Parsing.Trie
       Metamorth.Interpretation.Parser.Parsing.Types
@@ -53,6 +57,8 @@ library
       Metamorth.Interpretation.Phonemes.TH.Types
       Metamorth.Interpretation.Phonemes.Types
   other-modules:
+      Paths_metamorTHysis
+  autogen-modules:
       Paths_metamorTHysis
   hs-source-dirs:
       src
@@ -82,6 +88,8 @@ library
 executable metamorTHysis-exe
   main-is: Main.hs
   other-modules:
+      Paths_metamorTHysis
+  autogen-modules:
       Paths_metamorTHysis
   hs-source-dirs:
       app
@@ -116,6 +124,8 @@ test-suite metamorTHysis-test
       Test.TH.Basic
       Test.TH.Grouped
       Test.TH.TwoOrths
+      Paths_metamorTHysis
+  autogen-modules:
       Paths_metamorTHysis
   hs-source-dirs:
       test

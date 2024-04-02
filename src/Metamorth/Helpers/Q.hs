@@ -75,7 +75,7 @@ getLastName str
   , isOpChar c
   = ("", str)
   -- See whether the suffix is a standard word...
-  | (c:cs) <- strSfx
+  | (c:_) <- strSfx
   , (not $ isOpChar c)
   = (strPfx, strSfx)
   -- Qualified Operators

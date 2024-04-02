@@ -1,3 +1,20 @@
+{-|
+Module      : Metamorth.Helpers.Error
+Description : Very Basic Error Types
+Copyright   : (c) David Wilson, 2024
+License     : BSD-3
+
+Simple Error type that has three levels
+of message: plain messages, warnings,
+and errors. 
+
+`Metamorth.Helpers.Error.RWS` and 
+`Metamorth.Helpers.Error.Writer` have
+helpers when dealing with those specific
+Monad transformers.
+
+-}
+
 module Metamorth.Helpers.Error
   ( ParserMessage(..)
   , partitionMessages
