@@ -544,7 +544,6 @@ parsePhoneme1 :: AT.Parser PhoneName
 parsePhoneme1 = parsePhonemeBrack <|> parseAlt
   where 
     parseAlt = (\x -> (PhoneName (T.unpack x) [])) <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
-          
 
 parsePhonemeList :: AT.Parser (NonEmpty PhoneName)
 parsePhonemeList = do
@@ -679,15 +678,6 @@ parseOrthographyFile = do
 getStrPN :: [PhoneName] -> String
 getStrPN [] = "<??>"
 getStrPN ((PhoneName nom _):_) = nom
-
--- | Parse the end of line, possibly preceded by a comment.
-parseEndComment :: AT.Parser ()
-parseEndComment = do
-  skipHoriz
-  AT.option () $ do
-    _ <- AT.char '#'
-    AT.skipWhile (\x -> x /= '\n' && x /= '\r')
-  AT.endOfLine
 
 
 -- :m + Metamorth.Interpretation.Parser.Parsing Metamorth.Interpretation.Parser.Types Data.Either Control.Monad

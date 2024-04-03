@@ -4,6 +4,7 @@ module Metamorth.Helpers.Parsing
   , skipHorizontalSpace
   , skipHoriz1
   , skipHorizontalSpace1
+  , parseEndComment
 
   -- * Parsing identifiers
   , takeIdentifier
@@ -101,7 +102,14 @@ parseFileName1 = do
 parseFileName2 :: AT.Parser T.Text
 parseFileName2 = AT.takeWhile $ \c -> (isAlphaNum c) || (c == '_') || (c == '-') || (c == '/') || (c == '\\') || (c == '.')
 
-
+-- | Parse the end of line, possibly preceded by a comment.
+parseEndComment :: AT.Parser ()
+parseEndComment = do
+  skipHoriz
+  AT.option () $ do
+    _ <- AT.char '#'
+    AT.skipWhile (\x -> x /= '\n' && x /= '\r')
+  AT.endOfLine
 
 
 -- | The same as `AT.parseOnly` but with a different argument order.
