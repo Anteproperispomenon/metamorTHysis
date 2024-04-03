@@ -1,6 +1,8 @@
 module Metamorth.Interpretation.Output.Parsing
-  (
-
+  -- * Main Parsers
+  ( parseOutputFile
+  -- * Other Parsers
+  , parsePhonemeListS
   ) where
 
 import Control.Applicative
@@ -24,7 +26,7 @@ import Data.Text (Text)
 import Metamorth.Helpers.Char
 import Metamorth.Helpers.List
 import Metamorth.Helpers.Parsing
-import Metamorth.Helpers.Error
+import Metamorth.Helpers.Error ( ParserMessage )
 import Metamorth.Helpers.Error.RWS
 
 import Metamorth.Interpretation.Output.Parsing.Types
@@ -37,6 +39,29 @@ import Data.Set        qualified as S
 -- `Metamorth.Interpretation.Parser.Parsing`.
 
 ----------------------------------------------------------------
+-- Main Parser
+----------------------------------------------------------------
+
+-- | The main runner of the output file.
+parseOutputFile 
+  -- | The `S.Set` of group names.
+  :: S.Set String 
+  -- | A `M.Map` from trait names to the values
+  --   the trait can take (if applicable).
+  -> M.Map String (Maybe (S.Set String)) 
+  -- | A `M.Map` from aspect names to the values
+  --   the aspect can take.
+  -> M.Map String (S.Set String)
+  -- | A `S.Set` of the phonemes used for this
+  --   output.
+  -> S.Set String
+  -- | The input text.
+  -> Text
+  -> AT.Parser ((),[ParserMessage])
+parseOutputFile grps trts asps phones txt = do
+  return ((), [])
+
+----------------------------------------------------------------
 -- Helper Parsers
 ----------------------------------------------------------------
 
@@ -45,6 +70,9 @@ parseCodepoint :: AT.Parser Char
 parseCodepoint = do
   _ <- "U+"
   chr <$> AT.hexadecimal
+
+parseCodepointRS :: OutputParser CharPatternRaw
+parseCodepointRS = PlainCharR <$> lift parseCodepoint
 
 -- | Parse an escaped character.
 -- 
@@ -66,6 +94,9 @@ parseEscaped = do
     '%' -> consProd '%'
     's' -> consProd ' '
     y   -> consProd y
+
+parseEscapedRS :: OutputParser CharPatternRaw
+parseEscapedRS = PlainCharR <$> lift parseEscaped
 
 -- | Get an import declaration and check
 --   that it is a valid import.
@@ -184,6 +215,7 @@ parseStateValR = do
   return $ ValStateR st (T.unpack val)
 -}
 
+{-
 parseStateValRS :: OutputParser (Maybe CharPatternRaw)
 parseStateValRS = do
   (st, val) <- lift parseStateVal
@@ -216,6 +248,8 @@ parseStateValRS' = do
       Nothing    -> fail "Couldn't parse a state-val expression"
       (Just err) -> fail $ show err
     (Just cptrn) -> return cptrn
+
+-}
 
 safeHead :: [a] -> Maybe a
 safeHead []    = Nothing
@@ -292,6 +326,13 @@ parseStateSetRS' = do
 -- Case Type parsers
 ----------------------------------------------------------------
 
+getCaseTypeS :: OutputParser OutputCase
+getCaseTypeS = do
+  mct <- optional $ lift getCaseType
+  case mct of
+    (Just ct) -> return ct
+    Nothing   -> gets opsDefaultCasing
+
 -- | Get the case type of this pattern.
 getCaseType :: AT.Parser OutputCase
 getCaseType = AT.peekChar' >>= \case
@@ -327,12 +368,8 @@ getCaseType' = AT.peekChar >>= \case
   (Just 'A') -> AT.anyChar >> return (\x -> OCDetect x CAAll)
   _ -> return $ \x -> OCDetect x CATitle
 
-
-
-
-
 ----------------------------------------------------------------
--- Multiple Phoneme list parsers
+-- Phoneme list parsers
 ----------------------------------------------------------------
 
 
@@ -373,9 +410,18 @@ parsePhonemeList = do
     parsePhoneme1
   return (fstPhone :| rstPhones)
 
+parsePhonemeListS' :: OutputParser (NonEmpty PhonePatternRaw)
+parsePhonemeListS' = do
+  lift skipHoriz
+  fstPhone  <- (lift parsePhoneme1) <|> parseStateValRSX'
+  rstPhones <- AT.many' $ do
+    lift skipHoriz1
+    (lift parsePhoneme1) <|> parseStateValRSX'
+  return (fstPhone :| rstPhones)
+
 parsePhonemeListS :: OutputParser (NonEmpty PhonePatternRaw)
 parsePhonemeListS = do
-  lst@(phoneFst :| phoneRst) <- lift parsePhonemeList
+  lst@(phoneFst :| phoneRst) <- parsePhonemeListS'
   let phoneName = showPPRs (NE.toList lst)
   -- Use the phone name when trying the next check.
   phoneLast <- fmap join $ optional $ runOnPhoneme phoneName $ do
@@ -456,6 +502,143 @@ parseNextCheck = do
     _ <- AT.char '='
     takeIdentifier isAlpha isFollowId
   return (T.unpack strProp, T.unpack <$> strVal)
+
+{-
+parseStateValR :: AT.Parser CharPatternRaw
+parseStateValR = do
+  (st,val) <- parseStateVal
+  return $ ValStateR st (T.unpack val)
+-}
+
+parseStateValRSX :: OutputParser (Maybe PhonePatternRaw)
+parseStateValRSX = do
+  (st, val) <- lift parseStateVal
+  let val' = T.unpack val
+  stDict <- gets opsStateDictionary
+  let mVal = M.lookup st stDict
+  case mVal of
+    Nothing -> do 
+      mkError $ "Couldn't find state name \"" <> st <> "\" in dictionary."
+      return Nothing
+    (Just Nothing) -> case (checkBoolString val) of
+      Nothing -> do 
+        mkError $ "Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."
+        return Nothing
+      (Just bl) -> return $ Just (PhoneValStateR st (Right bl))
+    (Just (Just valSet)) -> if (val' `S.member` valSet)
+      then (return $ Just $ PhoneValStateR st (Left val'))
+      else case (checkBoolString val) of
+        Nothing -> do
+          mkError $ "Couldn't find \"" <> val' <> "\" as an option for state \"" <> st <> "\"."
+          return Nothing
+        (Just bl) -> return $ Just (PhoneValStateR st (Right bl))
+
+parseStateValRSX' :: OutputParser PhonePatternRaw
+parseStateValRSX' = do
+  (cpat, wrtr) <- listens safeHead parseStateValRSX
+  case cpat of
+    Nothing -> case wrtr of
+      Nothing    -> fail "Couldn't parse a state-val expression"
+      (Just err) -> fail $ show err
+    (Just cptrn) -> return cptrn
+
+----------------------------------------------------------------
+-- Character list parsers
+----------------------------------------------------------------
+
+-- parseStateSetRS' :: OutputParser CharPatternRaw
+
+-- | The main character selector parser, after
+--   all the specialised ones have been run.
+parseNonSpace :: AT.Parser Char
+parseNonSpace = AT.satisfy isNonSpace
+
+isNonSpace :: Char -> Bool
+isNonSpace = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!')
+
+isNonSpace' :: Char -> Bool
+isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*')
+
+parseNonSpaceR :: AT.Parser CharPatternRaw
+parseNonSpaceR = PlainCharR <$> parseNonSpace
+
+parseNonSpaceRS :: OutputParser CharPatternRaw
+parseNonSpaceRS = lift parseNonSpaceR
+
+
+parseMultiNonSpace :: AT.Parser (Either T.Text Char)
+parseMultiNonSpace = do
+  c1 <- AT.satisfy isNonSpace'
+  nxt <- AT.peekChar
+  case nxt of
+    Nothing  -> return $ Right c1
+    (Just x) -> case x of
+      y | isNonSpace' y -> Left . (T.cons c1) <$> AT.takeWhile1 isNonSpace
+      _ -> return $ Right c1
+
+parseMultiNonSpaceS :: OutputParser (Either T.Text Char)
+parseMultiNonSpaceS = do
+  rslt <- lift parseMultiNonSpace
+  case rslt of
+    (Left txt) -> do
+      phone <- ask
+      warn $ "Phoneme \"" <> phone <> "\" is missing spaces in one of its patterns: ... " <> (T.unpack txt) <> " ..."
+      return rslt
+    _ -> return rslt
+
+parseMultiNonSpaceRS :: OutputParser [CharPatternRaw]
+parseMultiNonSpaceRS = do
+  rslt <- parseMultiNonSpaceS
+  case rslt of
+    (Left txt) -> return $ map PlainCharR $ T.unpack txt
+    (Right ch) -> return   [PlainCharR ch]
+
+mkList :: (Functor f) => f a -> f [a]
+mkList fx = (:[]) <$> fx
+
+----------------------------------------------------------------
+-- Full Pattern parsers
+----------------------------------------------------------------
+
+parsePhonemePatMulti :: OutputParser OutputPattern
+parsePhonemePatMulti = do
+  phones <- parsePhonemeListS
+  lift skipHoriz
+  let phoneName = showPPRs $ NE.toList phones
+  _ <- lift ((AT.char ':') <?> ("Phoneme pattern for \"" <> phoneName <> "\" is missing ':'."))
+  lift skipHoriz
+  -- hmm...
+  theCase <- getCaseTypeS
+  
+  -- Set the internal phoneme name to phoneName.
+  runOnPhoneme phoneName $ do
+    thePats <- concat <$> AT.sepBy1' 
+      ( (mkList parseCodepointRS )
+        -- <|> (mkList parseClassNameRS)
+        <|> (mkList parseEscapedRS  )
+        <|> (parseMultiNonSpaceRS   )
+        <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
+        -- These two should probably be combined into one function for better errors.
+        -- <|> (mkList parseStateValRS')
+        <|> (mkList parseStateSetRS')
+      ) 
+      (lift skipHoriz1)
+    -- hmm...
+    -- return ()
+    
+    sdict <- gets opsStateDictionary
+    let ePhonePats = validatePhonePattern sdict (NE.toList phones)
+    case ePhonePats of
+      (Left  errs) -> do 
+        mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
+        return (OutputPattern [] (CharPattern [] []) OCNull)
+      (Right phonePats) -> -- addPhonemesPattern phones rslt
+        case (validateCharPattern sdict thePats) of
+          (Left  errs) -> do 
+            mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
+            return (OutputPattern [] (CharPattern [] []) OCNull)
+          (Right cPats) -> return $ OutputPattern phonePats cPats theCase
+    
 
 
 
