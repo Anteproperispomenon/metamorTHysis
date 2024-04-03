@@ -1,5 +1,7 @@
 module Metamorth.Interpretation.Output.Types
   ( OutputCase(..)
+  , CaseSource(..)
+  , CaseApply(..)
   ) where
 
 data OutputPattern = OutputPattern
@@ -21,25 +23,35 @@ data OutputCase
   --   will use the same value.
   | OCNull
   -- | Automatically create cases for this pattern.
-  --   If the first casable value is upper-case, then
-  --   the 
-  | OCDetectTitle
-  -- | Automatically create cases for this pattern.
-  --   Use the case value of the last phoneme.
-  | OCDetectFirst
-  -- | Automatically create cases for this pattern.
-  --   Use the case value of the last phoneme.
-  | OCDetectLast
-  -- | Automatically create cases for this pattern.
-  --   Go for upper-case unless there aren't any
-  --   upper-case phonemes.
-  | OCDetectHigh
-  -- | Automatically create cases for this pattern.
-  --   Go for lower-case unless there aren't any
-  --   lower-case phonemes.
-  | OCDetectLow
-  -- | Automatically detect each phoneme individually.
-  --   Only works when each phoneme has a corresponding
-  --   (list of) character(s).
+  --   The parameters tell you how to transform
+  --   the input case to the output case. 
+  | OCDetect CaseSource CaseApply
   | OCDetectIndividual
   deriving (Show, Eq)
+
+-- | Which phoneme of the input list to
+--   use to determine the case of the
+--   output.
+data CaseSource
+   -- | Use the case of the first casable character.
+   = CSFirst
+   -- | Use the case of the last casable character
+   | CSLast
+   -- | Use lower-case, unless all characters are
+   --   upper-case
+   | CSLow
+   -- | Use upper-case, unless all characters are
+   --   lower-case.
+   | CSHigh
+   deriving (Show, Eq)
+
+-- | Which output character(s) to apply the
+--   case to.
+data CaseApply
+   -- | Use Title case if the input is capitalised.
+   = CATitle
+   -- | Apply case to all characters.
+   | CAAll
+   -- | 
+   deriving (Show, Eq)
+

@@ -4,6 +4,7 @@ module Metamorth.Interpretation.Output.Parsing
   ) where
 
 import Control.Applicative
+import Control.Arrow ((&&&))
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -66,6 +67,40 @@ parseEscaped = do
     's' -> consProd ' '
     y   -> consProd y
 
+getImportS :: OutputParser ImportProperty
+getImportS = do
+  imp <- lift getImport
+  case imp of
+    (ImportGroup grpName) -> do
+      (thisDict, fullDict) <- gets (opsGroupDictionary &&& opsGroupDictionary')
+      if (grpName `elem` thisDict)
+        then warn ("Importing group \"" ++ grpName ++ "\" more than once.")
+        else if (grpName `elem` fullDict)
+          then do
+            let newDict = S.insert grpName thisDict
+            modify $ \x -> x {opsGroupDictionary = newDict}
+          else tellError ("Can't find group \"" ++ grpName ++ "\" in phoneme definitions.")
+    (ImportAspect aspName) -> do
+      (thisDict, fullDict) <- gets (opsAspectDictionary &&& opsAspectDictionary')
+      case (M.lookup aspName thisDict) of
+        (Just _) -> warn ("Importing aspect \"" ++ aspName ++ "\" more than once.")
+        Nothing  -> case (M.lookup aspName fullDict) of
+          Nothing  -> tellError ("Can't find aspect \"" ++ aspName ++ "\" in phoneme definitions.")
+          (Just v) -> do
+            let newDict = M.insert aspName v thisDict
+            modify $ \x -> x {opsAspectDictionary = newDict}
+    (ImportTrait trtName) -> do
+      (thisDict, fullDict) <- gets (opsTraitDictionary &&& opsTraitDictionary')
+      case (M.lookup trtName thisDict) of
+        (Just _) -> warn ("Importing trait \"" ++ trtName ++ "\" more than once.")
+        Nothing  -> case (M.lookup trtName fullDict) of
+          Nothing  -> tellError ("Can't find trait \"" ++ trtName ++ "\" in phoneme definitions.")
+          (Just v) -> do
+            let newDict = M.insert trtName v thisDict
+            modify $ \x -> x {opsTraitDictionary = newDict}
+  return imp
+
+      
 
 -- | Import a trait/group/aspect from the phoneme file.
 getImport :: AT.Parser ImportProperty
@@ -257,19 +292,35 @@ getCaseType = AT.peekChar' >>= \case
   '+' -> AT.anyChar $> OCMaj
   '-' -> AT.anyChar $> OCMin
   '/' -> AT.anyChar >> AT.peekChar >>= \case
-    (Just 'a') -> AT.anyChar $> OCDetectFirst
-    (Just 'A') -> AT.anyChar $> OCDetectFirst
-    (Just 'z') -> AT.anyChar $> OCDetectLast
-    (Just 'Z') -> AT.anyChar $> OCDetectLast
-    (Just '0') -> AT.anyChar $> OCDetectLow
-    (Just '9') -> AT.anyChar $> OCDetectHigh
-    (Just 't') -> AT.anyChar $> OCDetectTitle
-    (Just 'T') -> AT.anyChar $> OCDetectTitle
+    (Just 'a') -> AT.anyChar >> getCaseType' <%> CSFirst
+    (Just 'A') -> AT.anyChar >> getCaseType' <%> CSFirst
+    (Just 'z') -> AT.anyChar >> getCaseType' <%> CSLast
+    (Just 'Z') -> AT.anyChar >> getCaseType' <%> CSLast
+    (Just '0') -> AT.anyChar >> getCaseType' <%> CSLow
+    (Just '9') -> AT.anyChar >> getCaseType' <%> CSHigh
+    (Just 't') -> AT.anyChar >> getCaseType' <%> CSHigh
+    (Just 'T') -> AT.anyChar >> getCaseType' <%> CSHigh
     -- These two will probably be redundant.
     (Just 'i') -> AT.anyChar $> OCDetectIndividual
     (Just 'I') -> AT.anyChar $> OCDetectIndividual
     _          -> return OCNull
   _ -> fail "Not a case type."
+    
+-- | Simplified version of @f <*> (pure x)@.
+(<%>) :: Applicative f => f (a -> b) -> a -> f b    
+f <%> x = f <*> (pure x)
+
+infixl 4 <%>
+
+-- Simple helper for `getCaseType`.
+getCaseType' :: AT.Parser (CaseSource -> OutputCase)
+getCaseType' = AT.peekChar >>= \case
+  (Just 't') -> AT.anyChar >> return (\x -> OCDetect x CATitle)
+  (Just 'T') -> AT.anyChar >> return (\x -> OCDetect x CATitle)
+  (Just 'a') -> AT.anyChar >> return (\x -> OCDetect x CAAll)
+  (Just 'A') -> AT.anyChar >> return (\x -> OCDetect x CAAll)
+  _ -> return $ \x -> OCDetect x CATitle
+
 
 
 
@@ -279,7 +330,7 @@ getCaseType = AT.peekChar' >>= \case
 ----------------------------------------------------------------
 
 
-parsePhonemeBrack :: AT.Parser (PhonePatternRaw)
+parsePhonemeBrack :: AT.Parser PhonePatternRaw
 parsePhonemeBrack = do
   _ <- AT.char '('
   skipHoriz
@@ -292,9 +343,20 @@ parsePhonemeBrack = do
   return $ PhoneNameR $ PhoneName phoneName rst
 
 parsePhoneme1 :: AT.Parser PhonePatternRaw
-parsePhoneme1 = parsePhonemeBrack <|> parseAlt
+parsePhoneme1 = parsePhonemeBrack <|> parseAlt <|> parseSpecPhoneme
   where 
-    parseAlt = (\x -> (PhoneNameR $ PhoneName (T.unpack x) [])) <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
+    parseAlt  = (\x -> (PhoneNameR $ PhoneName (T.unpack x) [])) <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
+
+-- Parse a character/string representing a special
+-- `PhonePatternRaw` value.
+parseSpecPhoneme :: AT.Parser PhonePatternRaw
+parseSpecPhoneme = AT.peekChar' >>= \case
+  '^' -> AT.anyChar $> PhoneAtStartR
+  '%' -> AT.anyChar $> PhoneNotStartR
+  '$' -> AT.anyChar $> PhoneAtEndR
+  '&' -> AT.anyChar $> PhoneNotEndR
+  _   -> fail "Can't read phoneme symbol/name."
+
 
 parsePhonemeList :: AT.Parser (NonEmpty PhonePatternRaw)
 parsePhonemeList = do

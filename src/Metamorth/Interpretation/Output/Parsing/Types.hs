@@ -46,16 +46,22 @@ data OutputParsingState = OutputParsingState
   --   the phoneme parser when the output files
   --   are run.
   , opsGroupDictionary  :: S.Set String
+  -- | The full group dictionary supplied by
+  --   the phoneme code.
+  , opsGroupDictionary' :: S.Set String
   -- | The Trait Dictionary. This is supplied by
   --   the phoneme parser when the output files
   --   are run. The `S.Set` contains the possible
   --   values for the trait, if relevant.
   , opsTraitDictionary  :: M.Map String (Maybe (S.Set String))
+  -- | The full trait dictionary supplied by the driver.
+  , opsTraitDictionary' :: M.Map String (Maybe (S.Set String))
   -- | The Aspect Dictionary. This is supplied by
   --   the phoneme parser when the output files
   --   are run. The `S.Set` contains the possible
   --   values for the trait.
-  , opsAspectDictionary :: M.Map String (S.Set String)
+  , opsAspectDictionary  :: M.Map String (S.Set String)
+  , opsAspectDictionary' :: M.Map String (S.Set String)
   } deriving (Show, Eq)
 
 -- | Use this when running a function that might
@@ -79,10 +85,12 @@ data ImportProperty
 --   of a phoneme pattern.
 data PhonePatternRaw
   = PhoneNameR PhoneName
-  | PhoneAtStartR 
+  | PhoneAtStartR
   | PhoneNotStartR
   | PhoneAtEndR
   | PhoneNotEndR
+  | PhoneFollowedBy String
+  | PhoneStateVal String String
   deriving (Show, Eq)
 
 
