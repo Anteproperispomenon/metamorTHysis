@@ -67,6 +67,8 @@ parseEscaped = do
     's' -> consProd ' '
     y   -> consProd y
 
+-- | Get an import declaration and check
+--   that it is a valid import.
 getImportS :: OutputParser ImportProperty
 getImportS = do
   imp <- lift getImport
@@ -100,6 +102,10 @@ getImportS = do
             modify $ \x -> x {opsTraitDictionary = newDict}
   return imp
 
+-- | Get an import declaration and check
+--   that it is a valid import.
+getImportS_ :: OutputParser ()
+getImportS_ = void getImportS
       
 
 -- | Import a trait/group/aspect from the phoneme file.
@@ -366,6 +372,94 @@ parsePhonemeList = do
     skipHoriz1
     parsePhoneme1
   return (fstPhone :| rstPhones)
+
+parsePhonemeListS :: OutputParser (NonEmpty PhonePatternRaw)
+parsePhonemeListS = do
+  lst@(phoneFst :| phoneRst) <- lift parsePhonemeList
+  let phoneName = showPPRs (NE.toList lst)
+  -- Use the phone name when trying the next check.
+  phoneLast <- fmap join $ optional $ runOnPhoneme phoneName $ do
+    lift skipHoriz1
+    parseNextCheckS
+  
+  case phoneLast of
+    Nothing   -> return lst
+    (Just pl) -> return (phoneFst :| (phoneRst ++ [pl]))
+
+-- | Parse the next-phoneme string, checking
+--   that it matches one of the given groups,
+--   traits, aspects, or phonemes.
+parseNextCheckS :: OutputParser (Maybe PhonePatternRaw)
+parseNextCheckS = do
+  (prop, mval) <- lift parseNextCheck
+  dicts <- get
+  case mval of
+    -- If nothing, then following chances,
+    -- from most likely to least likely:
+    -- Group, Trait, Phoneme, Aspect.
+    Nothing -> if (prop `elem` (opsGroupDictionary dicts))
+      then return $ Just $ PhoneFollowedByGroupR prop
+      else case (M.lookup prop (opsTraitDictionary dicts)) of
+        -- Works with either type of trait.
+        (Just _) -> return $ Just $ PhoneFollowedByTraitR prop
+        Nothing -> if (prop `elem` (opsPhoneDictionary dicts))
+          then return $ Just $ PhoneFollowedByPhoneR prop
+          else case (M.lookup prop (opsAspectDictionary dicts)) of
+            (Just _) -> return $ Just $ PhoneFollowedByAspectR prop
+            Nothing  -> do
+              phoneName <- ask
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
+              return Nothing
+    -- There IS a second value here.
+    (Just val) -> case (M.lookup prop (opsTraitDictionary dicts)) of
+      (Just (Just vs)) -> if (val `elem` vs)
+        then return $ Just $ PhoneFollowedByTraitAtR prop val
+        else do
+          phoneName <- ask
+          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
+          return Nothing
+      (Just _) -> do
+          phoneName <- ask
+          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
+          return Nothing
+      Nothing -> case (M.lookup prop (opsAspectDictionary dicts)) of
+        (Just vs) -> if (val `elem` vs)
+          then return $ Just $ PhoneFollowedByAspectAtR prop val
+          else do
+            phoneName <- ask
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for aspect \"" ++ prop ++ "\"."
+            return Nothing
+        Nothing -> if (prop `elem` (opsGroupDictionary dicts))
+          then do
+            phoneName <- ask
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a group: \">" ++ prop ++ "=" ++ val ++ "\"."
+            return Nothing
+          else if (prop `elem` (opsPhoneDictionary dicts))
+            then do
+              phoneName <- ask
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a phoneme: \">" ++ prop ++ "=" ++ val ++ "\"."
+              return Nothing
+            else do
+              phoneName <- ask
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match \"next-phoneme\" string : \">" ++ prop ++ "=" ++ val ++ "\"."
+              return Nothing
+
+-- At the moment, doesn't work with specific
+-- phonemes... but maybe it should? Okay
+-- now it (maybe) does.
+parseNextCheck :: AT.Parser (String, Maybe String)
+parseNextCheck = do
+  _ <- AT.char '>'
+  skipHoriz
+  strProp <- takeIdentifier isAlpha isFollowId
+  strVal <- optional $ do
+    _ <- AT.char '='
+    takeIdentifier isAlpha isFollowId
+  return (T.unpack strProp, T.unpack <$> strVal)
+
+
+
+
 
 
 

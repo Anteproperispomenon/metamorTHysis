@@ -6,6 +6,8 @@ module Metamorth.Interpretation.Output.Parsing.Types
   , ImportProperty(..)
   , PhoneName(..)
   , PhonePatternRaw(..)
+  , showPPR
+  , showPPRs
   ) where
 
 import Control.Monad
@@ -15,6 +17,7 @@ import Control.Monad.Trans.RWS.CPS
 import Data.Attoparsec.Text qualified as AT
 
 import Data.Char (ord, chr, isSpace, isLower, isAlpha)
+import Data.List (intercalate)
 import Data.Text qualified as T
 import Data.Text (Text)
 
@@ -62,6 +65,11 @@ data OutputParsingState = OutputParsingState
   --   values for the trait.
   , opsAspectDictionary  :: M.Map String (S.Set String)
   , opsAspectDictionary' :: M.Map String (S.Set String)
+  -- | The phoneme dictionary supplied by the
+  --   phoneme data. Doesn't contain the names
+  --   for each phoneme, since they aren't needed
+  --   by the parser.
+  , opsPhoneDictionary :: S.Set String
   } deriving (Show, Eq)
 
 -- | Use this when running a function that might
@@ -89,10 +97,36 @@ data PhonePatternRaw
   | PhoneNotStartR
   | PhoneAtEndR
   | PhoneNotEndR
-  | PhoneFollowedBy String
-  | PhoneStateVal String String
+  | PhoneFollowedByGroupR String
+  | PhoneFollowedByTraitR String
+  | PhoneFollowedByTraitAtR String String
+  | PhoneFollowedByAspectR String
+  | PhoneFollowedByAspectAtR String String
+  | PhoneFollowedByPhoneR String
+  | PhoneStateValR String String
   deriving (Show, Eq)
 
+-- | Show a `PhonePatternRaw` in a shortened form.
+showPPR :: PhonePatternRaw -> String
+showPPR (PhoneNameR (PhoneName pn pc))
+  | null pc   = pn
+  | otherwise = pn ++ "[" ++ (intercalate "," pc) ++ "]"
+showPPR PhoneAtStartR  = "^"
+showPPR PhoneNotStartR = "%"
+showPPR PhoneAtEndR    = "$"
+showPPR PhoneNotEndR   = "&"
+showPPR (PhoneFollowedByGroupR  str) = "G>" ++ str
+showPPR (PhoneFollowedByTraitR  str) = "T>" ++ str
+showPPR (PhoneFollowedByAspectR str) = "A>" ++ str
+showPPR (PhoneFollowedByTraitAtR  str str') = "T>" ++ str ++ "=" ++ str'
+showPPR (PhoneFollowedByAspectAtR str str') = "A>" ++ str ++ "=" ++ str'
+showPPR (PhoneFollowedByPhoneR str) = "P>" ++ str
+showPPR (PhoneStateValR st val) = "@" ++ st ++ "=" ++ val
+
+showPPRs :: [PhonePatternRaw] -> String
+showPPRs [] = ""
+showPPRs xs = unwords (map showPPR xs)
+-- unwords == (intercalate " ")
 
 -- | A constructor for how phoneme names
 --   are written in phoneme patterns.
