@@ -3,6 +3,8 @@ module Metamorth.Interpretation.Output.Parsing
   ( parseOutputFile
   -- * Other Parsers
   , parsePhonemeListS
+  -- * Testing
+  , testOutputFile
   ) where
 
 import Control.Applicative
@@ -43,6 +45,11 @@ import Data.Set        qualified as S
 -- Main Parser
 ----------------------------------------------------------------
 
+-- | A quick tester for the output file, that just
+--   gives empty sets for the various dictionaries.
+testOutputFile :: AT.Parser (OutputParserOutput, [ParserMessage])
+testOutputFile = parseOutputFile S.empty M.empty M.empty S.empty
+
 -- | The main runner of the output file.
 parseOutputFile 
   -- | The `S.Set` of group names.
@@ -58,12 +65,14 @@ parseOutputFile
   -> S.Set String
   -> AT.Parser (OutputParserOutput, [ParserMessage])
 parseOutputFile grps trts asps phones = do
+  (_hdr, cas) <- parseHeaderSection
   (_, ops, msgs) <- embedOutputParser grps trts asps phones $ do
     -- Fill out actions here.
-    (hdr, cas) <- parseHeaderSection
+    -- (hdr, cas) <- parseHeaderSection
     modify $ \x -> x { opsDefaultCasing = cas }
     parseStateDecSection
-    return hdr
+    parsePatternSection
+    -- return hdr
   let opo = OutputParserOutput
         { opoStateDictionary  = opsStateDictionary ops
         , opoTraitDictionary  = opsTraitDictionary ops
@@ -77,19 +86,22 @@ parseOutputFile grps trts asps phones = do
 -- Section Parsers
 ----------------------------------------------------------------
 
-parseHeaderSection :: OutputParser (OutputHeader, OutputCase)
+parseHeaderSection :: AT.Parser (OutputHeader, OutputCase)
 parseHeaderSection = do
-  _ <- lift $ many parseEndComment
+  _ <- many parseEndComment
   casity <- AT.option OCNull $ do
-    _ <- lift "default" 
-    lift skipHoriz1
-    _ <- lift "case"
-    lift skipHoriz
-    _ <- lift $ (AT.char ':') <|> (AT.char '=')
-    lift getCaseType
-  _ <- lift ("====" <?> "Header: Separator1")
-  _ <- lift ((AT.takeWhile (== '=')) <?> "Header: Separator2")
-  lift parseEndComment
+    _ <- "default" 
+    skipHoriz1
+    _ <- "case"
+    skipHoriz
+    _ <- (AT.char ':') <|> (AT.char '=')
+    skipHoriz
+    cas <- getCaseType
+    AT.many1 parseEndComment
+    return cas
+  _ <- ("====" <?> "Header: Separator1")
+  _ <- ((AT.takeWhile (== '=')) <?> "Header: Separator2")
+  parseEndComment
   return ((), casity)
 
 -- | Parse the class declaration section.
@@ -105,6 +117,16 @@ parseStateDecSection = do
   _ <- lift ("====" <?> "States: Separator1")
   _ <- lift ((AT.takeWhile (== '=')) <?> "States: Separator2")
   lift parseEndComment
+
+parsePatternSection :: OutputParser ()
+parsePatternSection = do
+  many $ lift parseEndComment
+  _ <- AT.many1 $ do
+    parsePhonemePatMulti
+    AT.many1 $ lift parseEndComment
+  -- hmm...
+  return ()
+    
 
 
 ----------------------------------------------------------------
@@ -690,7 +712,13 @@ parsePhonemePatMulti' = do
           (Right cPats) -> return (phonePats, OutputPattern cPats theCase)
 
 
+-- testing:
 
+-- :m + Metamorth.Interpretation.Output.Parsing Metamorth.Helpers.IO
+-- import Data.Attoparsec.Text qualified as AT
+-- AT.parseOnly testOutputFile <$> readFileUTF8 "examples/output/example_inuktitut_01.thyo"
+-- read errors:
+-- (either (const []) snd) . AT.parseOnly testOutputFile <$> readFileUTF8 "examples/output/example_inuktitut_01.thyo"
 
 
 

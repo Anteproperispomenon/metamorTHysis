@@ -1,12 +1,17 @@
 
 
 
-orthography : inuktitut_syllabics
-phoneme set : "../phonemes/example_inuktitut.thyt"
+# orthography : inuktitut_syllabics
+# phoneme set : "../phonemes/example_inuktitut.thyt"
+
+default case : /at
+
 
 ====
 
 # No classes or states.
+
+# import group vowel
 
 ====
 
@@ -17,7 +22,7 @@ p  : ᑉ
 t  : ᑦ
 k  : ᒃ
 h  : ᕻ
-h  : ᐦ # apparently
+# h  : ᐦ # apparently
 g  : ᒡ
 m  : ᒻ
 n  : ᓐ
@@ -31,7 +36,7 @@ r  : ᕐ
 q  : ᖅ
 
 ng : ᖕ
-ng : ᓐ ᒃ # alternate form
+# ng : ᓐ ᒃ # alternate form
 
 lh : ᖦ
 
@@ -43,12 +48,10 @@ glot : ᑊ
 jj  : ᑦ ᔾ
 qq  : ᖅ ᒃ
 nng : ᖖ
-nng : ᓐ ᓐ ᒃ # alt form
+# nng : ᓐ ᓐ ᒃ # alt form
 
 hx : ᕼ
 b  : ᖯ
-
-====
 
 # Syllables
 
