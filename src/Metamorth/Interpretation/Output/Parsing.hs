@@ -29,6 +29,7 @@ import Metamorth.Helpers.Parsing
 import Metamorth.Helpers.Error ( ParserMessage )
 import Metamorth.Helpers.Error.RWS
 
+import Metamorth.Interpretation.Output.Parsing.Trie
 import Metamorth.Interpretation.Output.Parsing.Types
 import Metamorth.Interpretation.Output.Types
 
@@ -55,11 +56,19 @@ parseOutputFile
   -- | A `S.Set` of the phonemes used for this
   --   output.
   -> S.Set String
-  -- | The input text.
-  -> Text
-  -> AT.Parser ((),[ParserMessage])
-parseOutputFile grps trts asps phones txt = do
-  return ((), [])
+  -> AT.Parser (OutputParserOutput, [ParserMessage])
+parseOutputFile grps trts asps phones = do
+  (_, ops, msgs) <- embedOutputParser grps trts asps phones $ do
+    -- Fill out actions here.
+    return ()
+  let opo = OutputParserOutput
+        { opoStateDictionary  = opsStateDictionary ops
+        , opoTraitDictionary  = opsTraitDictionary ops
+        , opoGroupDictionary  = opsGroupDictionary ops
+        , opoAspectDictionary = opsAspectDictionary ops
+        , opoOutputTrie = opsOutputTrie ops
+        }
+  return (opo, msgs)
 
 ----------------------------------------------------------------
 -- Helper Parsers
@@ -600,8 +609,13 @@ mkList fx = (:[]) <$> fx
 -- Full Pattern parsers
 ----------------------------------------------------------------
 
-parsePhonemePatMulti :: OutputParser OutputPattern
+parsePhonemePatMulti :: OutputParser ()
 parsePhonemePatMulti = do
+  pr <- parsePhonemePatMulti'
+  addOutputPattern pr
+
+parsePhonemePatMulti' :: OutputParser ([PhonePattern], OutputPattern)
+parsePhonemePatMulti' = do
   phones <- parsePhonemeListS
   lift skipHoriz
   let phoneName = showPPRs $ NE.toList phones
@@ -631,14 +645,13 @@ parsePhonemePatMulti = do
     case ePhonePats of
       (Left  errs) -> do 
         mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
-        return (OutputPattern [] (CharPattern [] []) OCNull)
+        return ([], OutputPattern (CharPattern [] []) OCNull)
       (Right phonePats) -> -- addPhonemesPattern phones rslt
         case (validateCharPattern sdict thePats) of
           (Left  errs) -> do 
             mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
-            return (OutputPattern [] (CharPattern [] []) OCNull)
-          (Right cPats) -> return $ OutputPattern phonePats cPats theCase
-    
+            return ([], OutputPattern (CharPattern [] []) OCNull)
+          (Right cPats) -> return (phonePats, OutputPattern cPats theCase)
 
 
 

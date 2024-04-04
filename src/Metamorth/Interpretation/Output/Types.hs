@@ -3,8 +3,11 @@
 {-# LANGUAGE PatternSynonyms #-}
 
 module Metamorth.Interpretation.Output.Types
+  -- * Important Types
+  ( OutputParserOutput(..)
+  , OutputPattern(..)
+  , pattern OutputPatternPair
   -- * Various types
-  ( OutputPattern(..)
   , OutputCase(..)
   , CaseSource(..)
   , CaseApply(..)
@@ -14,6 +17,7 @@ module Metamorth.Interpretation.Output.Types
   , PhoneFollow(..)
   , CharPatternItem(..)
   , CharPattern(..)
+  , OutputHeader(..)
   -- * State Operations
   , CheckState(..)
   , CheckStateX(..)
@@ -29,12 +33,22 @@ import Data.Map.Strict qualified as M
 
 import Data.Set qualified as S
 
+import Data.Trie.Map qualified as TM
+
 import Metamorth.Helpers.Ord
 
 data OutputPattern = OutputPattern
-  { opPhonePattern :: [PhonePattern]
-  , opCharPattern  :: CharPattern
+  { opCharPattern  :: CharPattern
   , opCasedness    :: OutputCase
+  } deriving (Show, Eq)
+
+pattern OutputPatternPair :: [PhonePattern] -> CharPattern -> OutputCase -> ([PhonePattern], OutputPattern)
+pattern OutputPatternPair pp cp oc = (pp, OutputPattern cp oc)
+
+data OutputPattern' = OutputPattern'
+  { opPhonePattern' :: [PhonePattern]
+  , opCharPattern'  :: CharPattern
+  , opCasedness'    :: OutputCase
   } deriving (Show, Eq)
 
 -- | The case of an output pattern.
@@ -224,4 +238,28 @@ data CharPattern = CharPattern
 
 -- SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
 
+type OutputHeader = ()
 
+-- | The Output from an `OutputParser`.
+data OutputParserOutput = OutputParserOutput
+  -- | The state dictionary. This is updated as
+  --   the parser parses the state declarations.
+  { opoStateDictionary :: M.Map String (Maybe (S.Set String))
+  -- | The Group "Dictionary". This is supplied by
+  --   the phoneme parser when the output files
+  --   are run.
+  , opoGroupDictionary :: S.Set String
+  -- | The Trait Dictionary. This is supplied by
+  --   the phoneme parser when the output files
+  --   are run. The `S.Set` contains the possible
+  --   values for the trait, if relevant.
+  , opoTraitDictionary :: M.Map String (Maybe (S.Set String))
+  -- | The Aspect Dictionary. This is supplied by
+  --   the phoneme parser when the output files
+  --   are run. The `S.Set` contains the possible
+  --   values for the trait.
+  , opoAspectDictionary :: M.Map String (S.Set String)
+  -- | The main trie to be used for determining
+  --   output.
+  , opoOutputTrie       :: TM.TMap PhonePattern OutputPattern
+  } deriving (Show, Eq)

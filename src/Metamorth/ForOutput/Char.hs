@@ -18,7 +18,7 @@ to a separate package.
 
 module Metamorth.ForOutput.Char
   ( CharCase(..)
-  , 
+
   ) where
 
 -- | 

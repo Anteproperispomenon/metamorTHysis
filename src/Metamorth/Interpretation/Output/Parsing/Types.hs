@@ -3,6 +3,7 @@
 
 module Metamorth.Interpretation.Output.Parsing.Types
   ( OutputParser
+  , embedOutputParser
   , OutputParsingState(..)
   , runOnPhoneme
   , CharPatternRaw(..)
@@ -20,6 +21,8 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.RWS.CPS
 
 import Data.Attoparsec.Text qualified as AT
+
+import Data.Trie.Map qualified as TM
 
 import Data.Char (ord, chr, isSpace, isLower, isAlpha)
 import Data.List (intercalate)
@@ -48,6 +51,27 @@ import Metamorth.Interpretation.Output.Types
 --   * The writer is used to collect error messages
 --   * The state will hold stateful info.
 type OutputParser a = RWST String [ParserMessage] OutputParsingState AT.Parser a
+
+embedOutputParser 
+  :: S.Set String 
+  -> M.Map String (Maybe (S.Set String)) 
+  -> M.Map String (S.Set String)
+  -> S.Set String
+  -> OutputParser a 
+  -> AT.Parser (a, OutputParsingState, [ParserMessage])
+embedOutputParser grps trts asps phons prs 
+  = runRWST prs "N/A" $ OutputParsingState
+      { opsStateDictionary   = M.empty
+      , opsGroupDictionary   = S.empty
+      , opsGroupDictionary'  = grps
+      , opsTraitDictionary   = M.empty
+      , opsTraitDictionary'  = trts
+      , opsAspectDictionary  = M.empty
+      , opsAspectDictionary' = asps
+      , opsPhoneDictionary   = phons
+      , opsDefaultCasing     = OCNull
+      , opsOutputTrie        = TM.empty
+      }
 
 -- | The State type for `OutputParser`.
 data OutputParsingState = OutputParsingState
@@ -80,6 +104,9 @@ data OutputParsingState = OutputParsingState
   --   by the parser.
   , opsPhoneDictionary :: S.Set String
   , opsDefaultCasing   :: OutputCase
+  -- | The main trie to be used for determining
+  --   output.
+  , opsOutputTrie      :: TM.TMap PhonePattern OutputPattern
   } deriving (Show, Eq)
 
 -- | Use this when running a function that might
