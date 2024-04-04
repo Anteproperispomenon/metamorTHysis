@@ -106,7 +106,7 @@ data OutputParsingState = OutputParsingState
   , opsDefaultCasing   :: OutputCase
   -- | The main trie to be used for determining
   --   output.
-  , opsOutputTrie      :: TM.TMap PhonePattern OutputPattern
+  , opsOutputTrie      :: TM.TMap PhonePattern (M.Map OutputCase OutputPattern)
   } deriving (Show, Eq)
 
 -- | Use this when running a function that might
@@ -272,7 +272,5 @@ validateCharPattern mp cps = do
       itms       = mapMaybe getPlainChar rst
   sts' <- traverse (validateModifyState mp) sts
   return $ CharPattern itms sts'
-
-
 
 

@@ -24,7 +24,7 @@ makePhoneConstructorPat nomMap aspMap phoneNom = do
   return $ ConP conName [] subPats
   where
     -- Check for wild cards.
-    lkupAsp :: String -> (M.Map String Name) -> Either String Pat
+    lkupAsp :: String -> M.Map String Name -> Either String Pat
     lkupAsp "*" _  = Right WildP
     lkupAsp "_" _  = Right WildP
     lkupAsp str mp = do

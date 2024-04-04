@@ -1,5 +1,4 @@
 {-# LANGUAGE DerivingVia #-}
-{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
@@ -74,7 +73,7 @@ data OutputCase
   --   the input case to the output case. 
   | OCDetect CaseSource CaseApply
   | OCDetectIndividual
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- | Which phoneme of the input list to
 --   use to determine the case of the
@@ -90,7 +89,7 @@ data CaseSource
    -- | Use upper-case, unless all characters are
    --   lower-case.
    | CSHigh
-   deriving (Show, Eq)
+   deriving (Show, Eq, Ord)
 
 -- | Which output character(s) to apply the
 --   case to.
@@ -99,7 +98,15 @@ data CaseApply
    = CATitle
    -- | Apply case to all characters.
    | CAAll
-   deriving (Show, Eq)
+   -- | Use this pattern if you want this to
+   --   match the upper-case and lower-case
+   --   separately. Use this one for upper-case.
+   | CAExactUpper
+   -- | Use this pattern if you want this to
+   --   match the upper-case and lower-case
+   --   separately. Use this one for lower-case.
+   | CAExactLower
+   deriving (Show, Eq, Ord)
 
 -- See `Metamorth.Interpretation.Parser.Types.CharPatternF`
 -- for more info on this.
@@ -135,7 +142,7 @@ data PhonePatternF b c
 
 deriving instance {-# OVERLAPPING #-} (Ord b, Ord c) => Ord (PhonePatternF (Down b) (Down c))
 
-deriving via (PhonePatternF (Down b) (Down c)) instance {-# OVERLAPPABLE #-} (Ord b, Ord c) => Ord (PhonePatternF b c) 
+deriving via (PhonePatternF (Down b) (Down c)) instance {-# OVERLAPPABLE #-} (Ord b, Ord c) => Ord (PhonePatternF b c)
 
 -- We want this instance to be chosen over plain @b@, but
 -- *not* over @Down b@.
@@ -291,5 +298,5 @@ data OutputParserOutput = OutputParserOutput
   , opoAspectDictionary :: M.Map String (S.Set String)
   -- | The main trie to be used for determining
   --   output.
-  , opoOutputTrie       :: TM.TMap PhonePattern OutputPattern
+  , opoOutputTrie       :: TM.TMap PhonePattern (M.Map OutputCase OutputPattern)
   } deriving (Show, Eq)

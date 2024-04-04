@@ -433,6 +433,12 @@ getCaseType' = AT.peekChar >>= \case
   (Just 'T') -> AT.anyChar >> return (\x -> OCDetect x CATitle)
   (Just 'a') -> AT.anyChar >> return (\x -> OCDetect x CAAll)
   (Just 'A') -> AT.anyChar >> return (\x -> OCDetect x CAAll)
+  (Just 'u') -> AT.anyChar >> return (\x -> OCDetect x CAExactUpper)
+  (Just 'U') -> AT.anyChar >> return (\x -> OCDetect x CAExactUpper)
+  (Just '+') -> AT.anyChar >> return (\x -> OCDetect x CAExactUpper)
+  (Just 'l') -> AT.anyChar >> return (\x -> OCDetect x CAExactLower)
+  (Just 'L') -> AT.anyChar >> return (\x -> OCDetect x CAExactLower)
+  (Just '-') -> AT.anyChar >> return (\x -> OCDetect x CAExactLower)
   _ -> return $ \x -> OCDetect x CATitle
 
 ----------------------------------------------------------------
