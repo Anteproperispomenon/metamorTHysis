@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
@@ -72,7 +73,7 @@ data OutputCase
   --   The parameters tell you how to transform
   --   the input case to the output case. 
   | OCDetect CaseSource CaseApply
-  | OCDetectIndividual
+  -- | OCDetectIndividual -- not yet implemented.
   deriving (Show, Eq, Ord)
 
 -- | Which phoneme of the input list to

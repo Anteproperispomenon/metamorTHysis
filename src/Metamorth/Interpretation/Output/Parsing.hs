@@ -88,7 +88,7 @@ parseOutputFile grps trts asps phones = do
 
 parseHeaderSection :: AT.Parser (OutputHeader, OutputCase)
 parseHeaderSection = do
-  _ <- many parseEndComment
+  many_ parseEndComment
   casity <- AT.option OCNull $ do
     _ <- "default" 
     skipHoriz1
@@ -97,7 +97,7 @@ parseHeaderSection = do
     _ <- (AT.char ':') <|> (AT.char '=')
     skipHoriz
     cas <- getCaseType
-    AT.many1 parseEndComment
+    some_ parseEndComment
     return cas
   _ <- ("====" <?> "Header: Separator1")
   _ <- ((AT.takeWhile (== '=')) <?> "Header: Separator2")
@@ -110,7 +110,7 @@ parseStateDecSection :: OutputParser ()
 parseStateDecSection = do
   -- lift AT.skipSpace
   _ <- lift $ many parseEndComment
-  _ <- AT.many' $ do
+  many'_ $ do
     getImportS_ <|> parseStateDecS -- <|> parseUnspecifiedClassOrState
     lift $ AT.many1 parseEndComment
   _ <- lift $ many  parseEndComment
@@ -120,14 +120,11 @@ parseStateDecSection = do
 
 parsePatternSection :: OutputParser ()
 parsePatternSection = do
-  many $ lift parseEndComment
-  _ <- AT.many1 $ do
+  many_ $ lift parseEndComment
+  some_ $ do
     parsePhonemePatMulti
     AT.many1 $ lift parseEndComment
   -- hmm...
-  return ()
-    
-
 
 ----------------------------------------------------------------
 -- Helper Parsers
@@ -415,8 +412,8 @@ getCaseType = AT.peekChar' >>= \case
     (Just 't') -> AT.anyChar >> getCaseType' <%> CSHigh
     (Just 'T') -> AT.anyChar >> getCaseType' <%> CSHigh
     -- These two will probably be redundant.
-    (Just 'i') -> AT.anyChar $> OCDetectIndividual
-    (Just 'I') -> AT.anyChar $> OCDetectIndividual
+    -- (Just 'i') -> AT.anyChar $> OCDetectIndividual
+    -- (Just 'I') -> AT.anyChar $> OCDetectIndividual
     _          -> return OCNull
   _ -> fail "Not a case type."
     

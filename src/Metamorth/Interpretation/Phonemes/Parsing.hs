@@ -47,7 +47,7 @@ parsePhonemeFile :: PhonemeParser ()
 parsePhonemeFile = do
   -- Skip the blank lines (better to consume
   -- them here than after the branch point).
-  many stParseBlankLine
+  many_ stParseBlankLine
   -- Parse Properties (which are optional)
   AT.option () $ do
     stParseProperties
@@ -62,7 +62,7 @@ parsePhonemeFile = do
   stParseGroups
 
   -- Check on the remaining stuff
-  many stParseBlankLine
+  many_ stParseBlankLine
   -- To get to the start of the next
   -- line, if it exists
   lift $ AT.skipSpace
@@ -77,12 +77,12 @@ parsePhonemeFile = do
         -- Make this a warning, not an error once
         -- that distinction is implemented.
         Nothing -> do
-          txt <- T.map (\case {'\n' -> ' '; x -> x}) . T.take 20 <$> lift AT.takeText
+          txt <- T.map (\case {'\n' -> ' '; z -> z}) . T.take 20 <$> lift AT.takeText
           tell ["Extra text found at end of source file: " <> T.unpack txt]
         (Just (depth, groupName)) -> do
           tell ["Could not parse group of incorrect depth: " <> (replicate depth '*') <> " " <> groupName]
     (Just _) -> do
-      txt <- T.map (\case {'\n' -> ' '; x -> x}) . T.take 20 <$> lift AT.takeText
+      txt <- T.map (\case {'\n' -> ' '; z -> z}) . T.take 20 <$> lift AT.takeText
       tell ["Extra text found at end of source file: " <> T.unpack txt]
 
 
@@ -110,9 +110,9 @@ stParseProperty' = do
 
 stParseProperties :: PhonemeParser ()
 stParseProperties = do
-  many stParseBlankLine -- parse empty lines
+  many_ stParseBlankLine -- parse empty lines
   -- For each property...
-  void $ many $ do
+  many_ $ do
     lift skipHoriz        -- skip horizontal whitespace
     stParseProperty       -- read the property
     some stParseBlankLine -- parse the end of line + more blank lines
@@ -205,7 +205,7 @@ u
 --   the `PhonemeInventory`.
 stParseGroups :: PhonemeParser ()
 stParseGroups = do
-  many stParseBlankLine -- Parse any blank lines first.
+  many_ stParseBlankLine -- Parse any blank lines first.
   lift skipHoriz        -- Parse any leading spaces
 
   -- Peek the next char to see whether we're
@@ -227,7 +227,7 @@ stParseGroups = do
 --   return the `PhonemeInventory`.
 stParseGroups' :: PhonemeParser PhonemeInventory
 stParseGroups' = do
-  many stParseBlankLine -- Parse any blank lines first.
+  many_ stParseBlankLine -- Parse any blank lines first.
   lift skipHoriz        -- Parse any leading spaces
 
   -- Peek the next char to see whether we're
@@ -251,7 +251,7 @@ stParseGroups' = do
 --   the `PhonemeInventory`.
 stParseGroupsB :: PhonemeParser PhonemeInventory
 stParseGroupsB = do
-  many stParseBlankLine -- Parse any blank lines first.
+  many_ stParseBlankLine -- Parse any blank lines first.
   lift skipHoriz        -- Parse any leading spaces
 
   -- Peek the next char to see whether we're
@@ -291,7 +291,7 @@ stParseGroup dp = do
   modify $ \ps -> ps { psUsedGroups = newGNs}
 
   -- Parse all blank/comment lines.
-  many stParseBlankLine
+  many_ stParseBlankLine
 
   -- This... should work?
   -- In the older version, the parser could

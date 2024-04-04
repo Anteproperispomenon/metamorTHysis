@@ -12,6 +12,12 @@ module Metamorth.Helpers.Parsing
   , isFileId
   , consProd
   
+  -- * More Combinators
+  , many_
+  , some_
+  , many'_
+  , some'_
+
   -- * Re-ordered Functions
   , forParseOnly
   
@@ -34,6 +40,9 @@ module Metamorth.Helpers.Parsing
 
 import Data.Attoparsec.Text       qualified as AT
 import Data.Attoparsec.Combinator qualified as AC
+
+import Control.Applicative
+import Control.Monad
 
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict qualified as State
@@ -178,3 +187,14 @@ lookAheadTellRWS' prs = do
   RWS.tell w
   return (a,s)
 
+many_ :: Alternative f => f a -> f ()
+many_ f = many f $> ()
+
+some_ :: Alternative f => f a -> f ()
+some_ f = some f $> ()
+
+many'_ :: MonadPlus m => m a -> m ()
+many'_ f = AT.many' f $> ()
+
+some'_ :: MonadPlus m => m a -> m ()
+some'_ f = AT.many1' f $> ()
