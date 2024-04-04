@@ -20,6 +20,7 @@ module Metamorth.Interpretation.Phonemes.Parsing.Types
   , runPhonemeParser
   , execPhonemeParser
   , modifyStructure
+  , modifyStructure'
   ) where
 
 import Metamorth.Helpers.Parsing

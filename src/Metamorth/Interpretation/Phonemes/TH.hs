@@ -19,7 +19,7 @@ import Control.Monad
 import Control.Monad.Trans.Class
 import Control.Monad.Trans.State.Strict
 
-import Data.Functor.Identity (runIdentity)
+-- import Data.Functor.Identity (runIdentity)
 
 import Data.Foldable
 import Data.Functor
@@ -179,7 +179,7 @@ instance Show PhonemeDatabase where
 
 producePhonemeDatabase :: PhonemeParsingStructure -> Q (PhonemeDatabase, [Dec])
 producePhonemeDatabase pps = do
-  ((propData, phoneDats, patNoms, isFuncNames, mainTypeName), theDecs) <- produceVariousData pps
+  ((propData, _phoneDats, patNoms, _isFuncNames, mainTypeName), theDecs) <- produceVariousData pps
   
   -- propData  :: PropertyData
   -- phoneDats :: M.Map String PhonemeHierarchy
@@ -263,7 +263,7 @@ produceVariousData pps = do
   propData <- producePropertyData pps
   let propDecs = propertyDecs propData
       phoneInv = ppsPhonemeInventory pps
-  (phonDats, phonGrps, patNoms, isFuncNames, mainTypeName, phonDecs) <- producePhonemeInventory propData phoneInv
+  (phonDats, _phonGrps, patNoms, isFuncNames, mainTypeName, phonDecs) <- producePhonemeInventory propData phoneInv
   -- let phonDecs = snd phonData
   --     phonDats = fst phonData
   return ((propData, phonDats, patNoms, isFuncNames, mainTypeName), (propDecs <> phonDecs))
@@ -321,7 +321,7 @@ producePropertyData' pps = do
     -- trtTypeNames :: Maybe (Name, Map String Name)
     trtTypeNames <- case ops of
       [] -> return Nothing
-      xs -> do
+      _s -> do
         trName  <- newName $ dataName trt
         opNames <- mapM (newName . dataName) $ fromSelfList ops
         return $ Just (trName,opNames)
@@ -339,7 +339,7 @@ producePropertyData' pps = do
   let traitRecTypes = forMap trtMap $ \((trtRecName, mTrtInfo), _) -> case mTrtInfo of
         Nothing -> (trtRecName, ConT ''Bool)
         (Just (typeNom,_)) -> (trtRecName, maybeType $ ConT typeNom)
-      aspctRecTypes = forMap aspMap1 $ \(aspTypeName, (aspRecName, aspConsNames)) -> 
+      aspctRecTypes = forMap aspMap1 $ \(aspTypeName, (aspRecName, _aspConsNames)) -> 
         (aspRecName, maybeType $ ConT aspTypeName)
       -- Since the parser disallows aspects and traits to have the same
       -- String/Name, the two maps should be disjoint. Thus, this type
@@ -458,7 +458,7 @@ producePhonemePatterns :: Name -> M.Map String (([Type], Name), [Name]) -> Q (M.
 producePhonemePatterns topType mp = do
   -- Only create as many vars as needed.
   let maxLen = if (M.null mp) then 0 else maximum $ M.map (\((ts,_),_) -> length ts) mp
-  necVars <- forM (take maxLen [1..]) $ \n -> newName ("x" ++ (show n))
+  necVars <- forM (take maxLen [(1 :: Int)..]) $ \n -> newName ("x" ++ (show n))
   forWithKey mp $ \phoneStr ((argList, baseConstr), cstrList) -> do
     -- hmm...
     patName <- newName $ (dataName phoneStr) <> "PhonePat"
@@ -480,7 +480,7 @@ producePhonemeInventory propData phi = do
 
 -- producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
 producePhonemeInventory' :: String -> Name -> PropertyData -> PhonemeInventory -> StateT (M.Map (String, String) Name) Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
-producePhonemeInventory' thisGrpStr nm propData (PhonemeSet mp) = do
+producePhonemeInventory' _thisGrpStr nm propData (PhonemeSet mp) = do
   (mpX, grpProps, decs) <- lift $ producePhonemeSet propData nm mp
   return (makeLeaves mpX, grpProps, decs)
 producePhonemeInventory' thisGrpStr nm propData (PhonemeGroup mp) = do
@@ -508,24 +508,11 @@ producePhonemeInventory' thisGrpStr nm propData (PhonemeGroup mp) = do
     -- Adding "Ph" to distinguish it a bit...
     sumName <- lift $ newName $ "Ph" <> (dataName str)
     return (sumName, [ConT nom])
-
-{-
-data GroupProps = GroupProps
-  { groupStringName :: String
-  , isGroupFuncName :: Name
-  -- all the lower-down "is<Subsubgroup>" functions.
-  , isGroupSubFuncs :: M.Map String Name
-  -- , groupType :: Type
-  , phonemeConstructors :: M.Map String ((Int, Name), [Name])
-  -- 
-  } deriving (Show, Eq)
--}
-
   
   -- Create the isSubgroup_ThisGroup functions, etc...
   
   -- subGrpRslts :: M.Map String ((M.Map String Name, M.Map String ((Int, Name), [Name])), [Dec])
-  subGrpRslts <- sequence $ forIntersectionWithKey subGrps subPats $ \subGrpString (subGrpNom, subGrpProps) (conName,_) -> do
+  subGrpRslts <- sequence $ forIntersectionWithKey subGrps subPats $ \subGrpString (_subGrpNom, subGrpProps) (conName,_) -> do
     -- hmm...
     let oneDownFnc  = isGroupFuncName subGrpProps
         oneDownFnc' = if (isGroupBottom subGrpProps) then Nothing else (Just oneDownFnc)
@@ -618,11 +605,11 @@ data GroupProps = GroupProps
 -}
 
 -- newFuncBod1 = Clause [ConP subGrpNom [] [VarP newVar]] (NormalB (AppE (VarE subFuncNom) (VarE newVar))) []
-produceSubMapClause' :: Bool -> Name -> Name -> Name -> Clause
-produceSubMapClause' True  constr        _   _ = Clause [ConP constr [] [WildP]]    (NormalB (ConE 'True)) []
-produceSubMapClause' False constr funcName var = Clause [ConP constr [] [VarP var]] (NormalB (AppE (VarE funcName) (VarE var))) []
+-- produceSubMapClause' :: Bool -> Name -> Name -> Name -> Clause
+-- produceSubMapClause' True  constr        _   _ = Clause [ConP constr [] [WildP]]    (NormalB (ConE 'True)) []
+-- produceSubMapClause' False constr funcName var = Clause [ConP constr [] [VarP var]] (NormalB (AppE (VarE funcName) (VarE var))) []
 
-produceSubMapClause :: Name -> (Maybe Name) -> Name -> Clause
+produceSubMapClause :: Name -> Maybe Name -> Name -> Clause
 produceSubMapClause constr         Nothing   _ = Clause [ConP constr [] [WildP]]    (NormalB (ConE 'True)) []
 produceSubMapClause constr (Just funcName) var = Clause [ConP constr [] [VarP var]] (NormalB (AppE (VarE funcName) (VarE var))) []
 
@@ -643,10 +630,10 @@ producePhonemeSet propData subName phoneSet = do
   -- is to make the recursive steps easier.
   igfName <- newName $ "is" <> (nameBase subName) <> "_" <> (nameBase subName)
   let groupStr = nameBase subName -- temp?
-      igfSign  = SigD igfName (AppT (AppT ArrowT (ConT subName)) (ConT ''Bool))
-      igfDecl  = FunD igfName [Clause [WildP] (NormalB (ConE 'True)) []]
-      igfPrag  = PragmaD (InlineP igfName Inline FunLike AllPhases)
-      igfDecls = [igfSign, igfDecl, igfPrag]
+      -- igfSign  = SigD igfName (AppT (AppT ArrowT (ConT subName)) (ConT ''Bool))
+      -- igfDecl  = FunD igfName [Clause [WildP] (NormalB (ConE 'True)) []]
+      -- igfPrag  = PragmaD (InlineP igfName Inline FunLike AllPhases)
+      -- igfDecls = [igfSign, igfDecl, igfPrag]
   
   let aspTable = aspectTable propData
       aspTableNames = M.map fst aspTable
@@ -696,7 +683,7 @@ makeRecordUpdate defPropName traitsInfo traitFields phoneProps
     -- phoneTraits = phTraits phoneProps
     phoneStuff :: [Maybe (Name, Exp)]
     phoneStuff = forMap (phTraits phoneProps) $ \(trtStr, trtOption) -> do
-      (trtName, mtrtOps) <- M.lookup trtStr traitsInfo
+      (_trtName, mtrtOps) <- M.lookup trtStr traitsInfo
       let mtrtOps' = snd <$> mtrtOps
       trtValue <- case trtOption of
         Nothing    -> Just $ ConE 'True
@@ -715,43 +702,4 @@ makeRecordUpdate defPropName traitsInfo traitFields phoneProps
 -- :m + Metamorth.Interpretation.Phonemes.Parsing Metamorth.Interpretation.Phonemes.Parsing.Types Metamorth.Interpretation.Phonemes.TH Language.Haskell.TH Data.Either Control.Monad Metamorth.Helpers.IO
 -- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> readFileUTF8 "local/example1.thy"
 -- join $ runQ <$> producePhonemeDatabase <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> readFileUTF8 "examples/phonemes/example_inuktitut.thyt"
-
-{-
-
-
-
-ghci> data ExampleRec = ExampleRec { recField1 :: Bool, recField2 :: Int, recField3 :: Maybe Word}
-ghci> [d| {exampleRec :: ExampleRec ; exampleRec = (ExampleRec False 0 Nothing)} |]
-[SigD exampleRec_16 (ConT Ghci23.ExampleRec),ValD (VarP exampleRec_16) (NormalB (AppE (AppE (AppE (ConE Ghci23.ExampleRec) (ConE GHC.Types.False)) (LitE (IntegerL 0))) (ConE GHC.Maybe.Nothing))) []]
-
-[| \x -> x {recField2 = 10} |]
-LamE [VarP x_11] (RecUpdE (VarE x_11) [(Ghci2.recField2,LitE (IntegerL 10))])
-
--}
-
-
-{-
-[("harmony",(Harmony_0,fromList [("back",Back_1),("front",Front_2)]))]
-,fromList 
-  [("articulation",(articulation_3,Just (Articulation_4,fromList [("alveolar",Alveolar_5),("labial",Labial_6),("velar",Velar_7)])))
-  ,("neutral",(neutral_8,Nothing))
-  ]
-,Just (PhonemeTraits_9, [(articulation_3,Articulation_4),(neutral_8,GHC.Types.Bool)])
-, [DataD [] Harmony_0 [] Nothing [NormalC Back_1 [],NormalC Front_2 []] 
-    [DerivClause Nothing [ConT GHC.Classes.Eq],DerivClause Nothing [ConT GHC.Classes.Ord]]
-  , InstanceD Nothing [] (AppT (ConT GHC.Show.Show) (ConT Harmony_0)) 
-      [FunD GHC.Show.show 
-        [ Clause [ConP Back_1 [] []] (NormalB (LitE (StringL "back"))) []
-        , Clause [ConP Front_2 [] []] (NormalB (LitE (StringL "front"))) []
-        ]
-      ]
-  , DataD [] Articulation_4 [] Nothing [NormalC Alveolar_5 [],NormalC Labial_6 [],NormalC Velar_7 []] 
-    [ DerivClause Nothing [ConT GHC.Classes.Eq],DerivClause Nothing [ConT GHC.Classes.Ord]]
-    , InstanceD Nothing [] (AppT (ConT GHC.Show.Show) (ConT Articulation_4)) 
-       [FunD GHC.Show.show 
-         [Clause [ConP Alveolar_5 [] []] (NormalB (LitE (StringL "alveolar"))) []
-         ,Clause [ConP Labial_6 [] []] (NormalB (LitE (StringL "labial"))) []
-         ,Clause [ConP Velar_7 [] []] (NormalB (LitE (StringL "velar"))) []]]]
--}
-
 

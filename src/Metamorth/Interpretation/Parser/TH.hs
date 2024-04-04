@@ -118,7 +118,7 @@ import Data.Attoparsec.Text qualified as AT
 import Data.Bifunctor qualified as Bi
 
 import Data.Foldable
-import Data.Functor
+-- import Data.Functor
 
 import Data.Traversable
 
@@ -190,15 +190,15 @@ testTheParserE spi fp = do
   (x,y,z) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, errStrings, warnStrings)) -> do
+    (Right (_hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of
         [] -> return ()
-        xs -> do
+        _s -> do
           putStrLn "Encountered errors while parsing patterns:"
           mapM_ putStrLn errStrings
       case warnStrings of
         [] -> return ()
-        xs -> do
+        _s -> do
           putStrLn "Encountered warnings while parsing patterns:"
           mapM_ putStrLn warnStrings
       runQ 
@@ -224,7 +224,7 @@ testTheParser spi fp = do
   (x,y,z) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, someStrings, warnStrings)) -> do
+    (Right (_hdr, pps, _someStrings, _warnStrings)) -> do
       runQ 
         ( makeTheParser
             (spiConstructorMap spi)
@@ -691,7 +691,7 @@ createCasesForStart grdName stateValName spi cp TrieLeaf mph = case cp of
         zs = map (\q -> (q, isTupper q)) xs
     if (any isCasable xs)
       then do 
-        zqr <- return $ forMap zs $ \(theChar, theCase) ->
+        zqr <- return $ forMap zs $ \(theChar, _theCase) ->
           (Match (LitP (CharL theChar)) (maybeGuard mgrdExp $ stateModifier $ consumerRetA mkMaj mkMin theChar cs mulExprs) [])
         return (Right zqr, True)
       else do 
@@ -703,14 +703,14 @@ createCasesForStart grdName stateValName spi cp TrieLeaf mph = case cp of
     (classFunc, zs) <- eitherMaybe' (M.lookup cn classMap) ["Couldn't find function name for class \"" <> cn <> "\"."]
     (mphZ, cs) <- eitherMaybe' mph ["Couldn't lookup value for parsed class: \"" <> cn <> "\"."]
     let (PhoneResult mphX stateMods) = mphZ
-    mgrdExp  <- (checkStateExps sdict chks stateValName)
+    mgrdExp  <- checkStateExps sdict chks stateValName
     mulExprs <- phoneNamePatterns constrMap aspMaps mphX
     stateModifier <- modifyStateExps sdict stateMods
     let checkExp = AppE (VarE classFunc) (VarE grdName)
-        boolExp  = AppE (VarE 'isUpperCase) (VarE grdName)
-        checkExp' = case mgrdExp of
-          Nothing -> checkExp
-          (Just guardExp) -> andE checkExp guardExp
+        -- boolExp  = AppE (VarE 'isUpperCase) (VarE grdName)
+        -- checkExp' = case mgrdExp of
+        --   Nothing -> checkExp
+        --   (Just guardExp) -> andE checkExp guardExp
     -- can probably just reduce to one expression.
     if (any isCasable zs)
       then Right (Left (NormalG checkExp, stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs), True ) -- need to change, maybe?
@@ -987,7 +987,7 @@ constructFunctionsBoth spi bl trie funNomStrt funNomRst = do
                 [| do { st <- State.get ; pkc <- $(peekCharQ') ; ($(return $ VarE nom2) st pkc) <|> ( $(return $ VarE nom3) st pkc) } |]
               let phoneType = spiPhoneTypeName spi
                   stateType = spiStateTypeName spi
-                  stateCons = spiStateConsName spi
+                  -- stateCons = spiStateConsName spi
               functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty $(return $ ConT phoneType)) |]
               -- Might want to check these strings are valid...
               funNom1 <- newName $ varName funNomStrt
@@ -1070,7 +1070,7 @@ constructFunctionsSB toReduce spi xcp stVals trie = do
           casePrime = CaseE (VarE peekName) matches
           caseStuff = if toReduce then (groupCaseGuards casePrime) else casePrime
           stateType = spiStateTypeName spi
-          stateCons = spiStateConsName spi
+          -- stateCons = spiStateConsName spi
       mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty $(return $ ConT phoneType)) ) |]
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP stateNom, VarP peekName] (NormalB caseStuff) []]
@@ -1087,7 +1087,7 @@ constructFunctionsSB toReduce spi xcp stVals trie = do
   where
     subTries  = map (second (first fromJust)) $ getSubTries trie
     phoneType = spiPhoneTypeName spi
-    evalRWST' rdr st act = evalRWST act rdr st
+    -- evalRWST' rdr st act = evalRWST act rdr st
     runRWST'  rdr st act = runRWST  act rdr st
 
 
@@ -1541,8 +1541,6 @@ condCaseExp blExpr mkMaj mkMin exprs
       blExpr 
       (returnExp $ formMulExp $ forMap exprs $ \expr -> mkMaj expr) 
       (returnExp $ formMulExp $ forMap exprs $ \expr -> mkMin expr)
-  where
-    ret = VarE 'return
 
 ----------------------------------------------------------------
 -- Helper Functions
@@ -1593,8 +1591,8 @@ setupTrie pops theMap
     initialTrie' = if (poCheckStates pops) then (generaliseStateTrie initialTrie) else initialTrie
 
 
-dontPathifyTrie :: M.Map PhoneResult [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
-dontPathifyTrie = annotateTrie . setupTrie'
+-- dontPathifyTrie :: M.Map PhoneResult [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
+-- dontPathifyTrie = annotateTrie . setupTrie'
 
 pathifyTrie :: M.Map PhoneResult [PhonemePattern] -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness))
 pathifyTrie = unifyPaths . setupTrie'
@@ -1610,7 +1608,7 @@ setupTrie' phonePats = TM.fromList $ concatMap phoneStuff $ M.toList phonePats
 -- | Temp function to test functions in REPL.
 tempTester :: (a -> b) -> Either String a -> IO b
 tempTester f (Right x) = return $ f x
-tempTester f (Left st) = fail $ st
+tempTester _ (Left st) = fail $ st
 
 -- , spiStateTypeName   :: Name
 -- , spiStateDictionary :: M.Map String (Name, Maybe (Name, M.Map String Name))
@@ -1623,7 +1621,7 @@ checkStateExp sdict vnom (CheckStateBB str bl) = do
   case mNothing of
     (Just _) -> Left "checkStateExp: internal error 1"
     Nothing  -> do
-      let setFunc = if bl then id else (\exp -> AppE (VarE 'not) exp)
+      let setFunc = if bl then id else (\expr -> AppE (VarE 'not) expr)
       -- setFunc <$> [| $(pure $ VarE recnom) $(pure $ VarE vnom)  |]
       return $ setFunc $ AppE (VarE recNom) (VarE vnom)
 checkStateExp sdict vnom (CheckStateVB str bl ) = do
@@ -1632,14 +1630,14 @@ checkStateExp sdict vnom (CheckStateVB str bl ) = do
   case mJust of
     Nothing  -> Left "checkStateExp: internal error 2"
     (Just _) -> do
-      let setFunc = if bl then (\exp -> AppE (VarE 'isJust) exp) else (\exp -> AppE (VarE 'isNothing) exp)
+      let setFunc = if bl then (\expr -> AppE (VarE 'isJust) expr) else (\expr -> AppE (VarE 'isNothing) expr)
       -- setFunc <$> [| $(pure $ VarE recnom) $(pure $ VarE vnom)  |]
       return $ setFunc $ AppE (VarE recNom) (VarE vnom)
 checkStateExp sdict vnom (CheckStateVV str val) = do
   (recNom, mJust) <- eitherMaybe' (M.lookup str sdict) $ "Couldn't find state \"" <> str <> "\"."
   case mJust of
     Nothing -> Left "checkStateExp: internal error 3"
-    (Just (typName, nextMap)) -> do
+    (Just (_typName, nextMap)) -> do
       valNom <- eitherMaybe' (M.lookup val nextMap) $ "Couldn't find state value \"" <> val <> "\" for state \"" <> str <> "\"."
       -- eqJustCon :: Exp -> Name -> Exp
       return $ eqJustCon (AppE (VarE recNom) (VarE vnom)) valNom
@@ -1796,7 +1794,7 @@ phoneNamePatterns patMap patConMap phoneNames
 
 -- | Construct a constructor/pattern synonym
 --   for a specific Phoneme Name.
-phoneNamePattern :: M.Map String Name -> (M.Map String ([M.Map String Name])) -> PhoneName -> Either [String] Exp
+phoneNamePattern :: M.Map String Name -> M.Map String [M.Map String Name] -> PhoneName -> Either [String] Exp
 phoneNamePattern patMap _patConMap (PhoneName nom []) = do
   patNom <- eitherMaybe' (M.lookup nom patMap) ["Couldn't find phoneme: \"" <> nom <> "\"."]
   return $ ConE patNom
@@ -1810,7 +1808,7 @@ phoneNamePattern patMap patConMap (PhoneName nom ps) = do
 
 -- | For constructing the guard part of 
 --   a body.
-charPatternGuard :: (M.Map String (Name,[Char])) -> Name -> Name -> CharPattern -> Name -> Either String Exp
+charPatternGuard :: M.Map String (Name,[Char]) -> Name -> Name -> CharPattern -> Name -> Either String Exp
 charPatternGuard _classMap _endWordFunc _notEndWordFunc (PlainChar _ c)   charVarName = Right (eqJustChar charVarName c)
 charPatternGuard _classMap _endWordFunc _notEndWordFunc (CharOptCase _ c) charVarName = Right (anyE (map (eqJustChar charVarName) (getCases c)))
 charPatternGuard  classMap _endWordFunc _notEndWordFunc (CharClass _ cnm) charVarName = do
@@ -1821,7 +1819,7 @@ charPatternGuard _classMap _endWordFunc _notEndWordFunc NotStart  _charVarName =
 charPatternGuard _classMap  endWordFunc _notEndWordFunc WordEnd    charVarName = return $ AppE (liftPredT endWordFunc   ) (VarE charVarName)
 charPatternGuard _classMap _endWordFunc  notEndWordFunc NotEnd     charVarName = return $ AppE (liftPred  notEndWordFunc) (VarE charVarName)
 
-charPatternGuard' :: (M.Map String (Name,[Char])) -> Name -> Name -> CharPattern -> Name -> Either String (Exp, Bool)
+charPatternGuard' :: M.Map String (Name,[Char]) -> Name -> Name -> CharPattern -> Name -> Either String (Exp, Bool)
 charPatternGuard' _classMap _endWordFunc _notEndWordFunc (PlainChar   _ c) charVarName = Right (eqJustChar charVarName c, isCasable c)
 charPatternGuard' _classMap _endWordFunc _notEndWordFunc (CharOptCase _ c) charVarName = Right (anyE (map (eqJustChar charVarName) (getCases c)), isCasable c)
 charPatternGuard'  classMap _endWordFunc _notEndWordFunc (CharClass _ cnm) charVarName = do

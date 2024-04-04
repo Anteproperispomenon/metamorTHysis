@@ -21,8 +21,8 @@ import Data.Attoparsec.Text qualified as AT
 
 import Metamorth.Helpers.TH
 
-import Metamorth.Interpretation.Parser.TH   qualified as Parser
-import Metamorth.Interpretation.Phonemes.TH qualified as Phonemes
+-- import Metamorth.Interpretation.Parser.TH   qualified as Parser
+-- import Metamorth.Interpretation.Phonemes.TH qualified as Phonemes
 
 import Metamorth.Interpretation.Phonemes.Parsing (parsePhonemeFile)
 
@@ -42,7 +42,7 @@ import Metamorth.Interpretation.Phonemes.TH
   ( PhonemeDatabase(..)
   , PhonemeInformation(..)
   , producePhonemeDatabase
-  , PropertyData(..)
+  -- , PropertyData(..)
   )
 
 import Language.Haskell.TH
@@ -50,7 +50,7 @@ import Language.Haskell.TH.Syntax hiding (lift)
 
 import Metamorth.Helpers.IO
 
-import System.IO
+-- import System.IO
 import System.Directory
 
 import Data.Text qualified as T
@@ -124,7 +124,7 @@ createParsers phonemePath parserPaths _outputPaths = do
   -- Note that this is probably fairly inefficient;
   -- all the text files are read into memory before
   -- being processed. This should change in the future.
-  rslts@(eParseFiles, _) <- runIO $ do
+  _rslts@(eParseFiles, _) <- runIO $ do
     eParsers <- mapM readParserFile parserPaths
     return (eParsers, Nothing)
 
@@ -162,7 +162,7 @@ getParserData pdb txt epd = do
   (dcs1, spi, funcNom) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
-    (Right (hdr, pps, errStrings, warnStrings)) -> do
+    (Right (_hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of
         [] -> return ()
         _  -> do
