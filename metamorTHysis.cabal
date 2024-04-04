@@ -47,6 +47,7 @@ library
       Metamorth.Interpretation.Output.Parsing
       Metamorth.Interpretation.Output.Parsing.Trie
       Metamorth.Interpretation.Output.Parsing.Types
+      Metamorth.Interpretation.Output.TH.Constructors
       Metamorth.Interpretation.Output.Types
       Metamorth.Interpretation.Parser.Parsing
       Metamorth.Interpretation.Parser.Parsing.Trie

@@ -1,4 +1,5 @@
 {-# LANGUAGE DerivingVia #-}
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE PatternSynonyms #-}
 
@@ -11,7 +12,8 @@ module Metamorth.Interpretation.Output.Types
   , OutputCase(..)
   , CaseSource(..)
   , CaseApply(..)
-  , PhoneName(..)
+  , PhoneName
+  , PhoneNameX(..)
   , PhonePattern
   , PhonePatternF(PhonemeName, PhoneAtStart, PhoneNotStart, PhoneAtEnd, PhoneNotEnd, PhoneFollow)
   , PhoneFollow(..)
@@ -28,6 +30,8 @@ module Metamorth.Interpretation.Output.Types
   ) where
 
 import Data.Ord (Down(..))
+
+import Data.String (IsString)
 
 import Data.Map.Strict qualified as M
 
@@ -151,10 +155,36 @@ data PhoneFollow
 --   are written in phoneme patterns.
 -- 
 --   Taken from the Parser Types.
-data PhoneName = PhoneName 
-  { pnName :: String
-  , pnCons :: [String] 
-  } deriving (Show, Eq, Ord)
+--
+--   Since this can have wildcards
+--   now, there needs to be a specialised
+--   instance for ord. We use derived newtypes
+--   for that.
+data PhoneNameX str = PhoneName 
+  { pnName :: str
+  , pnCons :: [str]
+  } deriving (Show, Eq)
+
+type PhoneName = PhoneNameX String
+
+-- Setting up the Ord instance:
+-- The newtype to use:
+newtype StringStar = StringStar String
+  deriving newtype (Eq, Show, IsString)
+
+-- The newtype's instance for Ord
+instance Ord StringStar where
+  compare "*" "*" = EQ
+  compare "*" _   = GT
+  compare _   "*" = LT
+  compare st1 st2  = compare st1 st2
+
+-- Create Ord instance to use
+deriving instance Ord (PhoneNameX StringStar)
+
+-- Derive Ord instance
+deriving via (PhoneNameX StringStar) 
+  instance Ord (PhoneNameX String)
 
 -- | The unvalidated "Check-state" type.
 data CheckState

@@ -1,6 +1,7 @@
 module Metamorth.Helpers.Either 
   ( liftEitherList
   , liftEitherNonEmpty
+  , traverseAllEither
   , eitherMaybe
   , eitherMaybe'
   , partitionWith
@@ -20,6 +21,9 @@ liftEitherList xs
   | otherwise   = Left  ls
   where 
     (ls,rs) = partitionEithers xs
+
+traverseAllEither :: (a -> Either b c) -> [a] -> Either [b] [c]
+traverseAllEither f xs = liftEitherList (map f xs)
 
 -- | Same as `liftEitherList`, but over `NE.NonEmpty`.
 liftEitherNonEmpty :: NE.NonEmpty (Either a b) -> Either (NE.NonEmpty a) (NE.NonEmpty b)

@@ -447,10 +447,16 @@ parsePhonemeBrack = do
   phoneName <- T.unpack <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
   rst <- AT.many' $ do
     skipHoriz1 -- to ensure a space between each value
-    T.unpack <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read aspect value")
+    T.unpack <$> (takeAspConstructor <?> "Can't read aspect value")
   skipHoriz
   _ <- AT.char ')'
   return $ PhoneNameR $ PhoneName phoneName rst
+
+takeAspConstructor :: AT.Parser T.Text
+takeAspConstructor =
+  -- Converting all wildcards to '*'s so that
+  -- they get compared as the same.
+  takeIdentifier isAlpha isFollowId <|> "*" <|> ("_" $> "*")
 
 parsePhoneme1 :: AT.Parser PhonePatternRaw
 parsePhoneme1 = parsePhonemeBrack <|> parseAlt <|> parseSpecPhoneme
