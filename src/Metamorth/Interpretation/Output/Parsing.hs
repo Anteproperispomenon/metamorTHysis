@@ -60,7 +60,10 @@ parseOutputFile
 parseOutputFile grps trts asps phones = do
   (_, ops, msgs) <- embedOutputParser grps trts asps phones $ do
     -- Fill out actions here.
-    return ()
+    (hdr, cas) <- parseHeaderSection
+    modify $ \x -> x { opsDefaultCasing = cas }
+    parseStateDecSection
+    return hdr
   let opo = OutputParserOutput
         { opoStateDictionary  = opsStateDictionary ops
         , opoTraitDictionary  = opsTraitDictionary ops
@@ -69,6 +72,40 @@ parseOutputFile grps trts asps phones = do
         , opoOutputTrie = opsOutputTrie ops
         }
   return (opo, msgs)
+
+----------------------------------------------------------------
+-- Section Parsers
+----------------------------------------------------------------
+
+parseHeaderSection :: OutputParser (OutputHeader, OutputCase)
+parseHeaderSection = do
+  _ <- lift $ many parseEndComment
+  casity <- AT.option OCNull $ do
+    _ <- lift "default" 
+    lift skipHoriz1
+    _ <- lift "case"
+    lift skipHoriz
+    _ <- lift $ (AT.char ':') <|> (AT.char '=')
+    lift getCaseType
+  _ <- lift ("====" <?> "Header: Separator1")
+  _ <- lift ((AT.takeWhile (== '=')) <?> "Header: Separator2")
+  lift parseEndComment
+  return ((), casity)
+
+-- | Parse the class declaration section.
+--   This also includes states.
+parseStateDecSection :: OutputParser ()
+parseStateDecSection = do
+  -- lift AT.skipSpace
+  _ <- lift $ many parseEndComment
+  _ <- AT.many' $ do
+    getImportS_ <|> parseStateDecS -- <|> parseUnspecifiedClassOrState
+    lift $ AT.many1 parseEndComment
+  _ <- lift $ many  parseEndComment
+  _ <- lift ("====" <?> "States: Separator1")
+  _ <- lift ((AT.takeWhile (== '=')) <?> "States: Separator2")
+  lift parseEndComment
+
 
 ----------------------------------------------------------------
 -- Helper Parsers
@@ -146,7 +183,6 @@ getImportS = do
 --   that it is a valid import.
 getImportS_ :: OutputParser ()
 getImportS_ = void getImportS
-      
 
 -- | Import a trait/group/aspect from the phoneme file.
 getImport :: AT.Parser ImportProperty
