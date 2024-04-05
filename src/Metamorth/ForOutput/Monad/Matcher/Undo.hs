@@ -25,7 +25,8 @@ This version of the code has support for
 
 module Metamorth.ForOutput.Monad.Matcher.Undo
   -- * Main Type
-  ( MatcherT
+  ( Matcher
+  , MatcherT
   -- * Primary Operations
   , match
   , proceed
@@ -130,6 +131,8 @@ unsnoc ls = Just $ unsnoc' id ls
 --   `proceed`, `preview`, etc...
 newtype MatcherT i v m a  = MatcherT { getMatcherT :: (i -> v) -> [i] -> UndoStack v -> m (a, [i], UndoStack v) }
 
+type Matcher i v = MatcherT i v Maybe
+
 instance (Functor m) => Functor (MatcherT i v m) where
   fmap f (MatcherT mt) = MatcherT $ \ifnc inp vs -> fmap1'3 f $ mt ifnc inp vs
 
@@ -211,6 +214,7 @@ preview = MatcherT $ \_ifnc inp vs -> case inp of
 pullValues :: (Applicative m, Undoable v) => MatcherT i v m v
 pullValues = MatcherT $ \_ifnc inp vs -> pure (retrieve vs, inp, emptyU)
 
+{-
 match :: (MonadPlus m, Monoid v, Undoable v) => (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m r
 match err f = do
   mybX <- proceed
@@ -225,5 +229,29 @@ match err f = do
         MatchFail str -> lift $ str >>= err
         MatchOptions ret cont
           -> (match err cont) <|> (pullValues >>= \vs -> lift $ ret vs)
+-}
+
+match :: (MonadPlus m, Monoid v, Undoable v) => (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m r
+match err f = do
+  mybX <- proceed
+  case mybX of
+    Nothing  -> lift $ err "Not Enough Input."
+    (Just x) -> do
+      case (f x) of
+        MatchReturn ret  -> matchReturn ret
+        MatchContinue mc -> match err mc
+        MatchFail str    -> lift $ str >>= err
+        MatchOptions ret cont
+          -> match err cont <|> matchReturn ret
+
+-- matchReturn :: (MonadPlus m, Monoid v) => (String -> m r) -> MatchReturn m i v r -> MatcherT i v m r
+matchReturn :: (MonadPlus m, Undoable v) => MatchReturn m i v r -> MatcherT i v m r
+matchReturn (PlainReturn f) = do
+  vs <- pullValues
+  lift $ f vs
+matchReturn (ConditionalReturn f) = do
+  mi <- preview
+  vs <- pullValues
+  lift $ f vs mi
 
 

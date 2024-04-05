@@ -20,7 +20,8 @@ to a separate package.
 
 module Metamorth.ForOutput.Monad.Matcher
   -- * Main Type
-  ( MatcherT
+  ( Matcher
+  , MatcherT
   -- * Primary Operations
   , match
   , proceed
@@ -35,6 +36,8 @@ import Control.Monad.Trans.Class
 -- import Data.Foldable1
 
 import Metamorth.ForOutput.Monad.Matcher.Result
+
+type Matcher i v = MatcherT i v Maybe
 
 -- | A `Monad` akin to a parser that consumes
 --   values from an input list, converts them
@@ -117,13 +120,25 @@ match err f = do
     Nothing  -> lift $ err "Not Enough Input."
     (Just x) -> do
       case (f x) of
-        MatchReturn g -> do
-          vs <- pullValues
-          lift $ g vs
+        MatchReturn ret  -> matchReturn ret
         MatchContinue mc -> match err mc
-        MatchFail str -> lift $ str >>= err
+        MatchFail str    -> lift $ str >>= err
         MatchOptions ret cont
-          -> (match err cont) <|> (pullValues >>= \vs -> lift $ ret vs)
+          -> match err cont <|> matchReturn ret
+
+-- matchReturn :: (MonadPlus m, Monoid v) => (String -> m r) -> MatchReturn m i v r -> MatcherT i v m r
+matchReturn :: (MonadPlus m, Monoid v) => MatchReturn m i v r -> MatcherT i v m r
+matchReturn (PlainReturn f) = do
+  vs <- pullValues
+  lift $ f vs
+matchReturn (ConditionalReturn f) = do
+  mi <- preview
+  vs <- pullValues
+  lift $ f vs mi
+--   eRslt <- lift $ f vs mi
+--   case eRslt of
+--     (Left str) -> lift $ err str
+--     (Right vl) -> return vl
 
 
 {-
