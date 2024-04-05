@@ -128,6 +128,7 @@ test-suite metamorTHysis-test
   type: exitcode-stdio-1.0
   main-is: Spec.hs
   other-modules:
+      Test.Monad.Matcher
       Test.TH.Basic
       Test.TH.Grouped
       Test.TH.TwoOrths

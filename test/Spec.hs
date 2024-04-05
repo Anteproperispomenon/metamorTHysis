@@ -12,6 +12,8 @@ import Data.Text qualified as T
 
 import Data.Attoparsec.Text qualified as AT
 
+import Test.Monad.Matcher
+
 main :: IO ()
 main = do
   hSetEncoding stdout utf8
@@ -25,7 +27,11 @@ main = do
   print $ AT.parseOnly Two.syllabicParser "ᓄᓇᑦᓯᐊᕗᑦ"
   putStrLn "Parsing \"ᓄᓇᑦᓯᐊᕗᑦ\" with grouped parser:"
   print $ AT.parseOnly G.theActualParser "ᓄᓇᑦᓯᐊᕗᑦ"
+  putStrLn "\n"
 
+  print $ runTheMatcher exampleList1 matchThingy
+  print $ runTheMatcher exampleList2 matchThingy
+  print $ runTheMatcher exampleList3 matchThingy
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text

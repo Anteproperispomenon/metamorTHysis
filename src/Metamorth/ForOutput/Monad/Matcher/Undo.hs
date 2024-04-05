@@ -26,15 +26,23 @@ This version of the code has support for
 module Metamorth.ForOutput.Monad.Matcher.Undo
   -- * Main Type
   ( Matcher
+  , runMatcher
+  , evalMatcher
   , MatcherT
+  , runMatcherT
+  , evalMatcherT
   -- * Primary Operations
   , match
+  , matches
   , proceed
   , preview
   -- * Undo Operations
   , unproceed
   , unproceedVia
   , unproceedWith
+  -- * Sub Types
+  , MatchResult(..)
+  , MatchReturn(..)
   ) where
 
 import Control.Applicative
@@ -42,7 +50,7 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Class
 
-import Data.Functor.Identity
+-- import Data.Functor.Identity
 
 import Metamorth.ForOutput.Monad.Matcher.Result
 
@@ -132,6 +140,21 @@ unsnoc ls = Just $ unsnoc' id ls
 newtype MatcherT i v m a  = MatcherT { getMatcherT :: (i -> v) -> [i] -> UndoStack v -> m (a, [i], UndoStack v) }
 
 type Matcher i v = MatcherT i v Maybe
+
+-- | Run a `MatcherT`
+runMatcherT :: (Undoable v, Functor m) => (i -> v) -> [i] -> MatcherT i v m a -> m (a, [i], v)
+runMatcherT func inp mt = f <$> getMatcherT mt func inp emptyU
+  where f (x,y,z) = (x,y,retrieve z)
+
+runMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe (a, [i], v)
+runMatcher = runMatcherT
+
+evalMatcherT :: (Undoable v, Functor m) => (i -> v) -> [i] -> MatcherT i v m a -> m a
+evalMatcherT func inp mt = (\(x,_,_) -> x) <$> getMatcherT mt func inp emptyU
+
+evalMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
+evalMatcher = evalMatcherT
+
 
 instance (Functor m) => Functor (MatcherT i v m) where
   fmap f (MatcherT mt) = MatcherT $ \ifnc inp vs -> fmap1'3 f $ mt ifnc inp vs
@@ -253,5 +276,15 @@ matchReturn (ConditionalReturn f) = do
   mi <- preview
   vs <- pullValues
   lift $ f vs mi
+
+
+matches :: (MonadPlus m, Undoable v, Monoid v) => (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m [r]
+matches err f = do
+  mybX <- preview
+  case mybX of
+    Nothing  -> return []
+    (Just _) -> do
+      y <- match err f
+      (y:) <$> matches err f
 
 

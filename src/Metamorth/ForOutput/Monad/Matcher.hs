@@ -21,11 +21,19 @@ to a separate package.
 module Metamorth.ForOutput.Monad.Matcher
   -- * Main Type
   ( Matcher
+  , runMatcher
+  , evalMatcher
   , MatcherT
+  , runMatcherT
+  , evalMatcherT
   -- * Primary Operations
   , match
+  , matches
   , proceed
   , preview
+  -- * Sub Types
+  , MatchResult(..)
+  , MatchReturn(..)
   ) where
 
 import Control.Applicative
@@ -47,6 +55,19 @@ type Matcher i v = MatcherT i v Maybe
 --   The main functions with @MatcherT@ are
 --   `proceed`, `preview`, etc...
 newtype MatcherT i v m a  = MatcherT { getMatcherT :: (i -> v) -> [i] -> v -> m (a, [i], v) }
+
+-- | Run a `MatcherT`
+runMatcherT :: (Monoid v) => (i -> v) -> [i] -> MatcherT i v m a -> m (a, [i], v)
+runMatcherT func inp mt = getMatcherT mt func inp mempty
+
+runMatcher :: (Monoid v) => (i -> v) -> [i] -> Matcher i v a -> Maybe (a, [i], v)
+runMatcher = runMatcherT
+
+evalMatcherT :: (Functor m, Monoid v) => (i -> v) -> [i] -> MatcherT i v m a -> m a
+evalMatcherT func inp mt = (\(x,_,_) -> x) <$> getMatcherT mt func inp mempty
+
+evalMatcher :: (Monoid v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
+evalMatcher = evalMatcherT
 
 instance (Functor m) => Functor (MatcherT i v m) where
   fmap f (MatcherT mt) = MatcherT $ \ifnc inp vs -> fmap1'3 f $ mt ifnc inp vs
@@ -140,15 +161,12 @@ matchReturn (ConditionalReturn f) = do
 --     (Left str) -> lift $ err str
 --     (Right vl) -> return vl
 
-
-{-
-data MatchResult m i v r
-  = MatchReturn (v -> m r)
-  | MatchContinue (i -> MatchResult m i v r)
-  | MatchOptions (v -> m r) (i -> MatchResult m i v r)
-  | MatchFail String
--}
-
-
-
+matches :: (MonadPlus m, Monoid v) => (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m [r]
+matches err f = do
+  mybX <- preview
+  case mybX of
+    Nothing  -> return []
+    (Just _) -> do
+      y <- match err f
+      (y:) <$> matches err f
 
