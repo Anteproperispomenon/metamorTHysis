@@ -26,6 +26,9 @@ source-repository head
 library
   exposed-modules:
       Metamorth.ForOutput.Char
+      Metamorth.ForOutput.Monad.Matcher
+      Metamorth.ForOutput.Monad.Matcher.Result
+      Metamorth.ForOutput.Monad.Matcher.Undo
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
       Metamorth.Helpers.Error
@@ -47,6 +50,7 @@ library
       Metamorth.Interpretation.Output.Parsing
       Metamorth.Interpretation.Output.Parsing.Trie
       Metamorth.Interpretation.Output.Parsing.Types
+      Metamorth.Interpretation.Output.TH
       Metamorth.Interpretation.Output.TH.Constructors
       Metamorth.Interpretation.Output.Types
       Metamorth.Interpretation.Parser.Parsing
