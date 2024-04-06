@@ -19,6 +19,10 @@ be the same regardless of the input files.
 In the future, these modules may be moved
 to a separate package.
 
+This particular module defines a simple
+Parser-Like Monad that can be used to
+match simple input buffers.
+
 This version of the code has support for
 "undo" operations. 
 
@@ -35,9 +39,12 @@ module Metamorth.ForOutput.Monad.Matcher.Undo
   -- * Primary Operations
   , match
   , matches
+  , matchesL
+  , matchesDefL
+  -- * Low-Level Operations
   , proceed
   , preview
-  -- * Undo Operations
+  -- ** Undo Operations
   , unproceed
   , unproceedVia
   , unproceedWith
@@ -64,6 +71,7 @@ import Data.List (uncons)
 --   except for `()`, which just uses
 --   `()` as its undo stack instead.
 type family UndoStack v = r | r -> v where
+
   UndoStack () = ()
   UndoStack a  = [a]
 
@@ -137,9 +145,14 @@ unsnoc ls = Just $ unsnoc' id ls
 --   list, and then returns the item it processed.
 --
 --   The main functions with @MatcherT@ are
---   `proceed`, `preview`, etc...
+--   `match`, `matches`, etc..., along with
+--   the lower-level functions `proceed`,
+--   `preview`, `unproceed`, etc...
 newtype MatcherT i v m a  = MatcherT { getMatcherT :: (i -> v) -> [i] -> UndoStack v -> m (a, [i], UndoStack v) }
 
+-- | A simple matcher that uses `Maybe` as the
+--   base `Monad`. Probably the easiest version
+--   to use, but it won't return error messages.
 type Matcher i v = MatcherT i v Maybe
 
 -- | Run a `MatcherT`
@@ -147,12 +160,17 @@ runMatcherT :: (Undoable v, Functor m) => (i -> v) -> [i] -> MatcherT i v m a ->
 runMatcherT func inp mt = f <$> getMatcherT mt func inp emptyU
   where f (x,y,z) = (x,y,retrieve z)
 
+-- | Run a `Matcher`, returning the result
+--   value, along with the remaining input
+--   and output streams.
 runMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe (a, [i], v)
 runMatcher = runMatcherT
 
+-- | Run `MatcherT`, only returning the result value.
 evalMatcherT :: (Undoable v, Functor m) => (i -> v) -> [i] -> MatcherT i v m a -> m a
 evalMatcherT func inp mt = (\(x,_,_) -> x) <$> getMatcherT mt func inp emptyU
 
+-- | Run `Matcher`, only returning the result value.
 evalMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
 evalMatcher = evalMatcherT
 
@@ -278,7 +296,17 @@ matchReturn (ConditionalReturn f) = do
   vs <- pullValues
   lift $ f vs mi
 
-
+-- | Run `match` repeatedly until the input buffer
+--   is empty, and accumulate the results in a list.
+--   This list uses a right-fold to process the elements,
+--   i.e.
+--
+--   @
+--   matches err f == (rslt1 : ) <$> (rslt2 : ) <$> (rslt3 : ) <$> (return [])
+--   @
+--
+--   If this isn't working well for whatever reason,
+--   try using `matchesL` with a different `Monoid`.
 matches :: (MonadPlus m, Undoable v, Monoid v) => (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m [r]
 matches err f = do
   mybX <- preview
@@ -287,5 +315,70 @@ matches err f = do
     (Just _) -> do
       y <- match err f
       (y:) <$> matches err f
+
+-- | Run `match` repeatedly until the input buffer is
+--   empty, accumulating the results in the returning 
+--   `Monoid` from left-to-right. i.e.
+--
+--   @
+--   matchesL err f == (((rslt1 <> rslt2) <> rslt3) <> rslt4)
+--   matchesL err f == ((((mempty <> rslt1) <> rslt2) <> rslt3) <> rslt4)
+--   @
+--   
+--   Note that it only returns `mempty` if there is
+--   nothing in the input buffer.
+--
+--   This function is usefuly for when the output value
+--   is one intended to be used as a `Monoid`/`Semigroup`,
+--   e.g. a ByteString `Data.ByteString.Builder.Builder` or
+--   a `Data.Text.Lazy.Builder.Builder`.
+--
+--   If you'd rather supply an initial value instead of
+--   using mempty, use `matchesDefL` instead.
+matchesL :: (MonadPlus m, Undoable v, Monoid v, Monoid r) => (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m r
+matchesL err f = do
+  mybX <- preview
+  case mybX of
+    Nothing  -> return mempty
+    (Just _) -> do
+      y <- match err f
+      matchesDefL y err f
+
+-- | Run `match` repeatedly until the input buffer is
+--   empty, accumulating the results in the returning 
+--   `Semigroup` from left-to-right. i.e.
+--
+--   @
+--   matchesL def err f == ((((def <> rslt1) <> rslt2) <> rslt3) <> rslt4)
+--   @
+--   
+--   Note that it only returns @def@ if there is
+--   nothing in the input buffer.
+--
+--   This function can be useful if chaining several
+--   `runMatcherT` operations in a row, e.g.
+--
+--   @
+--   matchTexts txt1 txt2 txt3 = do
+--     rslt1 <- runMatcherT txt1 myFunc (matchesL          myErr myMatch)
+--     rslt2 <- runMatcherT txt2 myFunc (matchesDefL rslt1 myErr myMatch)
+--     rslt3 <- runMatcherT txt3 myFunc (matchesDefL rslt2 myErr myMatch)
+--     return rslt3
+--     where
+--       myMatch = \case ...
+--       myFunc  = \_ -> ()
+--       myErr   = \str -> ...
+--   @
+--
+--   If you'd rather just use `mempty` for @def@, use
+--   `matchesL` instead.
+matchesDefL :: (MonadPlus m, Undoable v, Monoid v, Semigroup r) => r -> (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m r
+matchesDefL acc err f = do
+  mybX <- preview
+  case mybX of
+    Nothing  -> return acc
+    (Just _) -> do
+      y <- match err f
+      matchesDefL (acc <> y) err f
 
 

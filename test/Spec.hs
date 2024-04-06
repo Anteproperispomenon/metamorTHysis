@@ -13,6 +13,7 @@ import Data.Text qualified as T
 import Data.Attoparsec.Text qualified as AT
 
 import Test.Monad.Matcher
+import Test.Monad.Matcher2 qualified as M2
 
 main :: IO ()
 main = do
@@ -32,6 +33,12 @@ main = do
   print $ runTheMatcher exampleList1 matchThingy
   print $ runTheMatcher exampleList2 matchThingy
   print $ runTheMatcher exampleList3 matchThingy
+
+  putStrLn "\n"
+
+  print $ M2.runTheMatcher M2.exampleList1 M2.myMatch
+  print $ M2.runTheMatcher M2.exampleList2 M2.myMatch
+  print $ M2.runTheMatcher M2.exampleList3 M2.myMatch
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text

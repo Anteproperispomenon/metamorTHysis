@@ -129,6 +129,7 @@ test-suite metamorTHysis-test
   main-is: Spec.hs
   other-modules:
       Test.Monad.Matcher
+      Test.Monad.Matcher2
       Test.TH.Basic
       Test.TH.Grouped
       Test.TH.TwoOrths

@@ -55,5 +55,3 @@ getFirstCase (NonCased:xs) = getFirstCase xs
 getLastCase :: [CharCase] -> CharCase
 getLastCase xs = getFirstCase $ reverse xs
 
-
-
