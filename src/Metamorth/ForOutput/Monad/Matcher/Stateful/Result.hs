@@ -29,6 +29,7 @@ module Metamorth.ForOutput.Monad.Matcher.Stateful.Result
   ( MatchResult(..)
   , MatchReturn(..)
   , checkStateReturn
+  , checkConditionalStateReturn
   ) where
 
 import Control.Arrow (first)
@@ -131,6 +132,9 @@ data MatchReturn m i v s r
 --   modify the state.
 checkStateReturn :: (Functor m) => (v -> s -> m r) -> MatchReturn m i v s r
 checkStateReturn f = StateReturn $ \v s -> (,s) <$> f v s
+
+checkConditionalStateReturn :: (Functor m) => (v -> Maybe i -> s -> m r) -> MatchReturn m i v s r
+checkConditionalStateReturn f = ConditionalStateReturn $ \v i s -> (,s) <$> f v i s
 
 instance (Functor m) => Functor (MatchReturn m i v s) where
   fmap f (PlainReturn ret) = PlainReturn $ \v -> f <$> ret v
