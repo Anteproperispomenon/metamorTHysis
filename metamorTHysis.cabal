@@ -28,6 +28,8 @@ library
       Metamorth.ForOutput.Char
       Metamorth.ForOutput.Monad.Matcher
       Metamorth.ForOutput.Monad.Matcher.Result
+      Metamorth.ForOutput.Monad.Matcher.Stateful
+      Metamorth.ForOutput.Monad.Matcher.Stateful.Result
       Metamorth.ForOutput.Monad.Matcher.Undo
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
