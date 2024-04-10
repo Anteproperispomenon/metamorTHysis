@@ -64,7 +64,7 @@ type QP = QPT Q
 -- Need to write it like this and not `type QP a = QPT Q a`, since
 -- that would cause problems when using it with Monad transformers.
 
--- | @QPT` is a variant of `QP` that works over any
+-- | @QPT@ is a variant of `QP` that works over any
 --   instance of `Quasi` and `Quote`.
 --   Note that `runQP` and `runQP2` work on both
 --   `QP` and `QPT`.
