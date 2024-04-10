@@ -111,6 +111,9 @@ runMatcherT func inp st mt = getMatcherT mt func inp mempty st
 runMatcher :: (Monoid v) => (i -> v) -> [i] -> s -> Matcher i v s a -> Maybe (a, [i], v, s)
 runMatcher = runMatcherT
 
+-- | Run a `MatcherE`, returning the result value,
+--   along with the remaining input and output
+--   streams.
 runMatcherE :: (Monoid v) => (i -> v) -> [i] -> s -> MatcherE i v s a -> Either String (a, [i], v, s)
 runMatcherE x y z = toEither . runMatcherT x y z
 
@@ -122,6 +125,7 @@ evalMatcherT func inp st mt = (\(x,_,_,_) -> x) <$> getMatcherT mt func inp memp
 evalMatcher :: (Monoid v) => (i -> v) -> [i] -> s -> Matcher i v s a -> Maybe a
 evalMatcher = evalMatcherT
 
+-- | Run a `MatcherE`, only returning the result value.
 evalMatcherE :: (Monoid v) => (i -> v) -> [i] -> s -> MatcherE i v s a -> Either String a
 evalMatcherE x y z = toEither . evalMatcherT x y z
 

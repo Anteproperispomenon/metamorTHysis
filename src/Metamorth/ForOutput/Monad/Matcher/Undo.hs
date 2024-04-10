@@ -29,10 +29,15 @@ This version of the code has support for
 -}
 
 module Metamorth.ForOutput.Monad.Matcher.Undo
-  -- * Main Type
+  -- * Main Types
+  -- ** Simplified Types
   ( Matcher
   , runMatcher
   , evalMatcher
+  , MatcherE
+  , runMatcherE
+  , evalMatcherE
+  -- ** Transformer Type
   , MatcherT
   , runMatcherT
   , evalMatcherT
@@ -61,6 +66,8 @@ import Control.Monad.Trans.Class
 -- import Data.Functor.Identity
 
 import Metamorth.ForOutput.Monad.Matcher.Result
+
+import Metamorth.ForOutput.Monad.EitherFail
 
 -- import Data.Kind (Type)
 import Data.List (uncons)
@@ -155,7 +162,18 @@ newtype MatcherT i v m a  = MatcherT { getMatcherT :: (i -> v) -> [i] -> UndoSta
 --   to use, but it won't return error messages.
 type Matcher i v = MatcherT i v Maybe
 
--- | Run a `MatcherT`
+-- | A simple matcher that works very similarly
+--   to `Matcher`, but instead uses a variant
+--   of `Either` as its base `Monad`. This variant
+--   has instances for `Alternative`, `MonadFail`,
+--   and a few other related typeclasses that make
+--   it suitable for matching/parsing.
+type MatcherE i v = MatcherT i v EitherFail
+
+
+-- | Run a `MatcherT`, returning the result
+--   value, along with the remaining input
+--   and output streams.
 runMatcherT :: (Undoable v, Functor m) => (i -> v) -> [i] -> MatcherT i v m a -> m (a, [i], v)
 runMatcherT func inp mt = f <$> getMatcherT mt func inp emptyU
   where f (x,y,z) = (x,y,retrieve z)
@@ -166,6 +184,12 @@ runMatcherT func inp mt = f <$> getMatcherT mt func inp emptyU
 runMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe (a, [i], v)
 runMatcher = runMatcherT
 
+-- | Run a `MatcherE`, returning the result value,
+--   along with the remaining input and output
+--   streams.
+runMatcherE :: (Undoable v) => (i -> v) -> [i] -> MatcherE i v a -> Either String (a, [i], v)
+runMatcherE x y = toEither . runMatcherT x y
+
 -- | Run `MatcherT`, only returning the result value.
 evalMatcherT :: (Undoable v, Functor m) => (i -> v) -> [i] -> MatcherT i v m a -> m a
 evalMatcherT func inp mt = (\(x,_,_) -> x) <$> getMatcherT mt func inp emptyU
@@ -174,6 +198,9 @@ evalMatcherT func inp mt = (\(x,_,_) -> x) <$> getMatcherT mt func inp emptyU
 evalMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
 evalMatcher = evalMatcherT
 
+-- | Run a `MatcherE`, only returning the result value.
+evalMatcherE :: (Undoable v) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
+evalMatcherE x y = toEither . evalMatcherT x y
 
 instance (Functor m) => Functor (MatcherT i v m) where
   fmap f (MatcherT mt) = MatcherT $ \ifnc inp vs -> fmap1'3 f $ mt ifnc inp vs
