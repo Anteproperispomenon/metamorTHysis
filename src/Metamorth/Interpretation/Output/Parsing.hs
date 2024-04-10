@@ -39,7 +39,7 @@ import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
 -- A lot of the code here is taken from
--- `Metamorth.Interpretation.Parser.Parsing`.
+-- "Metamorth.Interpretation.Parser.Parsing".
 
 ----------------------------------------------------------------
 -- Main Parser

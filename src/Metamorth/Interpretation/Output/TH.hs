@@ -6,7 +6,7 @@ Description : Generating Phoneme Output Code
 Copyright   : (c) David Wilson, 2024
 License     : BSD-3
 
-This is the module for generating code
+This is the module for generating output code.
 
 -}
 
@@ -19,10 +19,10 @@ import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
 
 import Metamorth.Interpretation.Output.TH.Constructors
-
 import Metamorth.Interpretation.Output.Types
 
-
+-- searching for incorrectly entered modules in VS Code:
+-- `[^`.]*\.[^`]*`
 
 
 

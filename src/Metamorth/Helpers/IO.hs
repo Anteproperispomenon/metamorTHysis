@@ -9,12 +9,12 @@ This module just contains some variants of
 `readFile`, `writeFile`, etc... that are 
 specified to specific encoding schemes,
 mostly UTF-8. These functions are equivalent
-to ones in `Data.Text.IO`, but specialised
+to ones in "Data.Text.IO", but specialised
 to specific encodings; i.e. they all return/use
 values of type `T.Text`.
 
 Note: Since version 2.1, the @text@ package contains 
-a module `Data.Text.IO.Utf8`. The UTF-8 functions
+a module "Data.Text.IO.Utf8". The UTF-8 functions
 in this module are effectively equivalent to the
 functions in that module, but these ones don't
 require the newest version of @text@.
