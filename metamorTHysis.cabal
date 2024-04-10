@@ -26,6 +26,7 @@ source-repository head
 library
   exposed-modules:
       Metamorth.ForOutput.Char
+      Metamorth.ForOutput.Monad.EitherFail
       Metamorth.ForOutput.Monad.Matcher
       Metamorth.ForOutput.Monad.Matcher.Result
       Metamorth.ForOutput.Monad.Matcher.Stateful

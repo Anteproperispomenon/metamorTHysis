@@ -24,10 +24,15 @@ defines a stateful version that has more
 -}
 
 module Metamorth.ForOutput.Monad.Matcher.Stateful
-  -- * Main Type
+  -- * Main Types
+  -- ** Simplified Types
   ( Matcher
   , runMatcher
   , evalMatcher
+  , MatcherE
+  , runMatcherE
+  , evalMatcherE
+  -- ** Transformer Type
   , MatcherT
   , runMatcherT
   , evalMatcherT
@@ -63,10 +68,20 @@ import Control.Monad.Trans.Class
 
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
+import Metamorth.ForOutput.Monad.EitherFail
+
 -- | A simple matcher that uses `Maybe` as the
 --   base `Monad`. Probably the easiest version
 --   to use, but it won't return error messages.
 type Matcher i v s = MatcherT i v s Maybe
+
+-- | A simple matcher that works very similarly
+--   to `Matcher`, but instead uses a variant
+--   of `Either` as its base `Monad`. This variant
+--   has instances for `Alternative`, `MonadFail`,
+--   and a few other related typeclasses that make
+--   it suitable for matching/parsing.
+type MatcherE i v s = MatcherT i v s EitherFail
 
 -- | A `Monad` akin to a parser that consumes
 --   values from an input list, converts them
@@ -96,6 +111,9 @@ runMatcherT func inp st mt = getMatcherT mt func inp mempty st
 runMatcher :: (Monoid v) => (i -> v) -> [i] -> s -> Matcher i v s a -> Maybe (a, [i], v, s)
 runMatcher = runMatcherT
 
+runMatcherE :: (Monoid v) => (i -> v) -> [i] -> s -> MatcherE i v s a -> Either String (a, [i], v, s)
+runMatcherE x y z = toEither . runMatcherT x y z
+
 -- | Run `MatcherT`, only returning the result value.
 evalMatcherT :: (Functor m, Monoid v) => (i -> v) -> [i] -> s -> MatcherT i v s m a -> m a
 evalMatcherT func inp st mt = (\(x,_,_,_) -> x) <$> getMatcherT mt func inp mempty st
@@ -103,6 +121,9 @@ evalMatcherT func inp st mt = (\(x,_,_,_) -> x) <$> getMatcherT mt func inp memp
 -- | Run `Matcher`, only returning the result value.
 evalMatcher :: (Monoid v) => (i -> v) -> [i] -> s -> Matcher i v s a -> Maybe a
 evalMatcher = evalMatcherT
+
+evalMatcherE :: (Monoid v) => (i -> v) -> [i] -> s -> MatcherE i v s a -> Either String a
+evalMatcherE x y z = toEither . evalMatcherT x y z
 
 instance (Functor m) => Functor (MatcherT i v s m) where
   fmap f (MatcherT mt) = MatcherT $ \ifnc inp vs st -> fmap1'4 f $ mt ifnc inp vs st
