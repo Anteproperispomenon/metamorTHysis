@@ -40,6 +40,11 @@ module Metamorth.ForOutput.Monad.Matcher
   , matches
   , matchesL
   , matchesDefL
+  -- ** Automatic MonadFail Versions
+  , matchF
+  , matchesF
+  , matchesLF
+  , matchesDefLF
   -- * Low-Level Operations
   , proceed
   , preview
@@ -293,4 +298,25 @@ matchesDefL acc err f = do
     (Just _) -> do
       y <- match err f
       matchesDefL (acc <> y) err f
+
+-- | Variant of `match` that uses `fail` from `MonadFail`
+--   as the first argument.
+matchF :: (MonadPlus m, MonadFail m, Monoid v) => (i -> MatchResult m i v r) -> MatcherT i v m r
+matchF = match fail
+
+-- | Variant of `matches` that uses `fail` from `MonadFail`
+--   as the first argument.
+matchesF :: (MonadPlus m, MonadFail m, Monoid v) => (i -> MatchResult m i v r) -> MatcherT i v m [r]
+matchesF = matches fail
+
+-- | Variant of `matchesL` that uses `fail` from `MonadFail`
+--   as the first argument.
+matchesLF :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> MatchResult m i v r) -> MatcherT i v m r
+matchesLF = matchesL fail
+
+-- | Variant of `matchesDefL` that uses `fail` from `MonadFail`
+--   as the first argument
+matchesDefLF :: (MonadPlus m, MonadFail m, Monoid v, Semigroup r) => r -> (i -> MatchResult m i v r) -> MatcherT i v m r
+matchesDefLF acc = matchesDefL acc fail
+
 
