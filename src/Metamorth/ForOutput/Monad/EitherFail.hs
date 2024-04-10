@@ -47,9 +47,11 @@ import Control.Applicative
 --     * @RightF x@ : Success
 --
 --    Where
+--
 --      * @EmptyF == Left Nothing@
 --      * @LeftF str == Left (Just str)@
 --      * @RightF x == Right x@
+--
 --    (Except lifted into a @newtype@)
 newtype EitherFail a = EitherFail { getEither :: Either (Maybe String) a }
   deriving newtype (Functor, Applicative, Monad, Foldable)

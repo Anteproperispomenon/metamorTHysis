@@ -53,8 +53,6 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Class
 
--- import Data.Foldable1
-
 import Metamorth.ForOutput.Monad.Matcher.Result
 
 import Metamorth.ForOutput.Monad.EitherFail
@@ -149,12 +147,15 @@ instance (Monad m) => Monad (MatcherT i v m) where
         (x, inp2, vs2) <- mt1 ifnc inp vs
         getMatcherT (f x) ifnc inp2 vs2
 
-
 instance (MonadPlus m) => Alternative (MatcherT i v m) where
   empty = MatcherT $ \_ _ _ -> mzero
   (MatcherT mt1) <|> (MatcherT mt2) 
     = MatcherT $ \ifnc inp vs -> (mt1 ifnc inp vs) `mplus` (mt2 ifnc inp vs)
 
+instance (MonadPlus m) => MonadPlus (MatcherT i v m)
+
+instance (MonadFail m) => MonadFail (MatcherT i v m) where
+  fail = lift . fail
 
 instance MonadTrans (MatcherT i v) where
   lift action = MatcherT $ \_ inp vs -> (,inp,vs) <$> action
@@ -181,7 +182,6 @@ preview = MatcherT $ \_ifnc inp vs -> case inp of
 pullValues :: (Applicative m, Monoid v) => MatcherT i v m v
 pullValues = MatcherT $ \_ifnc inp vs -> pure (vs, inp, mempty)
 
-
 match :: (MonadPlus m, Monoid v) => (String -> m r) -> (i -> MatchResult m i v r) -> MatcherT i v m r
 match err f = do
   mybX <- proceed
@@ -191,7 +191,7 @@ match err f = do
       case (f x) of
         MatchReturn ret  -> matchReturn ret
         MatchContinue mc -> match err mc
-        MatchFail str    -> lift $ str >>= err
+        MatchFail str    -> lift $ err str
         MatchOptions ret cont
           -> match err cont <|> matchReturn ret
 
@@ -293,5 +293,4 @@ matchesDefL acc err f = do
     (Just _) -> do
       y <- match err f
       matchesDefL (acc <> y) err f
-
 

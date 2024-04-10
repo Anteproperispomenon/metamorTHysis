@@ -64,8 +64,6 @@ import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Class
 
--- import Data.Foldable1
-
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 import Metamorth.ForOutput.Monad.EitherFail
@@ -161,12 +159,15 @@ instance (Monad m) => Monad (MatcherT i v s m) where
         (x, inp2, vs2, st2) <- mt1 ifnc inp vs st
         getMatcherT (f x) ifnc inp2 vs2 st2
 
-
 instance (MonadPlus m) => Alternative (MatcherT i v s m) where
   empty = MatcherT $ \_ _ _ _ -> mzero
   (MatcherT mt1) <|> (MatcherT mt2) 
     = MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
 
+instance (MonadPlus m) => MonadPlus (MatcherT i v s m)
+
+instance (MonadFail m) => MonadFail (MatcherT i v s m) where
+  fail = lift . fail
 
 instance MonadTrans (MatcherT i v s) where
   lift action = MatcherT $ \_ inp vs st -> (,inp,vs,st) <$> action
@@ -206,7 +207,6 @@ modify f = MatcherT $ \_ifnc inp vs st -> pure ((), inp, vs, f st)
 
 modify' :: (Applicative m) => (s -> s) -> MatcherT i v s m ()
 modify' f = MatcherT $ \_ifnc inp vs st -> pure ((), inp, vs, f $! st)
-
 
 put :: (Applicative m) => s -> MatcherT i v s m ()
 put st = MatcherT $ \_ifnc inp vs _ -> pure ((), inp, vs, st)

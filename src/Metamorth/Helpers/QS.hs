@@ -66,7 +66,7 @@ type QS = QST Q
 -- Need to write it like this and not `type QS a = QST Q a`, since
 -- that would cause problems when using it with Monad transformers.
 
--- | @QST` is a variant of `QS` that works over any
+-- | @QST@ is a variant of `QS` that works over any
 --   instance of `Quasi` and `Quote`.
 --   Note that `runQS` and `runQS2` work on both
 --   `QS` and `QST`.

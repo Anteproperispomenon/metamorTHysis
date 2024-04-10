@@ -23,7 +23,6 @@ module here.
 
 -}
 
-
 module Metamorth.ForOutput.Monad.Matcher.Result
   ( MatchResult(..)
   , MatchReturn(..)
@@ -92,11 +91,11 @@ data MatchResult m i v r
   --   ... MatchContinue $ \case
   --     A -> ...
   --     ...
-  --     _ -> MatchFail $ fail "Bad Path"
+  --     _ -> MatchFail "Bad Path"
   --   @
   --
   --   So that the function isn't partial.
-  | MatchFail (m String)
+  | MatchFail String
 
 instance (Functor m) => Functor (MatchResult m i v) where
   fmap f (MatchReturn ret)       = MatchReturn (fmap f ret)

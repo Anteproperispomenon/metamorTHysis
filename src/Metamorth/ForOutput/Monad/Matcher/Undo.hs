@@ -239,6 +239,11 @@ instance (MonadPlus m) => Alternative (MatcherT i v m) where
   (MatcherT mt1) <|> (MatcherT mt2) 
     = MatcherT $ \ifnc inp vs -> (mt1 ifnc inp vs) `mplus` (mt2 ifnc inp vs)
 
+instance (MonadPlus m) => MonadPlus (MatcherT i v m)
+
+instance (MonadFail m) => MonadFail (MatcherT i v m) where
+  fail = lift . fail
+
 instance MonadTrans (MatcherT i v) where
   lift action = MatcherT $ \_ inp vs -> (,inp,vs) <$> action
 
@@ -309,7 +314,7 @@ match err f = do
       case (f x) of
         MatchReturn ret  -> matchReturn ret
         MatchContinue mc -> match err mc
-        MatchFail str    -> lift $ str >>= err
+        MatchFail str    -> lift $ err str
         MatchOptions ret cont
           -> match err cont <|> matchReturn ret
 
@@ -407,5 +412,4 @@ matchesDefL acc err f = do
     (Just _) -> do
       y <- match err f
       matchesDefL (acc <> y) err f
-
 
