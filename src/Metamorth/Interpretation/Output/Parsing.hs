@@ -34,6 +34,7 @@ import Metamorth.Helpers.Error.RWS
 import Metamorth.Interpretation.Output.Parsing.Trie
 import Metamorth.Interpretation.Output.Parsing.Types
 import Metamorth.Interpretation.Output.Types
+import Metamorth.Interpretation.Output.Types.Alt
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S

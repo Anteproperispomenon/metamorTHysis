@@ -5,8 +5,8 @@
 
 module Metamorth.Interpretation.Output.Types
   -- * Important Types
-  ( OutputParserOutput(..)
-  , OutputPattern(..)
+  -- ( OutputParserOutput(..)
+  ( OutputPattern(..)
   , pattern OutputPatternPair
   -- * Various types
   , OutputCase(..)
@@ -114,7 +114,7 @@ data CaseApply
 -- | The pattern of Phonemes on the left-hand-side
 --   of a pattern.
 type PhonePattern = PhonePatternF [CheckStateX] [PhoneFollow]
-{-# COMPLETE PhonemeName, PhoneAtStart, PhoneNotStart, PhoneAtEnd, PhoneNotEnd, PhoneFollow :: PhonePattern #-}
+{-# COMPLETE PhonemeName, PhoneAtStart, PhoneNotStart, PhoneAtEnd, PhoneNotEnd, PhoneFollow #-}
 
 pattern PhonemeName :: [CheckStateX] -> PhoneName -> PhonePattern
 pattern PhonemeName st nom = PhonemeNameX st nom
@@ -278,26 +278,3 @@ data CharPattern = CharPattern
 
 type OutputHeader = ()
 
--- | The Output from an `OutputParser`.
-data OutputParserOutput = OutputParserOutput
-  -- | The state dictionary. This is updated as
-  --   the parser parses the state declarations.
-  { opoStateDictionary :: M.Map String (Maybe (S.Set String))
-  -- | The Group "Dictionary". This is supplied by
-  --   the phoneme parser when the output files
-  --   are run.
-  , opoGroupDictionary :: S.Set String
-  -- | The Trait Dictionary. This is supplied by
-  --   the phoneme parser when the output files
-  --   are run. The `S.Set` contains the possible
-  --   values for the trait, if relevant.
-  , opoTraitDictionary :: M.Map String (Maybe (S.Set String))
-  -- | The Aspect Dictionary. This is supplied by
-  --   the phoneme parser when the output files
-  --   are run. The `S.Set` contains the possible
-  --   values for the trait.
-  , opoAspectDictionary :: M.Map String (S.Set String)
-  -- | The main trie to be used for determining
-  --   output.
-  , opoOutputTrie       :: TM.TMap PhonePattern (M.Map OutputCase OutputPattern)
-  } deriving (Show, Eq)

@@ -9,10 +9,12 @@ import Data.Maybe
 
 import Metamorth.Interpretation.Output.Parsing.Types
 import Metamorth.Interpretation.Output.Types
+import Metamorth.Interpretation.Output.Types.Alt
 
 import Data.Trie.Map qualified as TM
 
 import Data.Map.Strict qualified as M
+import Data.Set        qualified as S
 
 import Metamorth.Helpers.Error
 import Metamorth.Helpers.Error.RWS
@@ -58,6 +60,11 @@ modifyNodeM cs f tmap = do
 modifyNodeM' :: (Monad m, Ord c) => [c] -> TM.TMap c a -> (Maybe a -> m a) -> m (TM.TMap c a)
 modifyNodeM' cs tmap f = modifyNodeM cs f tmap
 
+insertNodeS :: (Ord c, Ord p) => [c] -> p -> TM.TMap c (S.Set p) -> TM.TMap c (S.Set p)
+insertNodeS cs p = TM.revise ins cs
+  where
+    ins Nothing   = S.singleton p
+    ins (Just st) = S.insert p st
 
 -- addOutputPattern :: ([PhonePattern], OutputPattern) -> OutputParser ()
 -- addOutputPattern pr@(pp, op) = do
@@ -67,12 +74,16 @@ modifyNodeM' cs tmap f = modifyNodeM cs f tmap
 --   modify $ \x -> x {opsOutputTrie = tmap'}
 
 addOutputPattern :: ([PhonePattern], OutputPattern) -> OutputParser ()
-addOutputPattern pr@(pp, op) = do
-  tmap  <- gets opsOutputTrie
-  tmap' <- modifyNodeM' pp tmap $ \case
-     Nothing   -> return $ M.singleton (opCasedness op) op
-     (Just mp) -> insertOrigMapM (opCasedness op) op mp $ \origVal ->
-        warn $ "Can't insert pair " ++ show pr ++ "; key already used for \"" ++ show origVal ++ "\"."
+addOutputPattern prOld = do
+  let (pp, op) = renewOutputPattern prOld
+  tmap <- gets opsOutputTrie
+  let tmap' = insertNodeS pp op tmap
   modify $ \x -> x {opsOutputTrie = tmap'}
+  
+  -- tmap' <- modifyNodeM' pp tmap $ \case
+  --    Nothing   -> return $ M.singleton (opCasedness op) op
+  --    (Just mp) -> insertOrigMapM (opCasedness op) op mp $ \origVal ->
+  --       warn $ "Can't insert pair " ++ show pr ++ "; key already used for \"" ++ show origVal ++ "\"."
+  -- modify $ \x -> x {opsOutputTrie = tmap'}
 
 

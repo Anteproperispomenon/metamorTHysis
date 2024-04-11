@@ -1,6 +1,7 @@
 {-|
 Module      : Metamorth.Helpers.List
 Description : Various List Functions
+Copyright   : (c) David Wilson, 2024
 License     : BSD-3
 
 This module mostly contains some helper
