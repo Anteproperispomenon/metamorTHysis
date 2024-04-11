@@ -76,7 +76,7 @@ data MatchResult m i v s r
   -- | There is only one option, which
   --   is to consume nothing and produce
   --   a value.
-  = MatchReturn (MatchReturn m i v s r)
+  = MatchReturn [MatchReturn m i v s r]
   -- | Continue matching the input using this
   --   function next. Typically run in the same
   --   way as the initial step (see above).
@@ -87,7 +87,7 @@ data MatchResult m i v s r
   --   to a `MatchFail` result, then the input
   --   will be rewound, and the return value
   --   here will be run instead.
-  | MatchOptions (MatchReturn m i v s r) (i -> MatchResult m i v s r)
+  | MatchOptions [MatchReturn m i v s r] (i -> MatchResult m i v s r)
   -- | Used for paths that aren't a valid match. 
   --   When writing a `MatchContinue` function, 
   --   you should use this together with a wildcard,
@@ -104,9 +104,9 @@ data MatchResult m i v s r
   | MatchFail String
 
 instance (Functor m) => Functor (MatchResult m i v s) where
-  fmap f (MatchReturn ret)       = MatchReturn (fmap f ret)
-  fmap f (MatchContinue cont)    = MatchContinue $ \inp -> f <$> cont inp
-  fmap f (MatchOptions ret cont) = MatchOptions (fmap f ret) (\inp -> f <$> cont inp)
+  fmap f (MatchReturn rets)       = MatchReturn (map (fmap f) rets)
+  fmap f (MatchContinue cont)     = MatchContinue $ \inp -> f <$> cont inp
+  fmap f (MatchOptions rets cont) = MatchOptions (map (fmap f) rets) (\inp -> f <$> cont inp)
   fmap _ (MatchFail x) = MatchFail x
 
 -- | Matching on return values. This is to

@@ -117,8 +117,9 @@ evalMatcher :: (Monoid v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
 evalMatcher = evalMatcherT
 
 -- | Run a `MatcherE`, only returning the result value.
-evalMatcherE :: (Monoid v) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
+evalMatcherE :: (Monoid v, Functor EitherFail) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
 evalMatcherE x y = toEither . evalMatcherT x y
+-- also what is that constraint???
 
 instance (Functor m) => Functor (MatcherT i v m) where
   fmap f (MatcherT mt) = MatcherT $ \ifnc inp vs -> fmap1'3 f $ mt ifnc inp vs
@@ -194,11 +195,11 @@ match err f = do
     Nothing  -> lift $ err "Not Enough Input."
     (Just x) -> do
       case (f x) of
-        MatchReturn ret  -> matchReturn ret
+        MatchReturn rets -> msum (map matchReturn rets)
         MatchContinue mc -> match err mc
         MatchFail str    -> lift $ err str
-        MatchOptions ret cont
-          -> match err cont <|> matchReturn ret
+        MatchOptions rets cont
+          -> match err cont <|> msum (map matchReturn rets)
 
 -- matchReturn :: (MonadPlus m, Monoid v) => (String -> m r) -> MatchReturn m i v r -> MatcherT i v m r
 matchReturn :: (MonadPlus m, Monoid v) => MatchReturn m i v r -> MatcherT i v m r

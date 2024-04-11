@@ -192,7 +192,7 @@ runMatcher = runMatcherT
 -- | Run a `MatcherE`, returning the result value,
 --   along with the remaining input and output
 --   streams.
-runMatcherE :: (Undoable v) => (i -> v) -> [i] -> MatcherE i v a -> Either String (a, [i], v)
+runMatcherE :: (Undoable v, Functor EitherFail) => (i -> v) -> [i] -> MatcherE i v a -> Either String (a, [i], v)
 runMatcherE x y = toEither . runMatcherT x y
 
 -- | Run `MatcherT`, only returning the result value.
@@ -204,7 +204,7 @@ evalMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
 evalMatcher = evalMatcherT
 
 -- | Run a `MatcherE`, only returning the result value.
-evalMatcherE :: (Undoable v) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
+evalMatcherE :: (Undoable v, Functor EitherFail) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
 evalMatcherE x y = toEither . evalMatcherT x y
 
 instance (Functor m) => Functor (MatcherT i v m) where
@@ -317,11 +317,11 @@ match err f = do
     Nothing  -> lift $ err "Not Enough Input."
     (Just x) -> do
       case (f x) of
-        MatchReturn ret  -> matchReturn ret
+        MatchReturn rets -> msum $ map matchReturn rets
         MatchContinue mc -> match err mc
         MatchFail str    -> lift $ err str
-        MatchOptions ret cont
-          -> match err cont <|> matchReturn ret
+        MatchOptions rets cont
+          -> match err cont <|> msum (map matchReturn rets)
 
 -- matchReturn :: (MonadPlus m, Monoid v) => (String -> m r) -> MatchReturn m i v r -> MatcherT i v m r
 matchReturn :: (MonadPlus m, Undoable v) => MatchReturn m i v r -> MatcherT i v m r

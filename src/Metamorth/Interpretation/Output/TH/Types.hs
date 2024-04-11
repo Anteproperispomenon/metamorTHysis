@@ -78,21 +78,27 @@ data OutputNameDatabase = OutputNameDatabase
 --------------------------------
 -- Pseudo-Accessors
 
+-- | Get the phonemes' `Name`s.
 ondPhonemeNames :: OutputNameDatabase -> M.Map String Name
 ondPhonemeNames = fmap fst . ondPhonemes
 
+-- | Get the phonemes' Constructor lists.
 ondPhonemeConsts :: OutputNameDatabase -> M.Map String [M.Map String Name]
 ondPhonemeConsts = fmap snd . ondPhonemes
 
+-- | Get the aspects' check functions.
 ondAspectChecks :: OutputNameDatabase -> M.Map String Name
 ondAspectChecks = fmap fst . ondAspects
 
+-- | get the aspects' constructor maps.
 ondAspectConsts :: OutputNameDatabase -> M.Map String (M.Map String Name)
 ondAspectConsts = fmap snd . ondAspects
 
+-- | The `M.Map` of val-traits.
 ondValTraits :: OutputNameDatabase -> M.Map String (Name, M.Map String Name)
 ondValTraits = M.mapMaybe tupMaybe2of2 . ondTraits
 
+-- | The `M.Map` of bool-traits.
 ondBoolTraits :: OutputNameDatabase -> M.Map String Name
 ondBoolTraits = M.mapMaybe tupOnlyNothing2of2 . ondTraits
 
