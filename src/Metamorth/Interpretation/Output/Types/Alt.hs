@@ -77,6 +77,8 @@ deriving via (PhoneResultX (Down b)) instance {-# OVERLAPPABLE #-} (Ord b) => Or
 deriving via (PhoneResultX (Down (SizeOrdList b))) 
   instance {-# OVERLAPS #-} (Ord b) => Ord (PhoneResultX [b])
 
+-- | Convert an old-style trie pair into the
+--   new-style version.
 renewOutputPattern :: ([PhonePattern], OutputPattern) -> ([PhonePatternAlt], PhoneResult)
 renewOutputPattern (phPats, outPats) = (ppAlt, PhoneResult (L.sort (prActs ++ cMods')) cItems (opCasedness outPats))
   where 
@@ -103,8 +105,6 @@ data CharPattern = CharPattern
   { cpPatterns     :: [CharPatternItem]
   , cpStateChanges :: [ModifyStateX]
   } deriving (Show, Eq)
-
-
 -}
 
 convertPhonePattern :: [PhonePattern] -> ([PhonePatternAlt], [PhoneResultActionX])
@@ -117,7 +117,6 @@ convertPhonePattern (PhoneAtEnd :rst) = consSnd PRAtEnd  $ convertPhonePattern r
 convertPhonePattern (PhoneNotEnd:rst) = consSnd PRNotEnd $ convertPhonePattern rst
 convertPhonePattern [PhoneFollow fs]  = ([],map PRCheckNext fs)
 convertPhonePattern (PhoneFollow fs:rst) = prpSnd (map PRCheckNext fs) $ convertPhonePattern rst
-
 
 consFst :: a -> ([a],[b]) -> ([a],[b])
 consFst x (xs,ys) = (x:xs,ys)
