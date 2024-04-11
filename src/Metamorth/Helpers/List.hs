@@ -1,10 +1,31 @@
+{-|
+Module      : Metamorth.Helpers.List
+Description : Various List Functions
+License     : BSD-3
+
+This module mostly contains some helper
+functions for lists, along with some 
+functions with re-ordered arguments to
+make them easier to use in some situations.
+
+It also includes `nubSort`, a combination
+of `L.sort` and `L.nub` that has improved
+performance because it `L.nub`s the list
+as it performs the merge sort.
+
+-}
+
 module Metamorth.Helpers.List
+  -- * Major Function(s)
   ( nubSort 
-  , liftEitherList
-  , withZip
-  , withZipM
+  -- * Simple Helpers
   , allUnique
   , firstJust
+  -- * Re-Ordered Functions
+  , withZip
+  , withZipM
+  -- * Re-Exports
+  , liftEitherList
   ) where
 
 import Control.Monad (zipWithM)
@@ -13,7 +34,6 @@ import Data.List qualified as L
 
 import Metamorth.Helpers.Either (liftEitherList)
 
-
 -- | A combination of `L.sort` and `L.nub`. This should
 --   be faster than @`L.nub` . `L.sort`@ and possibly
 --   faster than just `L.sort` on its own. This is
@@ -21,10 +41,24 @@ import Metamorth.Helpers.Either (liftEitherList)
 --   elements throughout the sorting process,
 --   which reduces the lengths of runs created
 --   and merged, and even allows the creation
---   of longer descending runs (since this allows
---   descending runs to work on monotonically 
+--   of longer descending runs. This is because
+--   descending runs can work on monotonically 
 --   decreasing runs, instead of just strictly
---   descreasing runs).
+--   descreasing runs.
+--
+--   i.e. In a normal merge sort, using the 
+--   following as a run
+--
+--   @ [...5,4,3,2,2,1...] ==> [...[1,2,2,3,4,5]...] @
+--
+--   wouldn't work, since it would break the
+--   stable-sorting guarantee. On the other hand,
+--   since @nubSort@ only keeps the first instance
+--   of each element around, it would create the
+--   following run instead:
+--
+--   @ [...5,4,3,3,2,1...] ==> [...[1,2,3,4,5]...] @
+--
 nubSort :: (Ord a) => [a] -> [a]
 nubSort = mergeAll . getRuns
 
@@ -87,11 +121,11 @@ pairwiseMerge [] = []
 pairwiseMerge [xs] = [xs]
 pairwiseMerge (xs:ys:xss) = (mergeRuns xs ys) : pairwiseMerge xss
 
--- | Like zipWith, but with a different argument order.
+-- | Like `zipWith`, but with a different argument order.
 withZip :: [a] -> [b] -> (a -> b -> c) -> [c]
 withZip xs ys f = zipWith f xs ys
 
--- | Like zipWithM, but with a different argument order.
+-- | Like `zipWithM`, but with a different argument order.
 withZipM :: (Applicative m) => [a] -> [b] -> (a -> b -> m c) -> m [c]
 withZipM xs ys f = zipWithM f xs ys
 

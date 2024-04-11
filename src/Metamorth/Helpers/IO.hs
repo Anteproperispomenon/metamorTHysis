@@ -95,9 +95,9 @@ import System.IO
 
 ----------------------------------------------------------------
 -- NOTE: The majority of these functions are taken right
--- from Data.Text.IO.Utf8, albeit renamed. The UTF-16 and
+-- from "Data.Text.IO.Utf8", albeit renamed. The UTF-16 and
 -- UTF-32 are also based on the functions from
--- Data.TExt.IO.Utf8, but with different encodings.
+-- "Data.Text.IO.Utf8", but with different encodings.
 
 ----------------------------------------------------------------
 -- UTF-8 Functions

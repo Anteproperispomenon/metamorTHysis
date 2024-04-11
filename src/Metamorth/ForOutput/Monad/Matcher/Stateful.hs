@@ -352,6 +352,6 @@ matchesLF :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> MatchResult
 matchesLF = matchesL fail
 
 -- | Variant of `matchesDefL` that uses `fail` from `MonadFail`
---   as the first argument
+--   as the second argument
 matchesDefLF :: (MonadPlus m, MonadFail m, Monoid v, Semigroup r) => r -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
 matchesDefLF acc = matchesDefL acc fail

@@ -41,7 +41,7 @@ getCase c
   | otherwise       = NonCased
 
 getMaxCase :: [CharCase] -> CharCase
-getMaxCase = foldl min LowerCase
+getMaxCase = foldl max LowerCase
 
 getMinCase :: [CharCase] -> CharCase
 getMinCase xs = max LowerCase $ foldl min LowerCase xs

@@ -39,7 +39,7 @@ data PhoneResultActionX
   | PRCheckNext [String] -- i.e. must be one of the strings in question.
   deriving (Show, Eq, Ord)
 
-type PhoneResult = PhoneResultX PhoneResultActionX
+type PhoneResult = PhoneResultX [PhoneResultActionX]
 
 data PhoneResultX a = PhoneResult
   { prPhoneOutput :: String
@@ -50,8 +50,7 @@ deriving instance {-# OVERLAPPING #-} (Ord b) => Ord (PhoneResultX (Down b))
 
 deriving via (PhoneResultX (Down b)) instance {-# OVERLAPPABLE #-} (Ord b) => Ord (PhoneResultX b)
 
--- We want this instance to be chosen over plain @b@, but
--- *not* over @Down b@.
+-- Copied over from another module.
 -- deriving via (PhoneResultX (Compose Down SizeOrdList b))
 deriving via (PhoneResultX (Down (SizeOrdList b))) 
   instance {-# OVERLAPS #-} (Ord b) => Ord (PhoneResultX [b])
