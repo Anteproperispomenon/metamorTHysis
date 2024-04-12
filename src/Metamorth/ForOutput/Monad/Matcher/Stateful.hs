@@ -218,11 +218,13 @@ match err f = do
     Nothing  -> lift $ err "Not Enough Input."
     (Just x) -> do
       case (f x) of
-        MatchReturn rets -> msum $ map matchReturn rets
+        -- MatchReturn rets -> msum $ map matchReturn rets
+        MatchReturn ret  -> matchReturn ret
         MatchContinue mc -> match err mc
         MatchFail str    -> lift $ err str
-        MatchOptions rets cont
-          -> match err cont <|> msum (map matchReturn rets)
+        MatchOptions ret cont
+          -> match err cont <|> matchReturn ret
+          -- -> match err cont <|> msum (map matchReturn ret)
 
 -- matchReturn :: (MonadPlus m, Monoid v) => (String -> m r) -> MatchReturn m i v r -> MatcherT i v m r
 matchReturn :: (MonadPlus m, Monoid v) => MatchReturn m i v s r -> MatcherT i v s m r

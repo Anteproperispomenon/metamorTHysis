@@ -14,6 +14,11 @@ module Metamorth.Interpretation.Output.Types.Alt
   , PhoneResultX(..)
   -- * Other Helpers
   , renewOutputPattern
+  , isConfirmState
+  , isModifyState
+  , isAtEnd
+  , isNotEnd
+  , isCheckNext
   ) where
 
 -- Alternate forms of types.
@@ -57,6 +62,26 @@ data PhoneResultActionX
   | PRNotEnd
   | PRCheckNext PhoneFollow
   deriving (Show, Eq, Ord)
+
+isConfirmState :: PhoneResultActionX -> Bool
+isConfirmState (PRConfirmState _) = True
+isConfirmState _ = False
+
+isModifyState :: PhoneResultActionX -> Bool
+isModifyState (PRModifyState _) = True
+isModifyState _ = False
+
+isAtEnd :: PhoneResultActionX -> Bool
+isAtEnd PRAtEnd = True
+isAtEnd _ = False
+
+isNotEnd :: PhoneResultActionX -> Bool
+isNotEnd PRNotEnd = True
+isNotEnd _ = False
+
+isCheckNext :: PhoneResultActionX -> Bool
+isCheckNext (PRCheckNext _) = True
+isCheckNext _ = False
 
 type PhoneResult = PhoneResultX [PhoneResultActionX]
 -- type PhoneResult str = PhoneResultX str    [PhoneResultActionX]
