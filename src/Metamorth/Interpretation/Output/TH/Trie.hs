@@ -5,6 +5,8 @@ module Metamorth.Interpretation.Output.TH.Trie
 
   ) where
 
+import Control.Arrow ((&&&))
+
 import Data.Functor.Identity
 
 import Data.Char
@@ -35,9 +37,11 @@ import Metamorth.ForOutput.Monad.Matcher.Stateful
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 import Metamorth.Helpers.Q
-import Metamorth.Helpers.TH (strE)
+import Metamorth.Helpers.TH (strE, intersperseInfixEDef, andE, boolE)
 
 import Metamorth.ForOutput.Char
+
+import THLego.Helpers
 
 -- | Since each condition requires a different
 --   number of arguments, we need to keep the
@@ -98,13 +102,76 @@ necessaryPhoneRet (PhoneActionData _  ys []) = StateRet
 necessaryPhoneRet (PhoneActionData [] [] zs) = CondPlainRet
 necessaryPhoneRet (PhoneActionData _  _  _ ) = CondStateRet
 
-addPhoneActionClause :: RetType -> PhoneActionData -> ReturnClauses -> ReturnClauses
-addPhoneActionClause PlainRet pad rcs = case pad of
-  (PhoneActionData [] [] [])  
+
+addPhoneActionClause :: (Quasi q, Quote q) => OutputNameDatabase -> OutputCase -> RetType -> [CharPatternItem] -> PhoneActionData -> ReturnClauses -> q ReturnClauses
+addPhoneActionClause ond oc PlainRet cpi pad rcs = case pad of
+  (PhoneActionData [] [] []) -> do
+    expr <- createCaseExp oc cpi
+    othw <- [| otherwise |]
+    let rslt = \v -> (NormalG othw, AppE expr (VarE v)) 
+    return $ addPlainRet rslt rcs
+  _ -> do 
+    qReportError $ "Couldn't create guard/clause (1) for output \"" ++ show cpi ++ "\"." 
+    return rcs -- error
+addPhoneActionClause ond oc StateRet cpi pad rcs = case pad of
+  (PhoneActionData [] [] []) -> do
+    expr <- createCaseExp oc cpi
+    othw <- [| otherwise |]
+    let rslt = \v s -> (NormalG othw, TupE [Just (AppE expr (VarE v)), Just $ VarE s]  ) 
+    return $ addStateRet rslt rcs
+  (PhoneActionData md [] []) -> do
+    expr <- createCaseExp oc cpi
+    othw <- [| otherwise |]
+    func <- makeModify ond md 
+    let rslt = \v s -> (NormalG othw, TupE [Just (AppE expr (VarE v)), Just $ func s])
+    return $ addStateRet rslt rcs
+  (PhoneActionData md cs []) -> do
+    expr <- createCaseExp oc cpi
+    func <- makeModify  ond md
+    pred <- makeConfirm ond cs
+    let rslt = \v s -> (NormalG $ pred s, TupE [Just (AppE expr (VarE v)), Just $ func s])
+    return $ addStateRet rslt rcs
+  _ -> do 
+    qReportError $ "Couldn't create guard/clause (2) for output \"" ++ show cpi ++ "\"." 
+    return rcs -- error
+addPhoneActionClause ond oc CondPlainRet cpi pad rcs = case pad of
+  (PhoneActionData [] [] []) -> do
+    expr <- createCaseExp oc cpi
+    othw <- [| otherwise |]
+    let rslt = \v _ -> (NormalG $ othw, (AppE expr (VarE v))  ) 
+    return $ addCondPlainRet rslt rcs
+  (PhoneActionData [] [] ns) -> do
+    expr <- createCaseExp oc cpi
+    let pred x   = intersperseInfixEDef (VarE 'otherwise) (VarE '(&&)) (map ($ x) ns)
+        rslt v n = (NormalG $ pred n, AppE expr (VarE v))
+    return $ addCondPlainRet rslt rcs
+  _ -> do 
+    qReportError $ "Couldn't create guard/clause (3) for output \"" ++ show cpi ++ "\"." 
+    return rcs -- error
+addPhoneActionClause ond oc CondStateRet cpi pad rcs = case pad of
+  (PhoneActionData [] [] []) -> do
+    expr <- createCaseExp oc cpi
+    othw <- [| otherwise |]
+    let rslt = \v _ s -> (NormalG othw, TupE [Just (AppE expr (VarE v)), Just $ VarE s]  ) 
+    return $ addCondStateRet rslt rcs
+  (PhoneActionData md cs []) -> do
+    expr <- createCaseExp oc cpi
+    func <- makeModify  ond md
+    prdc <- makeConfirm ond cs
+    let rslt = \v _ s -> (NormalG $ prdc s, TupE [Just (AppE expr (VarE v)), Just $ func s])
+    return $ addCondStateRet rslt rcs
+  (PhoneActionData md cs ns) -> do
+    expr <- createCaseExp oc cpi
+    func  <- makeModify  ond md
+    pred1 <- makeConfirm ond cs
+    let pred2 x     = intersperseInfixEDef (VarE 'otherwise) (VarE '(&&)) (map ($ x) ns)
+        pred3 n s   = andE (pred1 s) (pred2 n)
+        rslt  v n s = (NormalG $ pred3 n s, TupE [Just (AppE expr (VarE v)), Just $ func s])
+    return $ addCondStateRet rslt rcs
 
 
 collectActionData :: OutputNameDatabase -> [PhoneResultActionX] -> Either String PhoneActionData
-collectActionData ond [] = PhoneActionData [] [] []
+collectActionData ond [] = return $ PhoneActionData [] [] []
 collectActionData ond ps = toEither $ do
   let (confirms', rst1) = partition isConfirmState ps
       (modifys' , rst2) = partition isModifyState  rst1
@@ -165,7 +232,7 @@ data PhoneFollow
 -}
 
       
-  return $ PhoneActionData [] [] []
+  -- return $ PhoneActionData [] [] []
 
 -- PhoneResultActionX
 
@@ -173,6 +240,7 @@ data PhoneFollow
 -- makeReturn :: (QL q) => OutputNameDatabase -> S.Set PhoneResult -> q _
 -- makeReturn
 
+{-
 makeReturnItem :: (Quote q, Quasi q) => OutputNameDatabase -> PhoneResult -> ReturnClauses -> q ReturnClauses
 makeReturnItem ond (PhoneResult [] cPats ocs) rcs = do
   -- (v -> m r)
@@ -181,6 +249,7 @@ makeReturnItem ond (PhoneResult [] cPats ocs) rcs = do
   let grd = (\v -> (NormalG othw, AppE thisExp (VarE v)))
   return $ addPlainRet grd rcs
 makeReturnItem ond (PhoneResult )
+-}
 
 -- | Create an expression that can be applied to 
 --   the list of cases to get the desired output.
@@ -235,6 +304,102 @@ allLowerPat = T.unpack . T.toLower . T.pack . plainCharPat
 
 allUpperPat :: [CharPatternItem] -> String
 allUpperPat = T.unpack . T.toUpper . T.pack . plainCharPat
+
+-- | Convert a list of `ModifyStateX` into a
+--   single record update expression.
+makeModify :: (Quasi q, Quote q) => OutputNameDatabase -> [ModifyStateX] -> q (Name -> Exp)
+makeModify _ [] = return $ \x -> VarE x
+makeModify ond mss = do
+  let mss' = map (makeModify1 ond &&& getModName) mss
+  mss2 <- mapM checkNames mss'
+  let mss3 = catMaybes mss2
+  return $ \nom -> RecUpdE (VarE nom) mss3
+
+makeConfirm :: (Quasi q, Quote q) => OutputNameDatabase -> [CheckStateX] -> q (Name -> Exp)
+makeConfirm _ [] = return $ \_ -> VarE 'otherwise
+makeConfirm ond css = do
+  let css' = map (makeCheck1 ond &&& getChkName) css
+  css2 <- mapM checkNames css'
+  let css3 = catMaybes css2
+  return $ \x -> intersperseInfixEDef (VarE 'otherwise) (VarE '(&&)) (map ($ x) css3)
+
+checkNames :: (Quasi q, Quote q) => (Maybe a, String) -> q (Maybe a)
+checkNames (Just fx, _) = return (Just fx)
+checkNames (Nothing, v) = do
+  qReportError $ "Encountered error with state \"" ++ v ++ "\"."
+  return Nothing
+
+getModName :: ModifyStateX -> String
+getModName (ModifyStateBB str _) = str
+getModName (ModifyStateVV str x) = str ++ ":" ++ x
+getModName (ModifyStateVX str  ) = str
+
+getChkName :: CheckStateX -> String
+getChkName (CheckStateBB str _) = str
+getChkName (CheckStateVB str _) = str
+getChkName (CheckStateVV str x) = str ++ ":" ++ x
+
+
+-- FieldExp = (Name, Exp)
+makeModify1 :: OutputNameDatabase -> ModifyStateX -> Maybe FieldExp
+makeModify1 ond (ModifyStateBB str bl) = do
+  (recNom, _mpr) <- M.lookup str $ ondStates ond
+  return (recNom, boolE bl)
+makeModify1 ond (ModifyStateVX str) = do
+  (recNom, _mpr) <- M.lookup str $ ondStates ond
+  return (recNom, ConE 'Nothing)
+makeModify1 ond (ModifyStateVV str val) = do
+  (recNom, mpr) <- M.lookup str $ ondStates ond
+  (_n, valDict) <- mpr
+  conNom <- M.lookup val valDict
+  return (recNom, AppE (ConE 'Just) (ConE conNom))
+
+
+makeCheck1 :: OutputNameDatabase -> CheckStateX -> Maybe (Name -> Exp)
+makeCheck1 ond (CheckStateBB str bl) = do
+  (recNom, _mpr) <- M.lookup str $ ondStates ond
+  let expr1 = \x -> AppE (VarE recNom) (VarE x)
+  return $ if bl
+    then expr1
+    else (\x -> AppE (VarE 'not) (expr1 x))
+makeCheck1 ond (CheckStateVB str bl) = do
+  (recNom, _mpr) <- M.lookup str $ ondStates ond
+  let expr1 = \x -> AppE (VarE recNom) (VarE x)
+  return $ if bl
+    then (\x -> AppE (VarE 'isJust)    (expr1 x))
+    else (\x -> AppE (VarE 'isNothing) (expr1 x))
+makeCheck1 ond (CheckStateVV str val) = do
+  (recNom, mpr) <- M.lookup str $ ondStates ond
+  (_n, valDict) <- mpr
+  conNom <- M.lookup val valDict
+  return $ \x -> InfixE (Just (VarE x)) (VarE '(==)) (Just (AppE (ConE 'Just) (ConE conNom)))
+  
+
+
+-- ondStates  :: M.Map String (Name, Maybe (Name, M.Map String Name))
+{-
+-- | The validated "Check-State" type.
+data CheckStateX
+  -- | Boolean check on a bool-state.
+  = CheckStateBB String Bool
+  -- | Value check on a value-state.
+  | CheckStateVV String String
+  -- | Boolean check on a value-state.
+  | CheckStateVB String Bool
+  deriving (Show, Eq, Ord)
+
+data ModifyStateX
+  -- | Change the value of a boolean state.
+  = ModifyStateBB String Bool
+  -- | Change the value of a value-state.
+  | ModifyStateVV String String
+  -- | Set a value-state to `Nothing`.
+  | ModifyStateVX String
+  deriving (Show, Eq, Ord)
+-}
+
+-- RecUpdE (UnboundVarE x) [(Ghci7.example1,LitE (IntegerL 12))]
+
 
 {-
 

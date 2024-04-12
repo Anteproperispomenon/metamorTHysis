@@ -192,7 +192,7 @@ runMatcher = runMatcherT
 -- | Run a `MatcherE`, returning the result value,
 --   along with the remaining input and output
 --   streams.
-runMatcherE :: (Undoable v, Functor EitherFail) => (i -> v) -> [i] -> MatcherE i v a -> Either String (a, [i], v)
+runMatcherE :: (Undoable v) => (i -> v) -> [i] -> MatcherE i v a -> Either String (a, [i], v)
 runMatcherE x y = toEither . runMatcherT x y
 
 -- | Run `MatcherT`, only returning the result value.
@@ -204,7 +204,7 @@ evalMatcher :: (Undoable v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
 evalMatcher = evalMatcherT
 
 -- | Run a `MatcherE`, only returning the result value.
-evalMatcherE :: (Undoable v, Functor EitherFail) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
+evalMatcherE :: (Undoable v) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
 evalMatcherE x y = toEither . evalMatcherT x y
 
 instance (Functor m) => Functor (MatcherT i v m) where

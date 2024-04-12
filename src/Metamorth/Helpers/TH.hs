@@ -10,6 +10,7 @@ module Metamorth.Helpers.TH
   , showSumProdInstance
   , showSumProdInstanceAlt
   , intersperseInfixRE
+  , intersperseInfixEDef
   , nestedConPat
   , groupCaseGuards
   , forMap
@@ -255,6 +256,10 @@ groupCaseGuards' (m@(Match ptrn bdy dcs):mtchs)
     guardifyBody :: Body -> [(Guard, Exp)]
     guardifyBody (GuardedB grds) = grds
     guardifyBody (NormalB  expr) = [(NormalG otherwiseE,expr)]
+
+intersperseInfixEDef :: Exp -> Exp -> [Exp] -> Exp
+intersperseInfixEDef defE _ [] = defE
+intersperseInfixEDef _ infx (x:xs) = intersperseInfixE infx (x :| xs)
 
 ------------------------------------------------
 -- More basic functions

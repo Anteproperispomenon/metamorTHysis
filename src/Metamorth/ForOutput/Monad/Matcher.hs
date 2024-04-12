@@ -117,7 +117,7 @@ evalMatcher :: (Monoid v) => (i -> v) -> [i] -> Matcher i v a -> Maybe a
 evalMatcher = evalMatcherT
 
 -- | Run a `MatcherE`, only returning the result value.
-evalMatcherE :: (Monoid v, Functor EitherFail) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
+evalMatcherE :: (Monoid v) => (i -> v) -> [i] -> MatcherE i v a -> Either String a
 evalMatcherE x y = toEither . evalMatcherT x y
 -- also what is that constraint???
 
