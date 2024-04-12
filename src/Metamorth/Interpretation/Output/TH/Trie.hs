@@ -1,13 +1,17 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Metamorth.Interpretation.Output.TH.Trie
-  (
+  ( makeReturnFunction
 
   ) where
 
 import Control.Arrow ((&&&))
+import Control.Monad
 
 import Data.Functor.Identity
+
+import Data.String (IsString(..))
 
 import Data.Char
 
@@ -38,6 +42,7 @@ import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 import Metamorth.Helpers.Q
 import Metamorth.Helpers.TH (strE, intersperseInfixEDef, andE, boolE)
+import Metamorth.Helpers.Monad
 
 import Metamorth.ForOutput.Char
 
@@ -53,12 +58,102 @@ data ReturnClauses = ReturnClauses
   , condStateRet :: [Name -> Name -> Name -> (Guard, Exp)]
   } -- deriving (Show ,Eq)
 
+pattern EmptyRCs :: ReturnClauses
+pattern EmptyRCs = ReturnClauses [] [] [] []
+
+-- addPhoneActionClause :: (Quasi q, Quote q) => OutputNameDatabase -> OutputCase -> RetType -> [CharPatternItem] -> PhoneActionData -> ReturnClauses -> q ReturnClauses
+
+makeReturnFunction :: (Quasi q, Quote q) => OutputNameDatabase -> String -> S.Set PhoneResult -> q (Name, [Dec])
+makeReturnFunction ond str phoneSet = do
+  -- collectActionData :: OutputNameDatabase -> [PhoneResultActionX] -> Either String PhoneActionData
+  
+  retStuff <- forMaybeM (S.toAscList phoneSet) $ \(PhoneResult conds cpi oc) -> do
+    let eActData = collectActionData ond conds
+    case eActData of
+      (Left err)  -> do 
+        qReportError $ "Error making return function \"" ++ str ++  "\": " ++ err
+        return Nothing
+      (Right pad) -> return $ Just (pad, cpi, oc)
+
+  let retType = getTopRetType $ map (\(x,_,_) -> x) retStuff
+
+  -- Fold over the result clauses, since you can't
+  -- just do it with a map.
+  retClauses <- forFoldM EmptyRCs retStuff $ \rcs (pad, cpi, oc) -> do
+    addPhoneActionClause ond oc retType cpi pad rcs
+
+  -- Run the main function.
+  makeReturnFunction' ond str retClauses
+
+{-
+collectActionData :: OutputNameDatabase -> [PhoneResultActionX] -> Either String PhoneActionData
+type PhoneResult = PhoneResultX [PhoneResultActionX]
+
+data PhoneResultX a = PhoneResult
+  { prPhoneConditions :: a
+  , prPhoneOutput :: [CharPatternItem]
+  , prOutputCase  :: OutputCase
+  } deriving (Show, Eq)
+-}
+
+
+makeReturnFunction' :: (Quasi q, Quote q) => OutputNameDatabase -> String -> ReturnClauses -> q (Name, [Dec])
+makeReturnFunction' ond strName (ReturnClauses prs [] [] []) = do
+  funcName <- newName strName
+  varName1 <- newName "v"
+  typVar1  <- newName "str"
+  let rets = map ($ varName1) prs
+  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> $(pure $ VarT typVar1) |]
+  let signDec = SigD funcName sign
+      bodyDec = FunD funcName [Clause [VarP varName1] (GuardedB rets) []]
+  return (funcName, [signDec, bodyDec])
+makeReturnFunction' ond strName (ReturnClauses [] srs [] []) = do
+  funcName <- newName strName
+  varName1 <- newName "v"
+  varName2 <- newName "s"
+  typVar1  <- newName "str"
+  let rets = map (($ varName2) . ($ varName1)) srs
+      stateType = pure $ ConT (ondStateType ond)
+  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> $stateType -> ($(pure $ VarT typVar1) , $stateType) |]
+  let signDec = SigD funcName sign
+      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets) []]
+  return (funcName, [signDec, bodyDec])
+makeReturnFunction' ond strName (ReturnClauses [] [] nrs []) = do
+  funcName <- newName strName
+  varName1 <- newName "v"
+  varName2 <- newName "n"
+  typVar1  <- newName "str"
+  let rets = map (($ varName2) . ($ varName1)) nrs
+      nextType = pure $ ConT (ondPhoneType ond)
+  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> Maybe $nextType -> ($(pure $ VarT typVar1)) |]
+  let signDec = SigD funcName sign
+      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets) []]
+  return (funcName, [signDec, bodyDec])
+makeReturnFunction' ond strName (ReturnClauses [] [] [] xrs) = do
+  funcName <- newName strName
+  varName1 <- newName "v"
+  varName2 <- newName "n"
+  varName3 <- newName "s"
+  typVar1  <- newName "str"
+  let rets = map (($ varName3) . ($ varName2) . ($ varName1)) xrs
+      stateType = pure $ ConT (ondStateType ond)
+      nextType  = pure $ ConT (ondPhoneType ond)
+  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> Maybe $nextType -> $stateType -> ($(pure $ VarT typVar1) , $stateType) |]
+  let signDec = SigD funcName sign
+      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2, VarP varName3] (GuardedB rets) []]
+  return (funcName, [signDec, bodyDec])
+makeReturnFunction' _ond strName (ReturnClauses {}) = do
+  funcName <- newName strName
+  qReportError $ "Couldn't create declarations for function \"" ++ strName ++ "\".\nIt had Clauses of different numbers of arguments."
+  return (funcName, [])
+
+
 data RetType
   = PlainRet
   | StateRet
   | CondPlainRet
   | CondStateRet
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 -- Lattice-like operation.
 (/\) :: RetType -> RetType -> RetType
@@ -73,6 +168,9 @@ _ /\ CondStateRet = CondStateRet
 
 top :: Foldable f => f RetType -> RetType
 top = foldl (/\) PlainRet 
+
+getTopRetType :: (Foldable f, Functor f) => f PhoneActionData -> RetType
+getTopRetType = top . fmap necessaryPhoneRet
 
 -- Note that we are appending the options. This
 -- is to ensure that they have the same order
@@ -101,7 +199,6 @@ necessaryPhoneRet (PhoneActionData xs _  []) = StateRet
 necessaryPhoneRet (PhoneActionData _  ys []) = StateRet
 necessaryPhoneRet (PhoneActionData [] [] zs) = CondPlainRet
 necessaryPhoneRet (PhoneActionData _  _  _ ) = CondStateRet
-
 
 addPhoneActionClause :: (Quasi q, Quote q) => OutputNameDatabase -> OutputCase -> RetType -> [CharPatternItem] -> PhoneActionData -> ReturnClauses -> q ReturnClauses
 addPhoneActionClause ond oc PlainRet cpi pad rcs = case pad of
@@ -372,7 +469,7 @@ makeCheck1 ond (CheckStateVV str val) = do
   (recNom, mpr) <- M.lookup str $ ondStates ond
   (_n, valDict) <- mpr
   conNom <- M.lookup val valDict
-  return $ \x -> InfixE (Just (VarE x)) (VarE '(==)) (Just (AppE (ConE 'Just) (ConE conNom)))
+  return $ \x -> InfixE (Just (AppE (VarE recNom) (VarE x))) (VarE '(==)) (Just (AppE (ConE 'Just) (ConE conNom)))
   
 
 

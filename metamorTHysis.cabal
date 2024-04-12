@@ -42,6 +42,7 @@ library
       Metamorth.Helpers.Map
       Metamorth.Helpers.Maybe
       Metamorth.Helpers.Misc
+      Metamorth.Helpers.Monad
       Metamorth.Helpers.Ord
       Metamorth.Helpers.Parsing
       Metamorth.Helpers.Q

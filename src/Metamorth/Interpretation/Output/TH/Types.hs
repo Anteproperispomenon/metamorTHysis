@@ -73,6 +73,8 @@ data OutputNameDatabase = OutputNameDatabase
   --   data type, along with a `M.Map` from
   --   state `String`s to constructor `Name`s.
   , ondStates  :: M.Map String (Name, Maybe (Name, M.Map String Name))
+  -- | The `Name` of the main Phoneme type.
+  , ondPhoneType :: Name
   } deriving (Show, Eq)
 
 --------------------------------
