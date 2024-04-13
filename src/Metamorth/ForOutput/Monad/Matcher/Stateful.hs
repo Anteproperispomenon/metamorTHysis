@@ -21,6 +21,7 @@ This module defines a simple Parser-Like
 Monad that can be used to match simple 
 input buffers. In particular, this module
 defines a stateful version that has more
+computation possibilities.
 
 -}
 
@@ -99,9 +100,9 @@ newtype MatcherT i v s m a  = MatcherT' { getMatcherT' :: (i -> v) -> [i] -> v -
 --   allow trying out different optimizations;
 --   e.g. `GHC.Exts.oneShot` from "GHC.Exts".
 pattern MatcherT :: ((i -> v) -> [i] -> v -> s -> m (a, [i], v, s)) -> MatcherT i v s m a
-pattern MatcherT {getMatcherT} <- MatcherT' getMatcherT
+pattern MatcherT {getMatcherT} <- MatcherT' { getMatcherT' = getMatcherT }
   -- one-shot
-  where MatcherT f = MatcherT' $ \fnc -> Exts.oneShot $ \inp -> Exts.oneShot $ \v -> Exts.oneShot $ \st -> f fnc inp v st
+  where MatcherT f = MatcherT' $ Exts.oneShot $ \fnc -> Exts.oneShot $ \inp -> Exts.oneShot $ \v -> Exts.oneShot $ \st -> f fnc inp v st
   -- regular
   -- where MatcherT f = MatcherT' f
 

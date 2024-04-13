@@ -39,6 +39,7 @@ main = do
   print $ M2.runTheMatcher M2.exampleList1 M2.myMatch
   print $ M2.runTheMatcher M2.exampleList2 M2.myMatch
   print $ M2.runTheMatcher M2.exampleList3 M2.myMatch
+  print $ M2.runTheMatcher M2.exampleList4 M2.myMatch
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text
