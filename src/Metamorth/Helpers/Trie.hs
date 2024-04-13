@@ -25,6 +25,7 @@ module Metamorth.Helpers.Trie
   , getSubTries
   , getSubTriesOld
   , deleteBranch
+  , deleteBranches
   , getFirstSteps
   , matchPred
   , mapBranches
@@ -171,6 +172,11 @@ unifyPaths = annotifyTrie
 deleteBranch :: (Ord c) => c -> TM.TMap c a -> TM.TMap c a
 deleteBranch x (TMI.TMap (TMI.Node val0 cmap))
   = TMI.TMap (TMI.Node val0 (M.delete x cmap))
+
+-- | Delete the branches starting with any of the
+--   listed values.
+deleteBranches :: (Ord c) => [c] -> TM.TMap c a -> TM.TMap c a
+deleteBranches cs tm = foldl (flip deleteBranch) tm cs
 
 -- | Get the first "steps" of a `TM.TMap`.
 --   i.e. get the first element of any possible
