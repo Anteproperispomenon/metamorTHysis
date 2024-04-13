@@ -1,8 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Metamorth.Interpretation.Output.TH.Trie.Branches
-  (
-
+  ( generateBranches
   ) where
 
 import Data.String (IsString(..))
@@ -69,6 +68,11 @@ incState = do
   put (z+1)
   return z
 
+generateBranches :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q (Name, [Dec])
+generateBranches ond tmap = do
+  (nom, _, decs) <- evalStateT (generateBranches' ond tmap) 0
+  return (nom,decs)
+
 -- | Create the branches at each step of the way...
 generateBranches' :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> StateT Int q (Name, Name, [Dec])
 generateBranches' ond tmp = do
@@ -80,6 +84,7 @@ generateBranches' ond tmp = do
   n <- incState
   let funcString  = printf "outputBranch_%04d" n
       funcString2 = printf "outputCrunch_%04d" n
+      funcString3 = printf "outputReturn_%04d" n
   funcName  <- newName funcString
   fundName2 <- newName funcString2
 
@@ -113,10 +118,27 @@ generateBranches' ond tmp = do
   funcSign <- [t| forall m s. (MonadFail m, IsString s) => $(pure phoneType) -> MatchResultT m $(pure phoneType) [CharCase] $(pure stateType) s |]
   othrSign <- [t| forall m s. (MonadFail m, IsString s) => MatchResultT m $(pure phoneType) [CharCase] $(pure stateType) s |]
 
+  (appliedExpr, extraDecs) <- case mRslt of
+    Nothing  -> return (ConT 'MatchContinue, [])
+    (Just x) -> do
+      -- hmm...
+      (retExpr, retDecs) <- lift $ makeReturnFunctionAlt ond funcString3 x
+      return (AppE (ConE MatchOptions) retExpr, retDecs)
+
   let (subDecs', mats) = unzip rslts
       myCase = CaseE (VarE theMainVar) (mats ++ [failPat])
+      
+      sign1 = SigD funcName funcSign
+      defn1 = FunD funcName [Clause [VarP theMainVar] (NormalB myCase) []]
 
-  return (funcName, funcName2, [] ++ (concat subDecs'))
+      sign2 = SigD funcName2 othrSign
+      defn2 = ValD (VarP funcName2) (AppE appliedExpr (VarE funcName)) []
+
+  return (funcName, funcName2, [sign1, defn1, sign2, defn2] ++ extraDecs ++ (concat subDecs'))
+
+-- makeReturnFunction :: (Quasi q, Quote q) => OutputNameDatabase -> String -> S.Set PhoneResult -> q (Name, [Dec])
+
+-- MatchContinue (i -> MatchResult m i v s r)
 
 -- data MatchResult m i v s r
 -- MatcherT i v s m a

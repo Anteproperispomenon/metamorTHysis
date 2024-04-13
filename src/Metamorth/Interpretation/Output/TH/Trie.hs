@@ -3,7 +3,7 @@
 
 module Metamorth.Interpretation.Output.TH.Trie
   ( makeReturnFunction
-
+  , makeReturnFunctionAlt
   ) where
 
 import Control.Arrow ((&&&))
@@ -62,6 +62,53 @@ pattern EmptyRCs :: ReturnClauses
 pattern EmptyRCs = ReturnClauses [] [] [] []
 
 -- addPhoneActionClause :: (Quasi q, Quote q) => OutputNameDatabase -> OutputCase -> RetType -> [CharPatternItem] -> PhoneActionData -> ReturnClauses -> q ReturnClauses
+
+makeReturnFunctionAlt :: (Quasi q, Quote q) => OutputNameDatabase -> String -> S.Set PhoneResult -> q (Exp, [Dec])
+makeReturnFunctionAlt ond str phoneSet = do
+  -- collectActionData :: OutputNameDatabase -> [PhoneResultActionX] -> Either String PhoneActionData
+  
+  retStuff <- forMaybeM (S.toAscList phoneSet) $ \(PhoneResult conds cpi oc) -> do
+    let eActData = collectActionData ond conds
+    case eActData of
+      (Left err)  -> do 
+        qReportError $ "Error making return function \"" ++ str ++  "\": " ++ err
+        return Nothing
+      (Right pad) -> return $ Just (pad, cpi, oc)
+
+  let retType = getTopRetType $ map (\(x,_,_) -> x) retStuff
+
+  -- Fold over the result clauses, since you can't
+  -- just do it with a map.
+  retClauses <- forFoldM EmptyRCs retStuff $ \rcs (pad, cpi, oc) -> do
+    addPhoneActionClause ond oc retType cpi pad rcs
+
+  -- Run the main function.
+  (nom, decs) <- makeReturnFunction' ond str retClauses
+
+  case retType of
+    PlainRet -> return (AppE (ConE 'PlainReturn) (VarE nom), decs)
+    StateRet -> return (AppE (ConE 'StateReturn) (VarE nom), decs)
+    CondPlainRet -> return (AppE (ConE 'ConditionalReturn) (VarE nom), decs)
+    CondStateRet -> return (AppE (ConE 'ConditionalStateReturn) (VarE nom), decs)
+
+{-
+  = PlainReturn (v -> m r)
+  | StateReturn (v -> s -> m (r,s))
+  -- | Returning the results, but using
+  --   the next value in the stream to
+  --   determine what exactly should be
+  --   returned. 
+  | ConditionalReturn (v -> Maybe i -> m r)
+  | ConditionalStateReturn (v -> Maybe i -> s -> m (r,s))
+
+data RetType
+  = PlainRet
+  | StateRet
+  | CondPlainRet
+  | CondStateRet
+  deriving (Show, Eq, Ord)
+-}
+
 
 makeReturnFunction :: (Quasi q, Quote q) => OutputNameDatabase -> String -> S.Set PhoneResult -> q (Name, [Dec])
 makeReturnFunction ond str phoneSet = do
