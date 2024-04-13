@@ -1,4 +1,5 @@
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 {-|
 Module      : Metamorth.ForOutput.Monad.Matcher.Stateful
@@ -68,6 +69,8 @@ import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 import Metamorth.ForOutput.Monad.EitherFail
 
+import GHC.Exts qualified as Exts
+
 -- | A simple matcher that uses `Maybe` as the
 --   base `Monad`. Probably the easiest version
 --   to use, but it won't return error messages.
@@ -90,7 +93,19 @@ type MatcherE i v s = MatcherT i v s EitherFail
 --   `match`, `matches`, etc..., along with
 --   the lower-level functions `proceed` and
 --   `preview`.
-newtype MatcherT i v s m a  = MatcherT { getMatcherT :: (i -> v) -> [i] -> v -> s -> m (a, [i], v, s) }
+newtype MatcherT i v s m a  = MatcherT' { getMatcherT' :: (i -> v) -> [i] -> v -> s -> m (a, [i], v, s) }
+
+-- | An explicitly bidirectional pattern to
+--   allow trying out different optimizations;
+--   e.g. `GHC.Exts.oneShot` from "GHC.Exts".
+pattern MatcherT :: ((i -> v) -> [i] -> v -> s -> m (a, [i], v, s)) -> MatcherT i v s m a
+pattern MatcherT {getMatcherT} <- MatcherT' getMatcherT
+  -- one-shot
+  where MatcherT f = MatcherT' $ \fnc -> Exts.oneShot $ \inp -> Exts.oneShot $ \v -> Exts.oneShot $ \st -> f fnc inp v st
+  -- regular
+  -- where MatcherT f = MatcherT' f
+
+{-# COMPLETE MatcherT #-}
 
 -- | Run a `MatcherT`, returning the result
 --   value, along with the remaining input
