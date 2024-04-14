@@ -42,12 +42,21 @@ module Metamorth.ForOutput.Monad.Matcher.Stateful
   , match
   , matches
   , matchesL
+  , matchesL'
   , matchesDefL
   -- ** Automatic MonadFail Versions
   , matchF
   , matchesF
   , matchesLF
+  , matchesLF'
   , matchesDefLF
+  -- ** Changing what to match
+  , matchElse
+  , matchElseS
+  -- ** Simple Matchers
+  , matchSimple
+  , matchesSimple
+  , matchesSimpleDef
   -- * Low-Level Operations
   , proceed
   , preview
@@ -317,6 +326,18 @@ matchesL err f = do
       y <- match err f
       matchesDefL y err f
 
+-- | Like `matchesL`, but uses a different function
+--   for the first match.
+matchesL' :: (MonadPlus m, Monoid v, Monoid r) => (String -> m r) -> (i -> MatchResult m i v s r) -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
+matchesL' err f1 f2 = do
+  mybX <- preview
+  case mybX of
+    Nothing  -> return mempty
+    (Just _) -> do
+      y <- match err f1
+      matchesDefL y err f2
+
+
 -- | Run `match` repeatedly until the input buffer is
 --   empty, accumulating the results in the returning 
 --   `Semigroup` from left-to-right. i.e.
@@ -369,7 +390,69 @@ matchesF = matches fail
 matchesLF :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> MatchResult m i v s r) -> MatcherT i v s m r
 matchesLF = matchesL fail
 
+-- | Variant of `matchesL'` that uses `fail` from `MonadFail`
+--   as the first argument.
+matchesLF' :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> MatchResult m i v s r) -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
+matchesLF' = matchesL' fail
+
 -- | Variant of `matchesDefL` that uses `fail` from `MonadFail`
 --   as the second argument
 matchesDefLF :: (MonadPlus m, MonadFail m, Monoid v, Semigroup r) => r -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
 matchesDefLF acc = matchesDefL acc fail
+
+----------------------------------------------------------------
+-- Matching Something Else
+
+-- (i -> v) -> [i] -> v -> s -> m (a, [i], v, s) }
+
+-- | Run a different matching algorithm on
+--   a different list, and then return the
+--   result and restore the original state.
+--   Useful if the input list contains lists
+--   itself.
+matchElse :: (Monad m, Monoid w) => (j -> w) -> [j] -> s' -> MatcherT j w s' m r -> MatcherT i v s m r
+matchElse newConv lst st action = MatcherT $ \_ inp v oldSt -> do
+  rslt <- evalMatcherT newConv lst st action
+  return (rslt, inp, v, oldSt)
+
+-- | A variant of `matchElse` that runs a stateful
+--   computation as its sub-action, instead of
+--   just a plain action. 
+matchElseS :: (Monad m, Monoid w) => (j -> w) -> [j] -> s' -> (s -> MatcherT j w s' m (r,s)) -> MatcherT i v s m r
+matchElseS newConv lst st action = MatcherT $ \_ inp v oldSt -> do
+  (rslt, finalSt) <- evalMatcherT newConv lst st (action oldSt)
+  return (rslt, inp, v, finalSt)
+
+----------------------------------------------------------------
+-- Matching Something Else
+
+-- | A simple matcher that just uses a simple
+--   function type instead of a complex secondary
+--   type.
+matchSimple :: (Monad m, Monoid v) => (i -> MatcherT i v s m r) -> MatcherT i v s m (Maybe r)
+matchSimple action = do
+  x <- proceed
+  case x of
+    Nothing  -> return Nothing
+    (Just y) -> Just <$> action y
+
+-- | Repeat `matchSimple` until out of input.
+matchesSimple :: (Monad m, Monoid v, Monoid r) => (i -> MatcherT i v s m r) -> MatcherT i v s m r
+matchesSimple action = do
+  x <- matchSimple action
+  case x of
+    Nothing     -> return mempty
+    (Just rslt) -> matchesSimpleDef rslt action
+
+-- | Repeat `matchSimple` until no input left.
+--   Instead of starting out from empty, the
+--   accumulated value starts out with a default
+--   value.
+matchesSimpleDef :: (Monad m, Monoid v, Semigroup r) => r -> (i -> MatcherT i v s m r) -> MatcherT i v s m r
+matchesSimpleDef defVal action = do
+  x <- matchSimple action
+  case x of
+    Nothing     -> return defVal
+    (Just rslt) -> matchesSimpleDef (defVal <> rslt) action
+
+

@@ -3,6 +3,7 @@
 module Metamorth.Interpretation.Output.TH.Trie.Branches
   ( generateBranches
   , GroupedTrieDecs(..)
+  , generateBranches2
   , generateBranches3
   ) where
 
@@ -116,7 +117,23 @@ generateBranches3 ond tmap = do
   where
     evalStateT' = flip State.evalStateT
 
-  -- 
+generateBranches2 :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q ((Name, [Dec]), (Name, [Dec]))
+generateBranches2 ond tmap = do
+  let grpd = groupBranches tmap
+  -- (nom, _, decs) <- State.evalStateT (generateBranches' ond tmap) 0
+  evalStateT' 0 $ do
+    let tm1  = plainTrie grpd
+        tm2  = atStartTrie grpd
+        tm3  = notStartTrie grpd
+        tm2' = mergeTrieSets tm2 tm1
+        tm3' = mergeTrieSets tm3 tm1
+    -- (nom1, _, decs1) <- generateBranches' ond tm1
+    (nom2, _, decs2) <- generateBranches' ond tm2'
+    (nom3, _, decs3) <- generateBranches' ond tm3'
+    return ( (nom2, decs2), (nom3, decs3))
+  where
+    evalStateT' = flip State.evalStateT
+
 
 
 generateBranches :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q (Name, [Dec])
@@ -161,13 +178,13 @@ generateBranches' ond tmp = do
             let myMatch = Match pat (NormalB $ VarE subNom2) []
             return $ Just (subDecs, myMatch)
   
-  failExp <- lift $ [| MatchFail "Example" |]
+  failExp <- lift [| MatchFail "Example" |]
   let failPat = Match WildP (NormalB failExp) []
       phoneType = ConT $ ondPhoneType ond
       stateType = ConT $ ondStateType ond
 
-  funcSign <- lift $ [t| forall m s. (MonadFail m, IsString s) => $(pure phoneType) -> MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]
-  othrSign <- lift $ [t| forall m s. (MonadFail m, IsString s) => MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]
+  funcSign <- lift [t| forall m s. (MonadFail m, IsString s) => $(pure phoneType) -> MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]
+  othrSign <- lift [t| forall m s. (MonadFail m, IsString s) => MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]
 
   (appliedExpr, extraDecs) <- case mRslt of
     Nothing  -> return (ConE 'MatchContinue, [])

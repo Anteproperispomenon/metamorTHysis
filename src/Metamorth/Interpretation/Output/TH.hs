@@ -12,9 +12,10 @@ This is the module for generating output code.
 -}
 
 module Metamorth.Interpretation.Output.TH
-  (
+  -- * Main Function
+  ( generateOutputDecs
   -- * Extra Functions
-  makeOutputDatabase
+  , makeOutputDatabase
 
   ) where
 
@@ -26,6 +27,8 @@ import Language.Haskell.TH.Syntax hiding (lift)
 
 -- searching for incorrectly entered modules in VS Code:
 -- `[^`.]*\.[^`]*`
+
+import Data.String (IsString(..))
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
@@ -57,13 +60,47 @@ import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 -- | The main function for creating output 
 --   declarations. 
-generateOutputDecs :: String -> OutputParserOutput -> PhonemeNameInformation -> Q [Dec]
-generateOutputDecs sfx opo pni = runQS sfx $ do
+generateOutputDecs :: String -> String -> OutputParserOutput -> PhonemeNameInformation -> Q [Dec]
+generateOutputDecs userName sfx opo pni = runQS sfx $ do
   (ondDecs, ond, tmap) <- makeOutputDatabase opo pni
+  ((stNom, stDecs), (nstNom, nstDecs)) <- generateBranches2 ond tmap
+  
+  userFuncName  <- qsPlainNewName $ varName userName
+  userFuncName2 <- qsPlainNewName $ varName $ userName ++ "M"
+
+  let (wordType, (wordCon1, wordCon2)) = ondWordTypes ond
+      defSt = ondDefState ond
+      charCase = ondCaseExpr ond
+  
+  xyz <- newName "xyz"
+
+  caseFunc <- [| \x -> [$(pure charCase) x] |]
+
+  func1Exp <- [| matchesLF' $(pure $ VarE stNom) $(pure $ VarE nstNom) |]
+  func2Exp <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz] ) -> matchElse $(pure caseFunc) $(pure $ VarE xyz) $(pure defSt) $(pure func1Exp) 
+                       ; $(pure $ ConP wordCon2 [] [VarP xyz] ) -> return $(pure $ VarE xyz)
+                       }  
+              |]
+  func3Exp <- [| matchesSimple $(pure func2Exp) |]
+
+  outputSign1 <- [t| forall str. (IsString str) => MatcherE [$(pure $ ConT wordType)] () () str |]
+  let outputSig1  = SigD userFuncName2 outputSign1
+      outputDec1  = ValD (VarP userFuncName2) (NormalB func3Exp) []
+      outputDefn1 = [outputSig1, outputDec1]
+  
+  outputSign2 <- [t| forall str. (IsString str) => [$(pure $ ConT wordType)] -> str |]
+  outputFuncX <- [| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ VarE userFuncName2) |]
+  let outputSig2  = SigD userFuncName outputSign2
+      outputDec2  = FunD userFuncName [Clause [VarP xyz] (NormalB outputFuncX) []]
+      outputDefn2 = [outputSig2, outputDec2]
+  
+  -- matchElse :: (Monad m, Monoid w) => (j -> w) -> [j] -> s' -> MatcherT j w s' m r -> MatcherT i v s m r
+  -- matchesSimple :: (Monad m, Monoid v, Monoid r) => (i -> MatcherT i v s m r) -> MatcherT i v s m r
 
 
-  return []
+  return (outputDefn1 ++ outputDefn2 ++ ondDecs ++ stDecs ++ nstDecs)
 
+-- generateBranches3 :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q GroupedTrieDecs
 
 makeOutputDatabase :: (Quasi q, Quote q) => OutputParserOutput -> PhonemeNameInformation -> q ([Dec], OutputNameDatabase, TM.TMap PhonePatternAlt (S.Set PhoneResult))
 makeOutputDatabase opo pni = do
