@@ -49,7 +49,7 @@ data OutputNameDatabase = OutputNameDatabase
   --   constructor `Name`s. If you only need one
   --   or the other, see `ondAspectChecks` and
   --   `ondAspectConsts`.
-  , ondAspects :: M.Map String (Name, M.Map String Name)
+  , ondAspects :: M.Map String (Name, (Name, M.Map String Name))
   -- | A `M.Map` from `String` names of traits to
   --   `Name`s of functions that check whether a
   --   certain phoneme has that trait, and which
@@ -75,6 +75,9 @@ data OutputNameDatabase = OutputNameDatabase
   , ondStates  :: M.Map String (Name, Maybe (Name, M.Map String Name))
   -- | The `Name` of the main Phoneme type.
   , ondPhoneType :: Name
+  -- | The `Name`s of the word type and its
+  --   two constructors.
+  , ondWordTypes :: (Name, (Name, Name))
   -- | A function that can be applied to the
   --   a Phoneme to get its case.
   , ondCaseExpr :: Exp
@@ -96,7 +99,7 @@ ondAspectChecks :: OutputNameDatabase -> M.Map String Name
 ondAspectChecks = fmap fst . ondAspects
 
 -- | get the aspects' constructor maps.
-ondAspectConsts :: OutputNameDatabase -> M.Map String (M.Map String Name)
+ondAspectConsts :: OutputNameDatabase -> M.Map String (Name, (M.Map String Name))
 ondAspectConsts = fmap snd . ondAspects
 
 -- | The `M.Map` of val-traits.

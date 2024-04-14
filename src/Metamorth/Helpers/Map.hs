@@ -58,12 +58,12 @@ lookupE k mp = case (M.lookup k mp) of
 
 -- | Convert a `S.Set` to a `M.Map` using
 --   an applicative action on each element.
-forMapFromSet :: (Applicative m) => (S.Set a) -> (a -> m b) -> m (M.Map a b)
+forMapFromSet :: (Applicative m) => S.Set a -> (a -> m b) -> m (M.Map a b)
 forMapFromSet st f = sequenceA $ M.fromSet f st
 
 -- | Convert a `S.Set` to a `M.Map` using
---   an applicative action on each element.
-forMapFromSetM :: (Monad m) => (S.Set a) -> (a -> m b) -> m (M.Map a b)
+--   a monadic action on each element.
+forMapFromSetM :: (Monad m) => S.Set a -> (a -> m b) -> m (M.Map a b)
 forMapFromSetM st f = sequence $ M.fromSet f st
 
 

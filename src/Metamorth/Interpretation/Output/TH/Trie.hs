@@ -355,7 +355,7 @@ getLookups ond (PhoneFollowedByAspect asp) = do
   func <- M.lookup asp (ondAspectChecks ond)
   return (\nom -> AppE (VarE 'isJust) (InfixE (Just (VarE nom)) (VarE '(>>=)) (Just (VarE func))))
 getLookups ond (PhoneFollowedByAspectAt asp aspVal) = do
-  (func, dict) <- M.lookup asp (ondAspects ond)
+  (func, (_,dict)) <- M.lookup asp (ondAspects ond)
   aspVal' <- M.lookup aspVal dict
   return (\nom -> InfixE (Just (VarE nom)) (VarE '(==)) (Just (AppE (ConE 'Just) (ConE aspVal'))))
 getLookups ond (PhoneFollowedByPhone str) = do

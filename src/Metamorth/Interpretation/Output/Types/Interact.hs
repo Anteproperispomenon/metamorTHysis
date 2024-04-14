@@ -15,6 +15,7 @@ data PhonemeNameInformation = PhonemeNameInformation
   { pniPhones  :: M.Map String (Name, [M.Map String Name])
   , pniAspects :: M.Map String (Name, (Name, M.Map String Name))
   , pniTraits  :: M.Map String (Name, Maybe (Name, M.Map String Name))
+  , pniGroups  :: M.Map String Name -- :: Phoneme -> Bool
   , pniWordTypeNames  :: (Name, (Name, Name))
   , pniCaseExpr  :: Exp
   , pniPhoneType :: Name
