@@ -75,6 +75,9 @@ data OutputNameDatabase = OutputNameDatabase
   , ondStates  :: M.Map String (Name, Maybe (Name, M.Map String Name))
   -- | The `Name` of the main Phoneme type.
   , ondPhoneType :: Name
+  -- | A function that can be applied to the
+  --   a Phoneme to get its case.
+  , ondCaseExpr :: Exp
   } deriving (Show, Eq)
 
 --------------------------------

@@ -8,9 +8,12 @@ import Data.String (IsString(..))
 
 import Control.Monad
 import Control.Monad.Trans.Class
-import Control.Monad.Trans.State.Strict
+import Control.Monad.Trans.State.Strict qualified as State
 
 import Data.Trie.Map qualified as TM
+
+import Data.Map.Strict qualified as M
+import Data.Set        qualified as S
 
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax hiding (lift)
@@ -58,23 +61,23 @@ data GroupedTrie = GroupedTrie
 groupBranches :: TM.TMap PhonePatternAlt (S.Set PhoneResult) -> GroupedTrie
 groupBranches tm = GroupedTrie tm' atStart notStart
   where 
-    (_, atStart) = TM.match tm [PhoneAtStartZ ]
-    (_,notStart) = TM.match tm [PhoneNotStartZ]
+    (_, atStart) = TM.match [PhoneAtStartZ ] tm 
+    (_,notStart) = TM.match [PhoneNotStartZ] tm 
     tm' = deleteBranches [PhoneAtStartZ, PhoneNotStartZ] tm
 
-incState :: (Monad m) => StateT Int m Int
+incState :: (Monad m) => State.StateT Int m Int
 incState = do
-  z <- get
-  put (z+1)
+  z <- State.get
+  State.put (z+1)
   return z
 
 generateBranches :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q (Name, [Dec])
 generateBranches ond tmap = do
-  (nom, _, decs) <- evalStateT (generateBranches' ond tmap) 0
+  (nom, _, decs) <- State.evalStateT (generateBranches' ond tmap) 0
   return (nom,decs)
 
 -- | Create the branches at each step of the way...
-generateBranches' :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> StateT Int q (Name, Name, [Dec])
+generateBranches' :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> State.StateT Int q (Name, Name, [Dec])
 generateBranches' ond tmp = do
   let (mRslt,_) = TM.match [] tmp
       phoneMap  = ondPhonemeNames  ond
@@ -85,24 +88,24 @@ generateBranches' ond tmp = do
   let funcString  = printf "outputBranch_%04d" n
       funcString2 = printf "outputCrunch_%04d" n
       funcString3 = printf "outputReturn_%04d" n
-  funcName  <- newName funcString
-  fundName2 <- newName funcString2
+  funcName  <- lift $ newName funcString
+  funcName2 <- lift $ newName funcString2
 
   -- Match over the sub-results... I guess...
   rslts <- forMaybeM (getSubTries tmp) $ \(c, (_elem, subTrie)) -> do
     -- (subNom, subDecs) <- generateBranches ond subTrie
     case c of
       PhoneAtStartZ -> do
-        qReportError $ "Can't have an `AtStart` in the middle of a pattern."
+        lift $ qReportError $ "Can't have an `AtStart` in the middle of a pattern."
         return Nothing
       PhoneNotStartZ -> do
-        qReportError $ "Can't have a `NotStart` in the middle of a pattern."
+        lift $ qReportError $ "Can't have a `NotStart` in the middle of a pattern."
         return Nothing
       (PhonemeNameZ pn) -> do
         let ePat = makePhoneConstructorPat phoneMap phoneCns pn
         case ePat of
           (Left errs) -> do
-            mapM_ qReportError errs
+            lift $ mapM_ qReportError errs
             return Nothing
           (Right pat)  -> do
             -- myExp <- [|  |]
@@ -110,20 +113,20 @@ generateBranches' ond tmp = do
             let myMatch = Match pat (NormalB $ VarE subNom2) []
             return $ Just (subDecs, myMatch)
   
-  failExp <- [| MatchFail "Example" |]
+  failExp <- lift $ [| MatchFail "Example" |]
   let failPat = Match WildP (NormalB failExp) []
       phoneType = ConT $ ondPhoneType ond
       stateType = ConT $ ondStateType ond
 
-  funcSign <- [t| forall m s. (MonadFail m, IsString s) => $(pure phoneType) -> MatchResultT m $(pure phoneType) [CharCase] $(pure stateType) s |]
-  othrSign <- [t| forall m s. (MonadFail m, IsString s) => MatchResultT m $(pure phoneType) [CharCase] $(pure stateType) s |]
+  funcSign <- lift $ [t| forall m s. (MonadFail m, IsString s) => $(pure phoneType) -> MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]
+  othrSign <- lift $ [t| forall m s. (MonadFail m, IsString s) => MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]
 
   (appliedExpr, extraDecs) <- case mRslt of
-    Nothing  -> return (ConT 'MatchContinue, [])
+    Nothing  -> return (ConE 'MatchContinue, [])
     (Just x) -> do
       -- hmm...
       (retExpr, retDecs) <- lift $ makeReturnFunctionAlt ond funcString3 x
-      return (AppE (ConE MatchOptions) retExpr, retDecs)
+      return (AppE (ConE 'MatchOptions) retExpr, retDecs)
 
   let (subDecs', mats) = unzip rslts
       myCase = CaseE (VarE theMainVar) (mats ++ [failPat])
@@ -132,7 +135,7 @@ generateBranches' ond tmp = do
       defn1 = FunD funcName [Clause [VarP theMainVar] (NormalB myCase) []]
 
       sign2 = SigD funcName2 othrSign
-      defn2 = ValD (VarP funcName2) (AppE appliedExpr (VarE funcName)) []
+      defn2 = ValD (VarP funcName2) (NormalB $ AppE appliedExpr (VarE funcName)) []
 
   return (funcName, funcName2, [sign1, defn1, sign2, defn2] ++ extraDecs ++ (concat subDecs'))
 

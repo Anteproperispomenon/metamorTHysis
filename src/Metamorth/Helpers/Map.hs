@@ -6,12 +6,16 @@ module Metamorth.Helpers.Map
   , forMaybeMapWithKey
   , forIntersectionWithKey
   , lookupE
+  , forMapFromSet
+  , forMapFromSetM
   ) where
 
 import Data.Functor.Identity
 
 import Data.Maybe
 import Data.Map.Strict qualified as M
+
+import Data.Set qualified as S
 
 -- | Like `M.traverseWithKey`, but with the
 --   opposite argument order. Makes it easier
@@ -51,6 +55,17 @@ lookupE :: (Ord k, Show k) => k -> M.Map k a -> Either String a
 lookupE k mp = case (M.lookup k mp) of
   (Nothing) -> Left $ show k
   (Just  x) -> Right x
+
+-- | Convert a `S.Set` to a `M.Map` using
+--   an applicative action on each element.
+forMapFromSet :: (Applicative m) => (S.Set a) -> (a -> m b) -> m (M.Map a b)
+forMapFromSet st f = sequenceA $ M.fromSet f st
+
+-- | Convert a `S.Set` to a `M.Map` using
+--   an applicative action on each element.
+forMapFromSetM :: (Monad m) => (S.Set a) -> (a -> m b) -> m (M.Map a b)
+forMapFromSetM st f = sequence $ M.fromSet f st
+
 
 {- whoops
 mapMapMaybeWithKey :: (k -> a -> Maybe b) -> M.Map k a -> M.Map k b
