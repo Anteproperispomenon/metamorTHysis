@@ -2,6 +2,8 @@
 
 module Metamorth.Interpretation.Output.TH.Trie.Branches
   ( generateBranches
+  , GroupedTrieDecs(..)
+  , generateBranches3
   ) where
 
 import Data.String (IsString(..))
@@ -37,6 +39,8 @@ import Metamorth.Interpretation.Output.TH.Trie
 
 import Text.Printf
 
+import Data.Semigroup (Arg(..))
+
 -- TM.TMap PhonePatternAlt (S.Set PhoneResult)
 
 {-
@@ -56,6 +60,14 @@ data GroupedTrie = GroupedTrie
   , notStartTrie :: TM.TMap PhonePatternAlt (S.Set PhoneResult)
   } deriving (Show, Eq)
 
+-- | Simple type to save typing.
+data GroupedTrieDecs = GroupedTrieDecs
+  { plainTrieDecs    :: (Name, [Dec])
+  , atStartTrieDecs  :: (Name, [Dec])
+  , notStartTrieDecs :: (Name, [Dec])
+  } deriving (Show, Eq)
+
+
 -- | Group the branches into plain, at-start,
 --   and not-start.
 groupBranches :: TM.TMap PhonePatternAlt (S.Set PhoneResult) -> GroupedTrie
@@ -70,6 +82,42 @@ incState = do
   z <- State.get
   State.put (z+1)
   return z
+
+doTheThing :: S.Set PhoneResult -> S.Set (Arg [PhoneResultActionX] PhoneResult)
+doTheThing = S.map (\x -> Arg (prPhoneConditions x) x)
+
+undoTheThing :: S.Set (Arg [PhoneResultActionX] PhoneResult) -> S.Set PhoneResult
+undoTheThing = S.map f
+  where f (Arg _ y) = y
+
+-- | Try merging two `TM.TMap`s of `Set`s. Difficult,
+--   since the `Set`s might not quite work as expected.
+mergeTrieSets :: TM.TMap PhonePatternAlt (S.Set PhoneResult) -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> TM.TMap PhonePatternAlt (S.Set PhoneResult)
+mergeTrieSets tm1 tm2
+  = undoTheThing <$> TM.unionWith S.union tm1' tm2'
+  where
+    tm1' = fmap doTheThing tm1
+    tm2' = fmap doTheThing tm2
+
+generateBranches3 :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q GroupedTrieDecs
+generateBranches3 ond tmap = do
+  let grpd = groupBranches tmap
+  -- (nom, _, decs) <- State.evalStateT (generateBranches' ond tmap) 0
+  evalStateT' 0 $ do
+    let tm1  = plainTrie grpd
+        tm2  = atStartTrie grpd
+        tm3  = notStartTrie grpd
+        tm2' = mergeTrieSets tm2 tm1
+        tm3' = mergeTrieSets tm3 tm1
+    (nom1, _, decs1) <- generateBranches' ond tm1
+    (nom2, _, decs2) <- generateBranches' ond tm2'
+    (nom3, _, decs3) <- generateBranches' ond tm3'
+    return (GroupedTrieDecs (nom1, decs1) (nom2, decs2) (nom3, decs3))
+  where
+    evalStateT' = flip State.evalStateT
+
+  -- 
+
 
 generateBranches :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q (Name, [Dec])
 generateBranches ond tmap = do
