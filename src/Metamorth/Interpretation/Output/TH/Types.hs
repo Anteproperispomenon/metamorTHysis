@@ -72,7 +72,10 @@ data OutputNameDatabase = OutputNameDatabase
   --   it also includes the `Name` of the state's
   --   data type, along with a `M.Map` from
   --   state `String`s to constructor `Name`s.
-  , ondStates  :: M.Map String (Name, Maybe (Name, M.Map String Name))
+  , ondStates   :: M.Map String (Name, Maybe (Name, M.Map String Name))
+  -- | A value that can be used to get the
+  --   default state value.
+  , ondDefState :: Exp
   -- | The `Name` of the main Phoneme type.
   , ondPhoneType :: Name
   -- | The `Name`s of the word type and its

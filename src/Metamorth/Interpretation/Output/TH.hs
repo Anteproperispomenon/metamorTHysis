@@ -55,9 +55,19 @@ import Metamorth.Interpretation.Output.Parsing.Types
 import Metamorth.ForOutput.Monad.Matcher.Stateful
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
+-- | The main function for creating output 
+--   declarations. 
+generateOutputDecs :: String -> OutputParserOutput -> PhonemeNameInformation -> Q [Dec]
+generateOutputDecs sfx opo pni = runQS sfx $ do
+  (ondDecs, ond, tmap) <- makeOutputDatabase opo pni
+
+
+  return []
+
+
 makeOutputDatabase :: (Quasi q, Quote q) => OutputParserOutput -> PhonemeNameInformation -> q ([Dec], OutputNameDatabase, TM.TMap PhonePatternAlt (S.Set PhoneResult))
 makeOutputDatabase opo pni = do
-  (stDecs, stDict, stRecName) <- makeStates (opoStateDictionary opo)
+  (stDecs, stDict, stRecName, stRecNameC) <- makeStates (opoStateDictionary opo)
   -- hmm...
   -- , opoGroupDictionary :: S.Set String
   
@@ -75,6 +85,7 @@ makeOutputDatabase opo pni = do
         , ondPhoneType = pniPhoneType pni
         , ondWordTypes = pniWordTypeNames pni
         , ondCaseExpr  = AppE (VarE 'const) (ConE 'LowerCase) -- temp
+        , ondDefState  = makeDefaultState stRecNameC stDict
         }
   return (stDecs, ond, opoOutputTrie opo)
 
@@ -94,9 +105,7 @@ forMapFromSetM :: (Monad m) => S.Set a -> (a -> m b) -> m (M.Map a b)
 forMapFromSetM st f = sequence $ M.fromSet f st
 -}
 
-
-
-makeStates :: (Quasi q, Quote q) => M.Map String (Maybe (S.Set String)) -> q ([Dec], M.Map String (Name, Maybe (Name, M.Map String Name)), Name)
+makeStates :: (Quasi q, Quote q) => M.Map String (Maybe (S.Set String)) -> q ([Dec], M.Map String (Name, Maybe (Name, M.Map String Name)), Name, Name)
 makeStates mp = do
   stateRecNameT <- newName "StateRecordsT"
   stateRecNameD <- newName "StateRecordsD"
@@ -121,8 +130,14 @@ makeStates mp = do
       rsltStates = M.map (first fst) rsltState1
       recordDecs = recordAdtDecDeriv stateRecNameT stateRecNameD (M.elems recFields) [ConT ''Show, ConT ''Eq, ConT ''Ord]
   
-  return (recordDecs:subDecs, rsltStates, stateRecNameT)
+  return (recordDecs:subDecs, rsltStates, stateRecNameT, stateRecNameD)
 
+makeDefaultState :: Name -> M.Map String (Name, Maybe (Name, M.Map String Name)) -> Exp
+makeDefaultState conName oldMap = RecConE conName (M.elems newMap)
+  where 
+    newMap = M.map f oldMap
+    f (nom, Nothing) = (nom, ConE 'False)
+    f (nom, Just  _) = (nom, ConE 'Nothing)
 
 {-
 recordAdtDecDeriv :: Name -> Name -> [(Name, Type)] -> [Type] -> Dec
