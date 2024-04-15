@@ -3,6 +3,10 @@ module Metamorth.Helpers.Q
   ( QL(..)
   , newTopName
   -- * Other Functions
+  , qDebugNotice
+  , qDebugNoticeUnflushed
+  , qFlushErr
+  , qFlushOut
   , isOpChar
   , isSpecChar
   , notNameChar
@@ -13,7 +17,9 @@ module Metamorth.Helpers.Q
   , qReportWarning
   ) where
 
-import Language.Haskell.TH.Syntax (Quasi, Quote, qReport, Q, Name, newName)
+import Language.Haskell.TH.Syntax (Quasi, Quote, qReport, Q, Name, newName, qRunIO)
+
+import System.IO (stderr, stdout, hPutStrLn, hFlush)
 
 -- In the future, will extend this function
 -- or similar function to include unicode
@@ -119,6 +125,23 @@ qReportError = qReport True
 
 qReportWarning :: (Quasi q) => String -> q ()
 qReportWarning = qReport False
+
+qDebugNoticeUnflushed :: (Quasi q) => String -> q ()
+qDebugNoticeUnflushed str = qRunIO $ hPutStrLn stderr str
+
+-- | Write a message to `stderr` as the 
+--   program is compiling. Useful if compilation
+--   is hanging.
+qDebugNotice :: (Quasi q) => String -> q ()
+qDebugNotice str = qRunIO $ do
+  hPutStrLn stderr str
+  hFlush stderr
+
+qFlushErr :: (Quasi q) => q ()
+qFlushErr = qRunIO $ hFlush stderr
+
+qFlushOut :: (Quasi q) => q ()
+qFlushOut = qRunIO $ hFlush stdout
 
 -- | Types that can be lifted from the Q.
 --   This is similar to the `MonadIO` class,

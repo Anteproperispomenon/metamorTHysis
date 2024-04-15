@@ -78,12 +78,17 @@ addOutputPattern prOld = do
   let (pp, op) = renewOutputPattern prOld
   tmap <- gets opsOutputTrie
   let tmap' = insertNodeS pp op tmap
-  modify $ \x -> x {opsOutputTrie = tmap'}
+  modify' $ \x -> x {opsOutputTrie = tmap'}
   
   -- tmap' <- modifyNodeM' pp tmap $ \case
   --    Nothing   -> return $ M.singleton (opCasedness op) op
   --    (Just mp) -> insertOrigMapM (opCasedness op) op mp $ \origVal ->
   --       warn $ "Can't insert pair " ++ show pr ++ "; key already used for \"" ++ show origVal ++ "\"."
   -- modify $ \x -> x {opsOutputTrie = tmap'}
+
+modify' :: (Monad m) => (s -> s) -> RWST r w s m ()
+modify' f = do
+  s <- get
+  put $! f s
 
 

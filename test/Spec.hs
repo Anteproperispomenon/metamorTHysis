@@ -5,6 +5,7 @@
 import Test.TH.Basic
 import Test.TH.TwoOrths as Two
 import Test.TH.Grouped qualified as G
+import Test.TH.InAndOut as InOut
 
 import System.IO
 
@@ -40,6 +41,10 @@ main = do
   print $ M2.runTheMatcher M2.exampleList2 M2.myMatch
   print $ M2.runTheMatcher M2.exampleList3 M2.myMatch
   print $ M2.runTheMatcher M2.exampleList4 M2.myMatch
+
+  putStrLn "Trying the output functions..."
+  print $ (AT.parseOnly InOut.syllabicParser exampleText2) >>= (InOut.syllabicOutput)
+
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text

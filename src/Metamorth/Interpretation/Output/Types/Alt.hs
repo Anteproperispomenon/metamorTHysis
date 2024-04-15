@@ -14,6 +14,7 @@ module Metamorth.Interpretation.Output.Types.Alt
   , PhoneResultX(..)
   -- * Other Helpers
   , renewOutputPattern
+  , convertPhonePattern
   , isConfirmState
   , isModifyState
   , isAtEnd
@@ -132,8 +133,16 @@ data CharPattern = CharPattern
   } deriving (Show, Eq)
 -}
 
+
+
 convertPhonePattern :: [PhonePattern] -> ([PhonePatternAlt], [PhoneResultActionX])
 convertPhonePattern [] = ([],[])
+-- Temp test?
+-- convertPhonePattern ((PhonemeName _ nom):rst) = consFst (PhonemeNameZ nom) $ convertPhonePattern rst
+-- convertPhonePattern (PhoneAtStart :rst) = consFst PhoneAtStartZ  $ convertPhonePattern rst
+-- convertPhonePattern (PhoneNotStart:rst) = consFst PhoneNotStartZ $ convertPhonePattern rst
+-- convertPhonePattern (_:rst) = convertPhonePattern rst
+
 convertPhonePattern ((PhonemeName [] nom):rst) = consFst (PhonemeNameZ nom) $ convertPhonePattern rst
 convertPhonePattern ((PhonemeName st nom):rst) = prpBth [PhonemeNameZ nom] (map PRConfirmState st) $ convertPhonePattern rst
 convertPhonePattern (PhoneAtStart :rst) = consFst PhoneAtStartZ  $ convertPhonePattern rst

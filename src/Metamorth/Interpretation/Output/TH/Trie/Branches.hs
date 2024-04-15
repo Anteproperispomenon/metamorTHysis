@@ -155,29 +155,36 @@ generateBranches' ond tmp = do
       funcString3 = printf "outputReturn_%04d" n
   funcName  <- lift $ newName funcString
   funcName2 <- lift $ newName funcString2
+  -- lift $ qDebugNoticeUnflushed $ "got " ++ show mRslt ++ "."
+  lift $ qDebugNotice $ "Working on \"" ++ funcString ++ "\" now."
 
   -- Match over the sub-results... I guess...
   rslts <- forMaybeM (getSubTries tmp) $ \(c, (_elem, subTrie)) -> do
     -- (subNom, subDecs) <- generateBranches ond subTrie
+    lift $ qDebugNotice $ "In \"" ++ show c ++ "\" now."
     case c of
       PhoneAtStartZ -> do
-        lift $ qReportError $ "Can't have an `AtStart` in the middle of a pattern."
+        lift $ qReportError "Can't have an `AtStart` in the middle of a pattern."
         return Nothing
       PhoneNotStartZ -> do
-        lift $ qReportError $ "Can't have a `NotStart` in the middle of a pattern."
+        lift $ qReportError "Can't have a `NotStart` in the middle of a pattern."
         return Nothing
       (PhonemeNameZ pn) -> do
         let ePat = makePhoneConstructorPat phoneMap phoneCns pn
+        lift $ qDebugNotice "Help..."
         case ePat of
           (Left errs) -> do
             lift $ mapM_ qReportError errs
             return Nothing
           (Right pat)  -> do
             -- myExp <- [|  |]
+            lift $ qDebugNotice "About to recurse..."
             (subNom, subNom2, subDecs) <- generateBranches' ond subTrie
             let myMatch = Match pat (NormalB $ VarE subNom2) []
             return $ Just (subDecs, myMatch)
   
+  lift $ qDebugNotice $ "Wait a minute..."
+
   failExp <- lift [| MatchFail "Example" |]
   let failPat = Match WildP (NormalB failExp) []
       phoneType = ConT $ ondPhoneType ond

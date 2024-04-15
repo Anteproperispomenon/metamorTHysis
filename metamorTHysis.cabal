@@ -142,6 +142,7 @@ test-suite metamorTHysis-test
       Test.Monad.Matcher2
       Test.TH.Basic
       Test.TH.Grouped
+      Test.TH.InAndOut
       Test.TH.TwoOrths
       Paths_metamorTHysis
   autogen-modules:

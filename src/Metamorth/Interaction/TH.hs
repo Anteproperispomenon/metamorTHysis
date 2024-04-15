@@ -6,7 +6,7 @@ module Metamorth.Interaction.TH
   , ExtraParserDetails(..)
   , defExtraParserDetails
   , defExtraParserDetails'
-  , ExtraOutputDetails
+  , ExtraOutputDetails(..)
   , defExtraOutputDetails
   -- * Re-Exports
   , ParserOptions(..)
@@ -68,6 +68,8 @@ import System.Directory
 import Data.Text qualified as T
 import Data.Text (Text)
 
+import System.IO
+
 -- | Simple type for the output of the generated
 --   declarations.
 data GeneratedDecs = GeneratedDecs
@@ -105,13 +107,17 @@ defExtraOutputDetails  = ExtraOutputDetails
   , eodSuffix     = "_op1"
   }
 
+addLocalDependentFile' :: (Quasi q) => FilePath -> q ()
+addLocalDependentFile' = \_ -> return ()
+-- addLocalDependentFile' = addLocalDependentFile
+
 -- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 
 declareParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
 declareParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
-  mapM_ addLocalDependentFile allFps
+  mapM_ addLocalDependentFile' allFps
   (GeneratedDecs d1 ds2 ds3) <- createParsers fp1 fps2 fps3
   return (d1 ++ (concat ds2) ++ (concat ds3))
 
@@ -123,7 +129,7 @@ createParsers phonemePath parserPaths outputPaths = do
   
   -- Be careful running IO here...
   ePhoneData <- runIO $ readPhonemeFile phonemePath
-  addLocalDependentFile phonemePath
+  addLocalDependentFile' phonemePath
   phoneText <- case ePhoneData of
     (Left err)  -> fail err
     (Right txt) -> return txt
@@ -149,7 +155,7 @@ createParsers phonemePath parserPaths outputPaths = do
     case eParseFile of
       (Left err)           -> (qReport True (err)) >> return Nothing
       (Right (txt,epd,fp)) -> do
-        addLocalDependentFile fp
+        addLocalDependentFile' fp
         Just <$> getParserData pdb txt epd
 
   _rslts2@(eOutputFiles, _) <- runIO $ do
@@ -254,6 +260,10 @@ getTheOutput pdb txt eod = do
   decs <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse output specification: " ++ err
     (Right (opo, errMsgs)) -> do
+      runIO $ do
+        hPutStrLn stdout "Finished Parsing Output Spec..."
+        hPrint    stdout opo
+        hFlush stderr
       let (errs, wrns, msgs) = partitionMessages errMsgs
       mapM_ qReportError   errs
       mapM_ qReportWarning wrns

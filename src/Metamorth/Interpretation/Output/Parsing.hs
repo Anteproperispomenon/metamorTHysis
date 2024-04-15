@@ -2,6 +2,7 @@ module Metamorth.Interpretation.Output.Parsing
   -- * Main Parsers
   ( parseOutputFile
   -- * Other Parsers
+  , parsePhonemeList
   , parsePhonemeListS
   -- * Testing
   , testOutputFile
@@ -122,9 +123,10 @@ parseStateDecSection = do
 parsePatternSection :: OutputParser ()
 parsePatternSection = do
   many_ $ lift parseEndComment
-  some_ $ do
+  AT.many1' $ do
     parsePhonemePatMulti
-    AT.many1 $ lift parseEndComment
+    AT.many1' $ lift parseEndComment
+  return ()
   -- hmm...
 
 ----------------------------------------------------------------
@@ -680,6 +682,7 @@ mkList fx = (:[]) <$> fx
 parsePhonemePatMulti :: OutputParser ()
 parsePhonemePatMulti = do
   pr <- parsePhonemePatMulti'
+  -- return ()
   addOutputPattern pr
 
 parsePhonemePatMulti' :: OutputParser ([PhonePattern], OutputPattern)
@@ -709,7 +712,7 @@ parsePhonemePatMulti' = do
     -- return ()
     
     sdict <- gets opsStateDictionary
-    let ePhonePats = validatePhonePattern sdict (NE.toList phones)
+    let  ePhonePats = validatePhonePattern sdict (NE.toList phones)
     case ePhonePats of
       (Left  errs) -> do 
         mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
