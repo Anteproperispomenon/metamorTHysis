@@ -41,6 +41,7 @@ import Metamorth.Helpers.Q
 import Metamorth.Helpers.QS
 import Metamorth.Helpers.TH
 
+import Metamorth.Helpers.Error
 import Metamorth.Helpers.Map
 import Metamorth.Helpers.Monad
 
@@ -59,8 +60,17 @@ import Metamorth.ForOutput.Monad.Matcher.Stateful
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 -- | The main function for creating output 
---   declarations. 
-generateOutputDecs :: String -> String -> OutputParserOutput -> PhonemeNameInformation -> Q [Dec]
+--   declarations.
+generateOutputDecs 
+  -- | The name of the function you want to create.
+  :: String 
+  -- | The suffix for generated internal functions/variables.
+  -> String 
+  -- | The output from the output parser.
+  -> OutputParserOutput 
+  -- | Information from the Phoneme parser.
+  -> PhonemeNameInformation 
+  -> Q [Dec]
 generateOutputDecs userName sfx opo pni = runQS sfx $ do
   (ondDecs, ond, tmap) <- makeOutputDatabase opo pni
   ((stNom, stDecs), (nstNom, nstDecs)) <- generateBranches2 ond tmap
