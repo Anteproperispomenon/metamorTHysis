@@ -28,6 +28,8 @@ import Language.Haskell.TH.Syntax hiding (lift)
 -- searching for incorrectly entered modules in VS Code:
 -- `[^`.]*\.[^`]*`
 
+import Data.Text qualified as T
+
 import Data.String (IsString(..))
 
 import Data.Map.Strict qualified as M
@@ -83,25 +85,27 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
       charCase = ondCaseExpr ond
   
   xyz <- newName "xyz"
+  makeOutStr <- newName "makeMonoid"
 
   caseFunc <- [| \x -> [$(pure charCase) x] |]
 
   func1Exp <- [| matchesLF' $(pure $ VarE stNom) $(pure $ VarE nstNom) |]
   func2Exp <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz] ) -> matchElse $(pure caseFunc) $(pure $ VarE xyz) $(pure defSt) $(pure func1Exp) 
-                       ; $(pure $ ConP wordCon2 [] [VarP xyz] ) -> return $(pure $ VarE xyz)
+                       ; $(pure $ ConP wordCon2 [] [VarP xyz] ) -> return $(pure $ AppE (VarE makeOutStr) (VarE xyz))
                        }  
               |]
   func3Exp <- [| matchesSimple $(pure func2Exp) |]
 
-  outputSign1 <- [t| forall str. (IsString str) => MatcherE [$(pure $ ConT wordType)] () () str |]
+  outputSign1 <- [t| forall str. (IsString str) => (T.Text -> str) -> MatcherE $(pure $ ConT wordType) () () str |]
   let outputSig1  = SigD userFuncName2 outputSign1
-      outputDec1  = ValD (VarP userFuncName2) (NormalB func3Exp) []
+      -- outputDec1  = ValD (VarP userFuncName2) (NormalB func3Exp) []
+      outputDec1 = FunD userFuncName2 [Clause [VarP makeOutStr, VarP xyz] (NormalB func3Exp) []]
       outputDefn1 = [outputSig1, outputDec1]
   
-  outputSign2 <- [t| forall str. (IsString str) => [$(pure $ ConT wordType)] -> str |]
-  outputFuncX <- [| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ VarE userFuncName2) |]
+  outputSign2 <- [t| forall str. (IsString str) => (T.Text -> str) [$(pure $ ConT wordType)] -> Either String str |]
+  outputFuncX <- [| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ AppE (VarE userFuncName2) (VarE makeOutStr)) |]
   let outputSig2  = SigD userFuncName outputSign2
-      outputDec2  = FunD userFuncName [Clause [VarP xyz] (NormalB outputFuncX) []]
+      outputDec2  = FunD userFuncName [Clause [VarP makeOutStr, VarP xyz] (NormalB outputFuncX) []]
       outputDefn2 = [outputSig2, outputDec2]
   
   -- matchElse :: (Monad m, Monoid w) => (j -> w) -> [j] -> s' -> MatcherT j w s' m r -> MatcherT i v s m r

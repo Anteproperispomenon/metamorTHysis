@@ -16,7 +16,7 @@ declareParsers
   [ ("examples/parsing/parsing_example_02.thyp", (defExtraParserDetails "_syl") {epdParserName = "syllabicParser"} )
   , ("examples/parsing/inuktitut_latin.thyp"   , (defExtraParserDetails "_lat") {epdParserName = "latinParser"   } )
   ]
-  [ ("examples/output/example_inuktitut_03.thyo", defExtraOutputDetails {eodSuffix = "_sylout", eodOutputName = "syllabicOutput"})
+  [ ("examples/output/example_inuktitut_01.thyo", defExtraOutputDetails {eodSuffix = "_sylout", eodOutputName = "syllabicOutput"})
   ]
 
 {-

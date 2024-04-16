@@ -6,6 +6,7 @@ module Metamorth.Interpretation.Output.Parsing
   , parsePhonemeListS
   -- * Testing
   , testOutputFile
+  , testOutputParser
   ) where
 
 import Control.Applicative
@@ -51,6 +52,10 @@ import Data.Set        qualified as S
 --   gives empty sets for the various dictionaries.
 testOutputFile :: AT.Parser (OutputParserOutput, [ParserMessage])
 testOutputFile = parseOutputFile S.empty M.empty M.empty S.empty
+
+testOutputParser :: OutputParser x -> T.Text -> Either String (OutputParsingState)
+testOutputParser prsr txt = tup2'3 <$> AT.parseOnly (embedOutputParser S.empty M.empty M.empty S.empty prsr) txt
+  where tup2'3 (_,y,_) = y
 
 -- | The main runner of the output file.
 parseOutputFile 

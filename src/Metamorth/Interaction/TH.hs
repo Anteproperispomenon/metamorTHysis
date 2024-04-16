@@ -107,9 +107,11 @@ defExtraOutputDetails  = ExtraOutputDetails
   , eodSuffix     = "_op1"
   }
 
-addLocalDependentFile' :: (Quasi q) => FilePath -> q ()
-addLocalDependentFile' = \_ -> return ()
--- addLocalDependentFile' = addLocalDependentFile
+-- Swap this when trying to run it
+-- with IO.
+addLocalDependentFile' :: FilePath -> Q ()
+-- addLocalDependentFile' = \_ -> return ()
+addLocalDependentFile' = addLocalDependentFile
 
 -- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 
@@ -260,10 +262,6 @@ getTheOutput pdb txt eod = do
   decs <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse output specification: " ++ err
     (Right (opo, errMsgs)) -> do
-      runIO $ do
-        hPutStrLn stdout "Finished Parsing Output Spec..."
-        hPrint    stdout opo
-        hFlush stderr
       let (errs, wrns, msgs) = partitionMessages errMsgs
       mapM_ qReportError   errs
       mapM_ qReportWarning wrns

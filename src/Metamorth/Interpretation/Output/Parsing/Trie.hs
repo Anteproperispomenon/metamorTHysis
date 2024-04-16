@@ -1,5 +1,7 @@
 module Metamorth.Interpretation.Output.Parsing.Trie
   ( addOutputPattern
+  , addOutputPatternPlain
+  , insertNodeS
   ) where
 
 import Control.Monad.Trans.RWS.CPS
@@ -73,6 +75,10 @@ insertNodeS cs p = TM.revise ins cs
 --     warn $ "Can't insert pair " ++ show pr ++ "; key already used for \"" ++ show origVal ++ "\"."
 --   modify $ \x -> x {opsOutputTrie = tmap'}
 
+addOutputPatternPlain :: ([PhonePattern], OutputPattern) -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> TM.TMap PhonePatternAlt (S.Set PhoneResult)
+addOutputPatternPlain prOld = insertNodeS pp op
+  where (pp,op) = renewOutputPattern prOld
+
 addOutputPattern :: ([PhonePattern], OutputPattern) -> OutputParser ()
 addOutputPattern prOld = do
   let (pp, op) = renewOutputPattern prOld
@@ -90,5 +96,11 @@ modify' :: (Monad m) => (s -> s) -> RWST r w s m ()
 modify' f = do
   s <- get
   put $! f s
+
+-- Example Patterns
+
+-- ([PhonemeName [] "K", PhonemeName [] "A"], (OutputPattern (CharPattern [(CasableChar 'k'), (CasableChar 'a')] []) OCNull))
+-- ([PhonemeName [] "K", PhonemeName [] "E"], (OutputPattern (CharPattern [(CasableChar 'k'), (CasableChar 'e')] []) OCNull))
+
 
 
