@@ -45,6 +45,20 @@ main = do
   putStrLn "Trying the output functions..."
   print $ (AT.parseOnly InOut.latinParser exampleText2) >>= (InOut.syllabicOutput id)
 
+  putStrLn "Idempotency Checks..."
+  let eRslts = do
+        prs1 <- AT.parseOnly InOut.syllabicParser exampleText
+        out1 <- InOut.syllabicOutput id prs1
+        prs2 <- AT.parseOnly InOut.syllabicParser out1
+        out2 <- InOut.syllabicOutput id prs2
+        return (out1 == exampleText, out2 == out1)
+  case eRslts of
+    (Right (r1,r2)) -> do
+      putStrLn $ "  f    x  ==   x : " ++ show r1
+      putStrLn $ "  f (f x) == f x : " ++ show r2
+    (Left err) -> do
+      putStrLn $ "Couldn't parse input;"
+      putStrLn err
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text
