@@ -5,6 +5,7 @@ module Test.TH.InAndOut
   ( Phoneme(..)
   , syllabicParser
   , latinParser
+  , syllabicOutput
   ) where
 
 import Metamorth.Interaction.TH

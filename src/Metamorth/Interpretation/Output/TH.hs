@@ -96,13 +96,13 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
               |]
   func3Exp <- [| matchesSimple $(pure func2Exp) |]
 
-  outputSign1 <- [t| forall str. (IsString str) => (T.Text -> str) -> MatcherE $(pure $ ConT wordType) () () str |]
+  outputSign1 <- [t| forall str. (IsString str, Monoid str) => (T.Text -> str) -> MatcherE $(pure $ ConT wordType) () () str |]
   let outputSig1  = SigD userFuncName2 outputSign1
       -- outputDec1  = ValD (VarP userFuncName2) (NormalB func3Exp) []
-      outputDec1 = FunD userFuncName2 [Clause [VarP makeOutStr, VarP xyz] (NormalB func3Exp) []]
+      outputDec1 = FunD userFuncName2 [Clause [VarP makeOutStr] (NormalB func3Exp) []]
       outputDefn1 = [outputSig1, outputDec1]
   
-  outputSign2 <- [t| forall str. (IsString str) => (T.Text -> str) [$(pure $ ConT wordType)] -> Either String str |]
+  outputSign2 <- [t| forall str. (IsString str, Monoid str) => (T.Text -> str) -> [$(pure $ ConT wordType)] -> Either String str |]
   outputFuncX <- [| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ AppE (VarE userFuncName2) (VarE makeOutStr)) |]
   let outputSig2  = SigD userFuncName outputSign2
       outputDec2  = FunD userFuncName [Clause [VarP makeOutStr, VarP xyz] (NormalB outputFuncX) []]

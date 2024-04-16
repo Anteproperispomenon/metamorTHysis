@@ -43,7 +43,7 @@ main = do
   print $ M2.runTheMatcher M2.exampleList4 M2.myMatch
 
   putStrLn "Trying the output functions..."
-  print $ (AT.parseOnly InOut.syllabicParser exampleText2) >>= (InOut.syllabicOutput)
+  print $ (AT.parseOnly InOut.latinParser exampleText2) >>= (InOut.syllabicOutput id)
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.

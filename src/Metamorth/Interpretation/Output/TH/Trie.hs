@@ -149,8 +149,9 @@ makeReturnFunction' ond strName (ReturnClauses prs [] [] []) = do
   funcName <- newName strName
   varName1 <- newName "v"
   typVar1  <- newName "str"
+  monVar   <- newName "mon"
   let rets = map ($ varName1) prs
-  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> $(pure $ VarT typVar1) |]
+  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> $(pure $ VarT monVar) $(pure $ VarT typVar1) |]
   let signDec = SigD funcName sign
       bodyDec = FunD funcName [Clause [VarP varName1] (GuardedB rets) []]
   return (funcName, [signDec, bodyDec])
