@@ -260,7 +260,7 @@ data CharPatternRaw
 
 getPlainChar :: CharPatternRaw -> Maybe CharPatternItem
 getPlainChar (PlainCharR c)
-  | isCasable c = Just $ CasableChar c
+  | isCasable c = Just $ CasableChar   c
   | otherwise   = Just $ UncasableChar c
 getPlainChar _ = Nothing
 

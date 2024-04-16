@@ -31,7 +31,7 @@ module Metamorth.Interpretation.Output.Types
 
 import Data.Ord (Down(..))
 
-import Data.String (IsString)
+import Data.String (IsString(..))
 
 import Data.Map.Strict qualified as M
 
@@ -175,6 +175,9 @@ data PhoneNameX str = PhoneName
 
 type PhoneName = PhoneNameX String
 
+instance (IsString (PhoneNameX String)) where
+  fromString str = PhoneName str []
+
 -- Setting up the Ord instance:
 -- The newtype to use:
 newtype StringStar = StringStar String
@@ -185,7 +188,7 @@ instance Ord StringStar where
   compare "*" "*" = EQ
   compare "*" _   = GT
   compare _   "*" = LT
-  compare st1 st2  = compare st1 st2
+  compare (StringStar st1) (StringStar st2) = compare st1 st2
 
 -- Create Ord instance to use
 deriving instance Ord (PhoneNameX StringStar)
