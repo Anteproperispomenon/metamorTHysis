@@ -30,6 +30,8 @@ import Metamorth.Helpers.TH
 -- import Metamorth.Interpretation.Parser.TH   qualified as Parser
 -- import Metamorth.Interpretation.Phonemes.TH qualified as Phonemes
 
+import Metamorth.Interpretation.Output.Types (OutputHeader(..))
+
 import Metamorth.Interpretation.Phonemes.Parsing (parsePhonemeFile)
 
 import Metamorth.Interpretation.Phonemes.Parsing.Types 
@@ -170,8 +172,11 @@ createParsers phonemePath parserPaths outputPaths = do
       (Left err) -> (qReportError err) >> return Nothing
       (Right (txt, eod)) -> do
         Just <$> getTheOutput pdb txt eod
+  
+  -- The lift of orthography names.
+  let outOrthNames = map fst outputResults
 
-  return $ GeneratedDecs phoneDecs (map fst parserResults) outputResults
+  return $ GeneratedDecs phoneDecs (map fst parserResults) (map snd outputResults)
 
 readPhonemeFile :: FilePath -> IO (Either String (Text))
 readPhonemeFile fp = do
@@ -251,7 +256,7 @@ makePhonemeInformation pdb = PhonemeNameInformation
     pdt = pdbPropertyData pdb
     unwrap (PhonemeInformation x y) = (x,y)
 
-getTheOutput :: PhonemeDatabase -> Text -> ExtraOutputDetails -> Q [Dec]
+getTheOutput :: PhonemeDatabase -> Text -> ExtraOutputDetails -> Q (Name, [Dec])
 getTheOutput pdb txt eod = do
   let pni = makePhonemeInformation pdb
       aspectSet = M.map (M.keysSet . snd . snd) (pniAspects pni)
@@ -259,15 +264,22 @@ getTheOutput pdb txt eod = do
   let eParseRslt = AT.parseOnly (parseOutputFile S.empty M.empty aspectSet phoneSet) txt
       newNameStr = eodOutputName eod
       newNameSfx = eodSuffix eod
-  decs <- case eParseRslt of
+  -- (decs, hdrX) <- case eParseRslt of
+  case eParseRslt of
     (Left err) -> fail $ "Couldn't parse output specification: " ++ err
-    (Right (opo, errMsgs)) -> do
+    (Right (opo, hdr, errMsgs)) -> do
       let (errs, wrns, msgs) = partitionMessages errMsgs
       mapM_ qReportError   errs
       mapM_ qReportWarning wrns
-      generateOutputDecs newNameStr newNameSfx opo pni
+      decs <- generateOutputDecs newNameStr newNameSfx opo pni
+
+      hdrOut <- case (ohOrthName hdr) of
+        "" -> newName $ "Orth" ++ newNameSfx
+        x  -> newName $ dataName x
+      
+      return (hdrOut, decs)
   
-  return decs
+  -- return (hdrX, decs)
 
 {-
 

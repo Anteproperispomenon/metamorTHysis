@@ -7,6 +7,10 @@ module Metamorth.Interpretation.Output.Parsing
   -- * Testing
   , testOutputFile
   , testOutputParser
+  -- * Debug
+  , parsePhonemePatMulti
+  , parsePhonemePatMulti'
+  , parsePatternSection
   ) where
 
 import Control.Applicative
@@ -17,6 +21,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.RWS.CPS
 
 import Data.Functor
+import Data.Maybe
 
 import Data.Attoparsec.Text qualified as AT
 
@@ -50,7 +55,7 @@ import Data.Set        qualified as S
 
 -- | A quick tester for the output file, that just
 --   gives empty sets for the various dictionaries.
-testOutputFile :: AT.Parser (OutputParserOutput, [ParserMessage])
+testOutputFile :: AT.Parser (OutputParserOutput, OutputHeader, [ParserMessage])
 testOutputFile = parseOutputFile S.empty M.empty M.empty S.empty
 
 testOutputParser :: OutputParser x -> T.Text -> Either String (OutputParsingState)
@@ -70,9 +75,9 @@ parseOutputFile
   -- | A `S.Set` of the phonemes used for this
   --   output.
   -> S.Set String
-  -> AT.Parser (OutputParserOutput, [ParserMessage])
+  -> AT.Parser (OutputParserOutput, OutputHeader, [ParserMessage])
 parseOutputFile grps trts asps phones = do
-  (_hdr, cas) <- parseHeaderSection
+  (hdr, cas) <- parseHeaderSection
   (_, ops, msgs) <- embedOutputParser grps trts asps phones $ do
     -- Fill out actions here.
     -- (hdr, cas) <- parseHeaderSection
@@ -87,7 +92,7 @@ parseOutputFile grps trts asps phones = do
         , opoAspectDictionary = opsAspectDictionary ops
         , opoOutputTrie = opsOutputTrie ops
         }
-  return (opo, msgs)
+  return (opo, hdr, msgs)
 
 ----------------------------------------------------------------
 -- Section Parsers
@@ -96,20 +101,42 @@ parseOutputFile grps trts asps phones = do
 parseHeaderSection :: AT.Parser (OutputHeader, OutputCase)
 parseHeaderSection = do
   many_ parseEndComment
-  casity <- AT.option OCNull $ do
-    _ <- "default" 
-    skipHoriz1
-    _ <- "case"
-    skipHoriz
-    _ <- (AT.char ':') <|> (AT.char '=')
-    skipHoriz
-    cas <- getCaseType
-    some_ parseEndComment
-    return cas
+  name1 <- optional (parseHeaderName <* (some_ parseEndComment))
+  casity <- AT.option OCNull parseDefaultCase
+  some_ parseEndComment
+  name2 <- case name1 of
+    Nothing  -> optional (parseHeaderName <* (some_ parseEndComment))
+    (Just x) -> return (Just x)
+  
+  let name3 = fromMaybe "" name2
+  
   _ <- ("====" <?> "Header: Separator1")
   _ <- ((AT.takeWhile (== '=')) <?> "Header: Separator2")
   parseEndComment
-  return ((), casity)
+  let finalHeader = OutputHeader {ohOrthName = name3}
+  return (finalHeader, casity)
+
+parseDefaultCase :: AT.Parser (OutputCase)
+parseDefaultCase = do
+  _ <- "default" 
+  skipHoriz1
+  _ <- "case"
+  skipHoriz
+  _ <- (AT.char ':') <|> (AT.char '=')
+  skipHoriz
+  cas <- getCaseType
+  return cas
+
+parseHeaderName :: AT.Parser String
+parseHeaderName = do
+  skipHoriz
+  _ <- "name"
+  skipHoriz
+  (AT.char ':') <|> (AT.char '=') <|> (AT.char ' ') <|> (AT.char '\t')
+  skipHoriz
+  -- hmm...s
+  T.unpack <$> takeIdentifier isAlpha isFollowId
+
 
 -- | Parse the class declaration section.
 --   This also includes states.

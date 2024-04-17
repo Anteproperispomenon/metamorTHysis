@@ -279,5 +279,7 @@ data CharPattern = CharPattern
 
 -- SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
 
-type OutputHeader = ()
+data OutputHeader = OutputHeader
+  { ohOrthName :: String
+  } deriving (Show, Eq)
 
