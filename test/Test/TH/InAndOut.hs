@@ -6,13 +6,17 @@ module Test.TH.InAndOut
   , syllabicParser
   , latinParser
   , syllabicOutput
+  , convertOrthography
+  , convertOrthographyLazy
+  , InOrth(..)
+  , OutOrth(..)
   ) where
 
 import Metamorth.Interaction.TH
 
 import Metamorth.Interpretation.Parser.TH (ParserOptions(..))
 
-declareParsers 
+declareFullParsers 
   "examples/phonemes/example_inuktitut_02.thyt"
   [ ("examples/parsing/parsing_example_02.thyp", (defExtraParserDetails "_syl") {epdParserName = "syllabicParser"} )
   , ("examples/parsing/inuktitut_latin.thyp"   , (defExtraParserDetails "_lat") {epdParserName = "latinParser"   } )

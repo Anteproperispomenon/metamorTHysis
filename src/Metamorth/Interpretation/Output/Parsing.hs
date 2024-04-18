@@ -116,7 +116,7 @@ parseHeaderSection = do
   let finalHeader = OutputHeader {ohOrthName = name3}
   return (finalHeader, casity)
 
-parseDefaultCase :: AT.Parser (OutputCase)
+parseDefaultCase :: AT.Parser OutputCase
 parseDefaultCase = do
   _ <- "default" 
   skipHoriz1

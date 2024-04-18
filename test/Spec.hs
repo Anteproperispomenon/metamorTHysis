@@ -10,11 +10,16 @@ import Test.TH.InAndOut as InOut
 import System.IO
 
 import Data.Text qualified as T
+import Data.Text.Lazy (toStrict)
 
 import Data.Attoparsec.Text qualified as AT
 
 import Test.Monad.Matcher
 import Test.Monad.Matcher2 qualified as M2
+
+import Metamorth.Helpers.IO 
+
+import System.IO
 
 main :: IO ()
 main = do
@@ -59,6 +64,19 @@ main = do
     (Left err) -> do
       putStrLn $ "Couldn't parse input;"
       putStrLn err
+
+  -- Direct conversion types...
+  putStrLn "Trying direct conversions..."
+  let rslt = InOut.convertOrthography InInuktitut_latin OutSyllabic exampleText2
+  case rslt of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout tx
+  
+  putStrLn "Trying direct conversions with lazy text..."
+  let rslt2 = InOut.convertOrthographyLazy InInuktitut_latin OutSyllabic exampleText2
+  case rslt2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text

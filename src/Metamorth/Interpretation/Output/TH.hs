@@ -72,7 +72,7 @@ generateOutputDecs
   -> OutputParserOutput 
   -- | Information from the Phoneme parser.
   -> PhonemeNameInformation 
-  -> Q [Dec]
+  -> Q (Name, [Dec])
 generateOutputDecs userName sfx opo pni = runQS sfx $ do
   (ondDecs, ond, tmap) <- makeOutputDatabase opo pni
   ((stNom, stDecs), (nstNom, nstDecs)) <- generateBranches2 ond tmap
@@ -112,7 +112,7 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
   -- matchesSimple :: (Monad m, Monoid v, Monoid r) => (i -> MatcherT i v s m r) -> MatcherT i v s m r
 
 
-  return (outputDefn1 ++ outputDefn2 ++ ondDecs ++ stDecs ++ nstDecs)
+  return (userFuncName, (outputDefn1 ++ outputDefn2 ++ ondDecs ++ stDecs ++ nstDecs))
 
 -- generateBranches3 :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q GroupedTrieDecs
 
