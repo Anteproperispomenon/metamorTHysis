@@ -1,5 +1,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE PatternSynonyms #-}
+{-# OPTIONS_GHC -Wno-redundant-constraints -Wno-unused-top-binds #-}
 
 module Test.TH.TwoOrths
   ( Phoneme(..)

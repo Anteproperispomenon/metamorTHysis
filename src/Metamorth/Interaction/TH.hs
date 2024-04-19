@@ -90,35 +90,42 @@ data GeneratedDecs = GeneratedDecs
   , gdOrthTypeNames :: (Name, Name)
   , gdInputTypes    :: M.Map Name Name
   , gdOutputTypes   :: M.Map Name Name
+  , gdInputMap      :: [Dec]
+  , gdOutputMap     :: [Dec]
   } deriving (Show, Eq)
 
 -- | Options to go along with each parser file.
 data ExtraParserDetails = ExtraParserDetails
   { epdParserOptions :: ParserOptions
   , epdParserName    :: String
+  , epdOtherNames    :: [String]
   } deriving (Show, Eq)
 
 defExtraParserDetails' :: ExtraParserDetails
 defExtraParserDetails'  = ExtraParserDetails
   { epdParserOptions = defParserOptions'
   , epdParserName    = "anotherParser"
+  , epdOtherNames    = []
   }
 
 defExtraParserDetails :: String -> ExtraParserDetails
 defExtraParserDetails str = ExtraParserDetails
   { epdParserOptions = defParserOptions str
   , epdParserName    = "anotherParser"
+  , epdOtherNames    = []
   }
 
 data ExtraOutputDetails = ExtraOutputDetails 
   { eodOutputName :: String
   , eodSuffix     :: String
+  , eodOtherNames :: [String]
   } deriving (Show, Eq)
 
 defExtraOutputDetails :: ExtraOutputDetails
 defExtraOutputDetails  = ExtraOutputDetails
   { eodOutputName = "mainOutput"
   , eodSuffix     = "_op1"
+  , eodOtherNames = []
   }
 
 -- Swap this when trying to run it
@@ -134,7 +141,7 @@ declareParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap) <- createParsers fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap inMapDec outMapDec) <- createParsers fp1 fps2 fps3
   
   -- Create the full function...
   -- funcDecs <- makeFullFunction iNom oNom inMap outMap
@@ -147,12 +154,12 @@ declareFullParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap) <- createParsers fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap inMapDec outMapDec) <- createParsers fp1 fps2 fps3
   
   -- Create the full function...
   funcDecs <- makeFullFunction iNom oNom inMap outMap
 
-  return (funcDecs ++ ds4 ++ d1 ++ (concat ds2) ++ (concat ds3))
+  return (funcDecs ++ ds4 ++ d1 ++ (concat ds2) ++ (concat ds3) ++ inMapDec ++ outMapDec)
 
 -- I wonder why addLocalDependentFile doesn't work?
 
@@ -184,16 +191,19 @@ createParsers phonemePath parserPaths outputPaths = do
     eParsers <- mapM readParserFile parserPaths
     return (eParsers, Nothing)
 
-  parserResultsBoth <- fmap catMaybes $ forM eParseFiles $ \eParseFile -> do
+  parserResultsBoth' <- fmap catMaybes $ forM eParseFiles $ \eParseFile -> do
     case eParseFile of
-      (Left err)           -> (qReport True (err)) >> return Nothing
+      (Left err)           -> (qReport True err) >> return Nothing
       (Right (txt,epd,fp)) -> do
         addLocalDependentFile' fp
         Just <$> getParserData pdb txt epd
   
-  let parserResults = map fst parserResultsBoth
-      parserTypes   = map snd parserResultsBoth
-  
+  let parserResultsBoth = map fst parserResultsBoth'
+      parserResults     = map fst parserResultsBoth
+      parserTypes       = map snd parserResultsBoth
+      parserNameExprs   = concatMap snd parserResultsBoth'
+      parserNameExprs'  = map (\(x1,x2) -> TupE [Just x1, Just x2]) parserNameExprs
+
   inOrthMap <- fmap M.fromList $ forM parserTypes $ \(str, funcNom) -> do
     -- Maybe need to create an alternative if name is empty...
     orthName <- newName $ "In" ++ (dataName str)
@@ -204,29 +214,52 @@ createParsers phonemePath parserPaths outputPaths = do
     return (eOutputs, Nothing)
 
   -- let pni = makePhonemeInformation pdb
-  outputResults <- fmap catMaybes $ forM eOutputFiles $ \eOutputFile -> do
+  outputResults' <- fmap catMaybes $ forM eOutputFiles $ \eOutputFile -> do
     case eOutputFile of
       (Left err) -> (qReportError err) >> return Nothing
       (Right (txt, eod)) -> do
         Just <$> getTheOutput pdb txt eod
   
   -- The lift of orthography names.
-  let outOrthNames = map fst outputResults
-      outOrthMap   = M.fromList outOrthNames
-  
+  let outputResults = map fst outputResults'
+      outOrthNames  = map fst outputResults
+      outOrthMap    = M.fromList outOrthNames
+      outputNamers  = concatMap snd outputResults'
+      outputNamers' = map (\(x1,x2) -> TupE [Just x1, Just x2]) outputNamers
+
   outOrthTypeDec <- makeOutputOrthType outOrthMap
   inOrthTypeDec  <-  makeInputOrthType  inOrthMap
 
+
+  -- Make the map of input names.
+  inputOrthNameMap  <- [| M.fromList $(pure $ ListE parserNameExprs') |]
+  inputOrthNameType <- [t| M.Map String $(pure $ ConT $ fst outOrthTypeDec) |]
+  inputOrthNameName <- newName "inputOrthNameMap"
+  let inputOrthNameSign = SigD inputOrthNameName inputOrthNameType
+      inputOrthNameDefn = ValD (VarP inputOrthNameName) (NormalB $ inputOrthNameMap) []
+      inputOrthNameDecl = [inputOrthNameSign, inputOrthNameDefn]
+
+
+  -- Make the map of output names.
+  outputOrthNameMap  <- [| M.fromList $(pure $ ListE outputNamers') |]
+  outputOrthNameType <- [t| M.Map String $(pure $ ConT $ fst outOrthTypeDec) |]
+  outputOrthNameName <- newName "outputOrthNameMap"
+  let outputOrthNameSign = SigD outputOrthNameName outputOrthNameType
+      outputOrthNameDefn = ValD (VarP outputOrthNameName) (NormalB $ outputOrthNameMap) []
+      outputOrthNameDecl = [outputOrthNameSign, outputOrthNameDefn]
+
   return $ GeneratedDecs 
              phoneDecs 
-             (map fst parserResults) 
-             (map snd outputResults) 
+             (map fst parserResults)
+             (map snd outputResults)
              [snd inOrthTypeDec, snd outOrthTypeDec]
              (fst inOrthTypeDec, fst outOrthTypeDec)
              inOrthMap
              outOrthMap
+             inputOrthNameDecl
+             outputOrthNameDecl
 
-readPhonemeFile :: FilePath -> IO (Either String (Text))
+readPhonemeFile :: FilePath -> IO (Either String Text)
 readPhonemeFile fp = do
   bl <- doesFileExist fp
   case bl of
@@ -254,7 +287,7 @@ readOutputFile (fp, eod) = do
       return $ Right (txt, eod)
 
 
-getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q (([Dec], StaticParserInfo), (String, Name))
+getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (String, Name)), [(Exp, Exp)])
 getParserData pdb txt epd = do
   -- here
   let eParseRslt = AT.parseOnly parseOrthographyFile txt
@@ -288,7 +321,7 @@ getParserData pdb txt epd = do
   newSig <- SigD newNameNom <$> [t| AT.Parser [$(pure $ ConT $ fst $ pdbWordTypeNames pdb)]  |]
   newDec <- [d| $(pure $ VarP newNameNom) = $(pure $ VarE funcNom) |]
 
-  return ((newSig:newDec<>dcs1, spi), (typeNom, funcNom))
+  return (((newSig:newDec<>dcs1, spi), (typeNom, funcNom)), [])
 
 makePhonemeInformation :: PhonemeDatabase -> PhonemeNameInformation
 makePhonemeInformation pdb = PhonemeNameInformation
@@ -304,7 +337,7 @@ makePhonemeInformation pdb = PhonemeNameInformation
     pdt = pdbPropertyData pdb
     unwrap (PhonemeInformation x y) = (x,y)
 
-getTheOutput :: PhonemeDatabase -> Text -> ExtraOutputDetails -> Q ((Name, Name), [Dec])
+getTheOutput :: PhonemeDatabase -> Text -> ExtraOutputDetails -> Q (((Name, Name), [Dec]), [(Exp, Exp)])
 getTheOutput pdb txt eod = do
   let pni = makePhonemeInformation pdb
       aspectSet = M.map (M.keysSet . snd . snd) (pniAspects pni)
@@ -325,7 +358,7 @@ getTheOutput pdb txt eod = do
         "" -> newName $ "OutOrth" ++ newNameSfx
         x  -> newName $ "Out" ++ dataName x
       
-      return ((hdrOut, userFuncName), decs)
+      return (((hdrOut, userFuncName), decs), [])
   
   -- return (hdrX, decs)
 
