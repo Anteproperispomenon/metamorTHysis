@@ -9,6 +9,7 @@ module Test.TH.InAndOut
   , syllabicOutput
   , convertOrthography
   , convertOrthographyLazy
+  , convertOrthographyBS
   , InOrth(..)
   , OutOrth(..)
   ) where

@@ -24,6 +24,8 @@ import Data.Attoparsec.Text qualified as AT
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
+import Data.ByteString.Lazy qualified as BL
+
 import Data.Text              qualified as T
 import Data.Text.Lazy         qualified as TL
 import Data.Text.Lazy.Builder qualified as TB
@@ -90,6 +92,7 @@ data GeneratedDecs = GeneratedDecs
   , gdOrthTypeNames :: (Name, Name)
   , gdInputTypes    :: M.Map Name Name
   , gdOutputTypes   :: M.Map Name Name
+  , gdOutputTypesBS :: M.Map Name Name
   , gdInputMap      :: [Dec]
   , gdOutputMap     :: [Dec]
   } deriving (Show, Eq)
@@ -141,7 +144,7 @@ declareParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap inMapDec outMapDec) <- createParsers fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsers fp1 fps2 fps3
   
   -- Create the full function...
   -- funcDecs <- makeFullFunction iNom oNom inMap outMap
@@ -154,10 +157,10 @@ declareFullParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap inMapDec outMapDec) <- createParsers fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsers fp1 fps2 fps3
   
   -- Create the full function...
-  funcDecs <- makeFullFunction iNom oNom inMap outMap
+  funcDecs <- makeFullFunction iNom oNom inMap outMap outMapBS
 
   return (funcDecs ++ ds4 ++ d1 ++ (concat ds2) ++ (concat ds3) ++ inMapDec ++ outMapDec)
 
@@ -222,11 +225,14 @@ createParsers phonemePath parserPaths outputPaths = do
         Just <$> getTheOutput pdb txt eod
   
   -- The lift of orthography names.
-  let outputResults = map fst outputResults'
-      outOrthNames  = map fst outputResults
-      outOrthMap    = M.fromList outOrthNames
-      outputNamers  = concatMap snd outputResults'
-      outputNamers' = map (\(x1,x2) -> TupE [Just x1, Just x2]) outputNamers
+  let outputResults  = map fst outputResults'
+      outOrthNames'  = map fst outputResults
+      outOrthNames   = map fst outOrthNames'
+      outOrthNamesBS = map snd outOrthNames'
+      outOrthMap     = M.fromList outOrthNames
+      outOrthMapBS   = M.fromList outOrthNamesBS
+      outputNamers   = concatMap snd outputResults'
+      outputNamers'  = map (\(x1,x2) -> TupE [Just x1, Just x2]) outputNamers
 
   outOrthTypeDec <- makeOutputOrthType outOrthMap
   inOrthTypeDec  <-  makeInputOrthType  inOrthMap
@@ -257,6 +263,7 @@ createParsers phonemePath parserPaths outputPaths = do
              (fst inOrthTypeDec, fst outOrthTypeDec)
              inOrthMap
              outOrthMap
+             outOrthMapBS
              inputOrthNameDecl
              outputOrthNameDecl
 
@@ -343,7 +350,7 @@ makePhonemeInformation pdb = PhonemeNameInformation
     pdt = pdbPropertyData pdb
     unwrap (PhonemeInformation x y) = (x,y)
 
-getTheOutput :: PhonemeDatabase -> Text -> ExtraOutputDetails -> Q (((Name, Name), [Dec]), [(Exp, Exp)])
+getTheOutput :: PhonemeDatabase -> Text -> ExtraOutputDetails -> Q ((((Name, Name), (Name, Name)), [Dec]), [(Exp, Exp)])
 getTheOutput pdb txt eod = do
   let pni = makePhonemeInformation pdb
       aspectSet = M.map (M.keysSet . snd . snd) (pniAspects pni)
@@ -367,7 +374,7 @@ getTheOutput pdb txt eod = do
       let otherNames = map strE $ eodOtherNames eod
           otherPairs = map (,ConE hdrOut) otherNames
 
-      return (((hdrOut, userFuncName), decs), otherPairs)
+      return ((((hdrOut, userFuncName), (hdrOut, userFuncNameBS)), decs), otherPairs)
   
   -- return (hdrX, decs)
 
@@ -400,8 +407,8 @@ makeInputOrthType mps = do
 
 -- | Make the full function that can easily
 --   be called by a CLI application.
-makeFullFunction :: forall q. (Quote q, Quasi q) => Name -> Name -> M.Map Name Name -> M.Map Name Name -> q [Dec]
-makeFullFunction iNom oNom inNames outNames = do 
+makeFullFunction :: forall q. (Quote q, Quasi q) => Name -> Name -> M.Map Name Name -> M.Map Name Name -> M.Map Name Name -> q [Dec]
+makeFullFunction iNom oNom inNames outNames outNamesBS = do 
   funcName <- newName "convertOrthography"
   funcType <- [t| $(pure $ ConT iNom) -> $(pure $ ConT oNom) -> Text -> Either String Text |]
   funcSign <- return $ SigD funcName funcType
@@ -409,12 +416,17 @@ makeFullFunction iNom oNom inNames outNames = do
   funcNameL <- newName "convertOrthographyLazy"
   funcTypeL <- [t| $(pure $ ConT iNom) -> $(pure $ ConT oNom) -> Text -> Either String TL.Text |]
   funcSignL <- return $ SigD funcNameL funcTypeL
+
+  funcNameBS <- newName "convertOrthographyBS"
+  funcTypeBS <- [t| $(pure $ ConT iNom) -> $(pure $ ConT oNom) -> Text -> Either String BL.ByteString |]
+  funcSignBS <- return $ SigD funcNameBS funcTypeBS
   
   -- For the functions that select the input/output
   -- function to use based on the selector type.
   tempNameI <- newName "selectI"
   tempNameO <- newName "selectO"
   tempNameL <- newName "selectOL"
+  tempNameB <- newName "selectBS"
 
   extraName1 <- newName "abc"
 
@@ -426,10 +438,12 @@ makeFullFunction iNom oNom inNames outNames = do
   let tempDefnI = M.elems $ M.mapWithKey makeClauseI  inNames
       tempDefnO = M.elems $ M.mapWithKey makeClauseO outNames
       tempDefnL = M.elems $ M.mapWithKey (makeClauseOB extraName1) outNames
+      tempDefnB = M.elems $ M.mapWithKey makeClauseBS outNamesBS
   
       tempFuncI = FunD tempNameI tempDefnI
       tempFuncO = FunD tempNameO tempDefnO
       tempFuncL = FunD tempNameL tempDefnL
+      tempFuncB = FunD tempNameB tempDefnB
 
       tempSignI = SigD tempNameI tempTypeI
       tempSignO = SigD tempNameO tempTypeO
@@ -437,6 +451,7 @@ makeFullFunction iNom oNom inNames outNames = do
       -- whereDecs = [tempSignI, tempFuncI, tempSignO, tempFuncO]
       whereDecs  = [tempFuncI, tempFuncO]
       whereDecsL = [tempFuncI, tempFuncL]
+      whereDecsB = [tempFuncI, tempFuncB]
   
   when (M.null  inNames) $ qReportWarning  "There are no Input Orthography Names"
   when (M.null outNames) $ qReportWarning "There are no Output Orthography Names"
@@ -448,6 +463,7 @@ makeFullFunction iNom oNom inNames outNames = do
   -- i.e. (selectI iType txt) >>= (selectO oType)
   funcExp  <- [| ($(pve tempNameI) $(pve iVarNom) $(pve tVarNom)) >>= ($(pve tempNameO) $(pve oVarNom)) |]
   funcExpL <- [| ($(pve tempNameI) $(pve iVarNom) $(pve tVarNom)) >>= ($(pve tempNameL) $(pve oVarNom)) |]
+  funcExpB <- [| ($(pve tempNameI) $(pve iVarNom) $(pve tVarNom)) >>= ($(pve tempNameB) $(pve oVarNom)) |]
 
   -- Okay now...
   let mainFuncDefn = FunD funcName 
@@ -463,9 +479,16 @@ makeFullFunction iNom oNom inNames outNames = do
             (NormalB funcExpL)
             whereDecsL
         ]
+      
+      mainFuncDefnBS = FunD funcNameBS
+        [ Clause
+            [VarP iVarNom, VarP oVarNom, VarP tVarNom]
+            (NormalB funcExpB)
+            whereDecsB
+        ]
 
   
-  return [funcSign, mainFuncDefn, funcSignL, mainFuncDefnLazy]
+  return [funcSign, mainFuncDefn, funcSignL, mainFuncDefnLazy, funcSignBS, mainFuncDefnBS]
   where
     makeClauseO :: Name -> Name -> Clause
     makeClauseO dNom fNom = Clause [ConP dNom [] []] (NormalB (AppE (VarE fNom) (VarE 'id))) []
@@ -475,6 +498,12 @@ makeFullFunction iNom oNom inNames outNames = do
     makeClauseOB exNom dNom fNom = Clause 
       [ConP dNom [] [], VarP exNom] 
       (NormalB $ AppE (AppE (VarE 'fmap) (VarE 'TB.toLazyText)) $ multiAppE (VarE fNom) [VarE 'TB.fromText, VarE exNom] ) 
+      []
+    
+    makeClauseBS :: Name -> Name -> Clause
+    makeClauseBS dNom fNom = Clause
+      [ConP dNom [] []]
+      (NormalB $ VarE fNom)
       []
 
     makeClauseI :: Name -> Name -> Clause

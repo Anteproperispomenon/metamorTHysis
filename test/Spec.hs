@@ -11,6 +11,9 @@ import System.IO
 
 import Data.Text qualified as T
 import Data.Text.Lazy (toStrict)
+import Data.Text.Lazy.Encoding qualified as TLE
+
+
 
 import Data.Attoparsec.Text qualified as AT
 
@@ -75,6 +78,12 @@ main = do
   putStrLn "Trying direct conversions with lazy text..."
   let rslt2 = InOut.convertOrthographyLazy InInuktitut_latin OutSyllabic exampleText2
   case rslt2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+  putStrLn "Trying direct conversions with ByteStrings..."
+  let rslt3 = TLE.decodeUtf8 <$> InOut.convertOrthographyBS InInuktitut_latin OutSyllabic exampleText2
+  case rslt3 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
