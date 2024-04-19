@@ -19,10 +19,10 @@ import Metamorth.Interpretation.Parser.TH (ParserOptions(..))
 
 declareFullParsers 
   "examples/phonemes/example_inuktitut_02.thyt"
-  [ ("examples/parsing/parsing_example_02.thyp", (defExtraParserDetails "_syl") {epdParserName = "syllabicParser"} )
-  , ("examples/parsing/inuktitut_latin.thyp"   , (defExtraParserDetails "_lat") {epdParserName = "latinParser"   } )
+  [ ("examples/parsing/parsing_example_02.thyp", (defExtraParserDetails "_syl") {epdParserName = "syllabicParser", epdOtherNames = ["Syllabic", "Syl"]} )
+  , ("examples/parsing/inuktitut_latin.thyp"   , (defExtraParserDetails "_lat") {epdParserName = "latinParser"   , epdOtherNames = ["Latin"]} )
   ]
-  [ ("examples/output/example_inuktitut_01.thyo", defExtraOutputDetails {eodSuffix = "_sylout", eodOutputName = "syllabicOutput"})
+  [ ("examples/output/example_inuktitut_01.thyo", defExtraOutputDetails {eodSuffix = "_sylout", eodOutputName = "syllabicOutput", eodOtherNames = ["Syllabic", "Syl"]})
   ]
 
 {-

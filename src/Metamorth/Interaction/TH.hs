@@ -204,10 +204,11 @@ createParsers phonemePath parserPaths outputPaths = do
       parserNameExprs   = concatMap snd parserResultsBoth'
       parserNameExprs'  = map (\(x1,x2) -> TupE [Just x1, Just x2]) parserNameExprs
 
+  -- Originally, the name creation was handled here.
+  -- Hence the weird usage of forM.
   inOrthMap <- fmap M.fromList $ forM parserTypes $ \(str, funcNom) -> do
     -- Maybe need to create an alternative if name is empty...
-    orthName <- newName $ "In" ++ (dataName str)
-    return (orthName, funcNom)
+    return (str, funcNom)
 
   _rslts2@(eOutputFiles, _) <- runIO $ do
     eOutputs <- mapM readOutputFile outputPaths
@@ -233,10 +234,10 @@ createParsers phonemePath parserPaths outputPaths = do
 
   -- Make the map of input names.
   inputOrthNameMap  <- [| M.fromList $(pure $ ListE parserNameExprs') |]
-  inputOrthNameType <- [t| M.Map String $(pure $ ConT $ fst outOrthTypeDec) |]
+  inputOrthNameType <- [t| M.Map String $(pure $ ConT $ fst inOrthTypeDec) |]
   inputOrthNameName <- newName "inputOrthNameMap"
   let inputOrthNameSign = SigD inputOrthNameName inputOrthNameType
-      inputOrthNameDefn = ValD (VarP inputOrthNameName) (NormalB $ inputOrthNameMap) []
+      inputOrthNameDefn = ValD (VarP inputOrthNameName) (NormalB inputOrthNameMap) []
       inputOrthNameDecl = [inputOrthNameSign, inputOrthNameDefn]
 
 
@@ -287,7 +288,7 @@ readOutputFile (fp, eod) = do
       return $ Right (txt, eod)
 
 
-getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (String, Name)), [(Exp, Exp)])
+getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name)), [(Exp, Exp)])
 getParserData pdb txt epd = do
   -- here
   let eParseRslt = AT.parseOnly parseOrthographyFile txt
@@ -321,7 +322,12 @@ getParserData pdb txt epd = do
   newSig <- SigD newNameNom <$> [t| AT.Parser [$(pure $ ConT $ fst $ pdbWordTypeNames pdb)]  |]
   newDec <- [d| $(pure $ VarP newNameNom) = $(pure $ VarE funcNom) |]
 
-  return (((newSig:newDec<>dcs1, spi), (typeNom, funcNom)), [])
+  orthName <- newName $ "In" ++ (dataName typeNom)
+
+  let otherNames = map strE $ epdOtherNames epd
+      otherPairs = map (,ConE orthName) otherNames
+
+  return (((newSig:newDec<>dcs1, spi), (orthName, funcNom)), otherPairs)
 
 makePhonemeInformation :: PhonemeDatabase -> PhonemeNameInformation
 makePhonemeInformation pdb = PhonemeNameInformation
@@ -357,8 +363,11 @@ getTheOutput pdb txt eod = do
       hdrOut <- case (ohOrthName hdr) of
         "" -> newName $ "OutOrth" ++ newNameSfx
         x  -> newName $ "Out" ++ dataName x
-      
-      return (((hdrOut, userFuncName), decs), [])
+
+      let otherNames = map strE $ eodOtherNames eod
+          otherPairs = map (,ConE hdrOut) otherNames
+
+      return (((hdrOut, userFuncName), decs), otherPairs)
   
   -- return (hdrX, decs)
 
