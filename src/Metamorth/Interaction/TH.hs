@@ -358,7 +358,7 @@ getTheOutput pdb txt eod = do
       let (errs, wrns, _msgs) = partitionMessages errMsgs
       mapM_ qReportError   errs
       mapM_ qReportWarning wrns
-      (userFuncName, decs) <- generateOutputDecs newNameStr newNameSfx opo pni
+      ((userFuncName, userFuncNameBS), decs) <- generateOutputDecs newNameStr newNameSfx opo pni
 
       hdrOut <- case (ohOrthName hdr) of
         "" -> newName $ "OutOrth" ++ newNameSfx

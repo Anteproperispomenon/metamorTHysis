@@ -44,12 +44,16 @@ module Metamorth.ForOutput.Monad.Matcher.Stateful
   , matchesL
   , matchesL'
   , matchesDefL
+  , matchesR
+  , matchesR'
   -- ** Automatic MonadFail Versions
   , matchF
   , matchesF
   , matchesLF
   , matchesLF'
   , matchesDefLF
+  , matchesRF
+  , matchesRF'
   -- ** Changing what to match
   , matchElse
   , matchElseS
@@ -288,7 +292,8 @@ matchReturn (ConditionalStateReturn f) = do
 --   @
 --
 --   If this isn't working well for whatever reason,
---   try using `matchesL` with a different `Monoid`.
+--   try using `matchesL` or `matchesR` with a 
+--   different `Monoid`.
 matches :: (MonadPlus m, Monoid v) => (String -> m r) -> (i -> MatchResult m i v s r) -> MatcherT i v s m [r]
 matches err f = do
   mybX <- preview
@@ -312,8 +317,7 @@ matches err f = do
 --
 --   This function is usefuly for when the output value
 --   is one intended to be used as a `Monoid`/`Semigroup`,
---   e.g. a ByteString `Data.ByteString.Builder.Builder` or
---   a `Data.Text.Lazy.Builder.Builder`.
+--   e.g. a ByteString `Data.ByteString.Builder.Builder`.
 --
 --   If you'd rather supply an initial value instead of
 --   using mempty, use `matchesDefL` instead.
@@ -399,6 +403,38 @@ matchesLF' = matchesL' fail
 --   as the second argument
 matchesDefLF :: (MonadPlus m, MonadFail m, Monoid v, Semigroup r) => r -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
 matchesDefLF acc = matchesDefL acc fail
+
+-- | A variant of `matches` that uses a `Monoid` instead
+--   of a list to accumulate the results. This version
+--   is left-associative, so it should work better with
+--   `Data.Text.Lazy.Builder.Builder` from "Data.Text.Lazy.Builder".
+matchesR :: (MonadPlus m, Monoid v, Monoid r) => (String -> m r) -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
+matchesR err f = do
+  mybX <- preview
+  case mybX of
+    Nothing  -> return mempty
+    _ -> do
+      y <- match err f
+      (y <>) <$> matchesR err f
+
+-- | Like `matchesL`, but uses a different function
+--   for the first match.
+matchesR' :: (MonadPlus m, Monoid v, Monoid r) => (String -> m r) -> (i -> MatchResult m i v s r) -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
+matchesR' err f1 f2 = do
+  mybX <- preview
+  case mybX of
+    Nothing -> return mempty
+    _ -> do
+      y <- match err f1
+      (y <>) <$> matchesR err f2
+
+-- | Like `matchesL`, but uses `fail` for
+--   the first argument.
+matchesRF :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> MatchResult m i v s r) -> MatcherT i v s m r
+matchesRF = matchesR fail
+
+matchesRF' :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> MatchResult m i v s r) -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
+matchesRF' = matchesR' fail
 
 ----------------------------------------------------------------
 -- Matching Something Else

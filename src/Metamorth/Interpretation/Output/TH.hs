@@ -28,7 +28,13 @@ import Language.Haskell.TH.Syntax hiding (lift)
 -- searching for incorrectly entered modules in VS Code:
 -- `[^`.]*\.[^`]*`
 
-import Data.Text qualified as T
+import Data.ByteString.Lazy    qualified as BL
+import Data.ByteString.Builder qualified as BB
+
+import Data.Text               qualified as T
+import Data.Text.Lazy          qualified as TL 
+import Data.Text.Lazy.Encoding qualified as TLE
+import Data.Text.Encoding      qualified as TE
 
 import Data.String (IsString(..))
 
@@ -72,13 +78,15 @@ generateOutputDecs
   -> OutputParserOutput 
   -- | Information from the Phoneme parser.
   -> PhonemeNameInformation 
-  -> Q (Name, [Dec])
+  -> Q ((Name, Name), [Dec])
 generateOutputDecs userName sfx opo pni = runQS sfx $ do
   (ondDecs, ond, tmap) <- makeOutputDatabase opo pni
   ((stNom, stDecs), (nstNom, nstDecs)) <- generateBranches2 ond tmap
   
   userFuncName  <- qsPlainNewName $ varName userName
   userFuncName2 <- qsPlainNewName $ varName $ userName ++ "M"
+  userFuncName3 <- qsPlainNewName $ varName $ userName ++ "BSM"
+  userFuncName4 <- qsPlainNewName $ varName $ userName ++ "BS"
 
   let (wordType, (wordCon1, wordCon2)) = ondWordTypes ond
       defSt = ondDefState ond
@@ -96,6 +104,15 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
               |]
   func3Exp <- [| matchesSimple $(pure func2Exp) |]
 
+  funcByteExp1 <- [| matchesRF' $(pure $ VarE stNom) $(pure $ VarE nstNom) |]
+  funcByteExp2 <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz]) -> TLE.encodeUtf8Builder <$> matchElse $(pure caseFunc) $(pure $ VarE xyz) $(pure defSt) $(pure funcByteExp1) 
+                           ; $(pure $ ConP wordCon2 [] [VarP xyz]) -> return $ TE.encodeUtf8Builder $(pure $ VarE xyz) 
+                           }
+                  |]
+  funcByteExp3 <- [| BB.toLazyByteString <$> matchesSimple $(pure funcByteExp2 ) |]
+
+-- matchElse :: (Monad m, Monoid w) => (j -> w) -> [j] -> s' -> MatcherT j w s' m r -> MatcherT i v s m r
+
   outputSign1 <- [t| forall str. (IsString str, Monoid str) => (T.Text -> str) -> MatcherE $(pure $ ConT wordType) () () str |]
   let outputSig1  = SigD userFuncName2 outputSign1
       -- outputDec1  = ValD (VarP userFuncName2) (NormalB func3Exp) []
@@ -103,16 +120,26 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
       outputDefn1 = [outputSig1, outputDec1]
   
   outputSign2 <- [t| forall str. (IsString str, Monoid str) => (T.Text -> str) -> [$(pure $ ConT wordType)] -> Either String str |]
-  outputFuncX <- [| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ AppE (VarE userFuncName2) (VarE makeOutStr)) |]
+  outputFuncX <- [e| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ AppE (VarE userFuncName2) (VarE makeOutStr)) |]
   let outputSig2  = SigD userFuncName outputSign2
       outputDec2  = FunD userFuncName [Clause [VarP makeOutStr, VarP xyz] (NormalB outputFuncX) []]
       outputDefn2 = [outputSig2, outputDec2]
+
+  outputSign3 <- [t| MatcherE $(pure $ ConT wordType) () () BL.ByteString |]
+  let outputSig3  = SigD userFuncName3 outputSign3
+      outputDec3  = FunD userFuncName3 [Clause [] (NormalB funcByteExp3) []]
+      outputDefn3 = [outputSig3, outputDec3]
+  
+  outputSign4 <- [t| [$(pure $ ConT wordType)] -> Either String BL.ByteString |]
+  outputFunc4 <- [e| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
+  let outputSig4  = SigD userFuncName4 outputSign4
+      outputDec4  = FunD userFuncName4 [Clause [VarP xyz] (NormalB outputFunc4) []]
+      outputDefn4 = [outputSig4, outputDec4]
   
   -- matchElse :: (Monad m, Monoid w) => (j -> w) -> [j] -> s' -> MatcherT j w s' m r -> MatcherT i v s m r
   -- matchesSimple :: (Monad m, Monoid v, Monoid r) => (i -> MatcherT i v s m r) -> MatcherT i v s m r
 
-
-  return (userFuncName, (outputDefn1 ++ outputDefn2 ++ ondDecs ++ stDecs ++ nstDecs))
+  return ((userFuncName, userFuncName4), outputDefn1 ++ outputDefn2 ++ outputDefn3 ++ outputDefn4 ++ ondDecs ++ stDecs ++ nstDecs)
 
 -- generateBranches3 :: (Quasi q, Quote q) => OutputNameDatabase -> TM.TMap PhonePatternAlt (S.Set PhoneResult) -> q GroupedTrieDecs
 
