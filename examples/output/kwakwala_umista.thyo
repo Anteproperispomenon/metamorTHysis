@@ -1,0 +1,86 @@
+name : umista
+
+default case : /at
+
+====
+
+# Apostrophes
+# class apost : ' ` U+0313 U+0315
+
+# class underline : U+02CD U+0320 U+0332
+
+# class lh : Ɫ ɫ ɬ U+A7AD
+
+# clas lab : W w ʷ
+
+====
+
+m  : m
+m' : ' m
+n  : n
+n' : ' n
+
+# ɫł
+l  : l
+l' : ' l
+lh : ł
+
+j  : y
+j' : ' y
+
+w  : w
+w' : ' w
+
+p  : p
+p' : p U+0313
+b  : b
+
+# U+02CD
+t   : t
+ts  : t s
+ts' : t U+0315 s
+tl  : t ɫ
+tl' : t U+0315 ɫ
+
+d   : d
+dl  : d ɫ
+dz  : d z
+s   : s
+
+k   : k
+k'  : k U+0313
+kw  : k w
+kw' : k U+0315 w
+
+q   : k U+02CD
+q'  : k U+02CD U+0313
+qw  : k U+02CD w
+qw' : k U+02CD U+0315 w
+
+g   : g
+gw  : g w
+gh  : g U+02CD
+ghw : g U+02CD w
+
+x   : x
+xw  : x w
+xh  : x U+02CD
+xhw : x U+02CD w
+
+h   : h
+glt : '
+
+a     : a
+e     : e
+i     : i
+o     : o
+u     : y
+schwa : a U+02CD
+
+^ glt a     : a
+^ glt e     : e
+^ glt i     : i
+^ glt o     : o
+^ glt u     : y
+^ glt schwa : a U+02CD
+

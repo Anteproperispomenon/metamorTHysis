@@ -6,6 +6,7 @@ import Test.TH.Basic
 import Test.TH.TwoOrths as Two
 import Test.TH.Grouped qualified as G
 import Test.TH.InAndOut as InOut
+import Test.TH.Kwakwala as Kwak
 
 import System.IO
 
@@ -86,6 +87,13 @@ main = do
   case rslt3 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+  
+  putStrLn "Testing Kwak'wala..."
+  let kwak1 = TLE.decodeUtf8 <$> Kwak.convertOrthographyBS InGrubb OutUmista kwakText1
+  case kwak1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text
@@ -93,3 +101,7 @@ exampleText = "ᐃᓄᐃᑦ (ᓄᓇᖃᖅᑳᖅᓯᒪᔪᑦ) ᓄᓇᕗᒻᒥᐅ�
 
 exampleText2 :: T.Text 
 exampleText2 = "inuit (nunaqaqqaaqŝimajut) inuktitut uqauŝirngautiqarmata. inuit uqauŝingit ajjigiinngittuutiugaluaqtutik nunaliit malikługit, inuinnaqtun ilaulluni, uqauŝirijaujuq ualiniqpaŝinganirmiutaujuni nunavumi."
+
+kwakText1 :: T.Text 
+kwakText1 = "dadapa dadats'e'akw dagens dagens da'dagens didzu'yu digi'lats'i di'deganu di'xhstanu di'yu dukhwelaxhden dzadzuts'a dzekhwa dagens dzekhwa ghwilhghwa'ehla dzemba gawekh'anem ga'yas gembuts gensuxh gen'sa'os gigalilha'sidzi' gukwdzi ghadlekw ghaghe'o ghaghe'o ghedzekh"
+

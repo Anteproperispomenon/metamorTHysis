@@ -143,6 +143,7 @@ test-suite metamorTHysis-test
       Test.TH.Basic
       Test.TH.Grouped
       Test.TH.InAndOut
+      Test.TH.Kwakwala
       Test.TH.TwoOrths
       Paths_metamorTHysis
   autogen-modules:

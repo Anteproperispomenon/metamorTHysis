@@ -460,7 +460,7 @@ matchElseS newConv lst st action = MatcherT $ \_ inp v oldSt -> do
   return (rslt, inp, v, finalSt)
 
 ----------------------------------------------------------------
--- Matching Something Else
+-- Simple Matchers
 
 -- | A simple matcher that just uses a simple
 --   function type instead of a complex secondary

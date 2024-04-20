@@ -1,13 +1,16 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE PatternSynonyms #-}
 
 module Metamorth.Interaction.TH
   ( createParsers
   , declareParsers
   , declareFullParsers
-  , ExtraParserDetails(..)
+  , ExtraParserDetails(.., ExtraParserDetails, epdParserName, epdOtherNames, epdUnifyBranches, epdGroupGuards, epdCheckStates, epdMainFuncName, epdNameSuffix)
+  , ParserOptions(..)
   , defExtraParserDetails
   , defExtraParserDetails'
+  -- , editParserOptions
   , ExtraOutputDetails(..)
   , defExtraOutputDetails
   -- * Re-Exports
@@ -98,25 +101,62 @@ data GeneratedDecs = GeneratedDecs
   } deriving (Show, Eq)
 
 -- | Options to go along with each parser file.
-data ExtraParserDetails = ExtraParserDetails
+data ExtraParserDetails = ExtraParserDetails'
   { epdParserOptions :: ParserOptions
-  , epdParserName    :: String
-  , epdOtherNames    :: [String]
+  , epdParserName'    :: String
+  , epdOtherNames'    :: [String]
   } deriving (Show, Eq)
 
+
+pattern ExtraParserDetails :: String -> [String] -> Bool -> Bool -> Bool -> String -> String -> ExtraParserDetails
+pattern ExtraParserDetails 
+  { epdParserName
+  , epdOtherNames
+  , epdUnifyBranches
+  , epdGroupGuards
+  , epdCheckStates
+  , epdMainFuncName
+  , epdNameSuffix 
+  }
+  = ExtraParserDetails' 
+    { epdParserName'   = epdParserName
+    , epdOtherNames'   = epdOtherNames
+    , epdParserOptions = ParserOptions 
+       { poUnifyBranches = epdUnifyBranches
+       , poGroupGuards   = epdGroupGuards
+       , poCheckStates   = epdCheckStates
+       , poMainFuncName  = epdMainFuncName
+       , poNameSuffix    = epdNameSuffix
+       }
+    }
+
 defExtraParserDetails' :: ExtraParserDetails
-defExtraParserDetails'  = ExtraParserDetails
+defExtraParserDetails'  = ExtraParserDetails'
   { epdParserOptions = defParserOptions'
-  , epdParserName    = "anotherParser"
-  , epdOtherNames    = []
+  , epdParserName'    = "anotherParser"
+  , epdOtherNames'    = []
   }
 
+{-
+data ParserOptions = ParserOptions
+  { poUnifyBranches :: Bool
+  , poGroupGuards   :: Bool
+  , poCheckStates   :: Bool
+  , poMainFuncName  :: String
+  , poNameSuffix    :: String
+  } deriving (Show, Eq)
+
+-}
+
 defExtraParserDetails :: String -> ExtraParserDetails
-defExtraParserDetails str = ExtraParserDetails
+defExtraParserDetails str = ExtraParserDetails'
   { epdParserOptions = defParserOptions str
-  , epdParserName    = "anotherParser"
-  , epdOtherNames    = []
+  , epdParserName'    = "anotherParser"
+  , epdOtherNames'    = []
   }
+
+-- editParserOptions :: (ParserOptions -> ParserOptions) -> ExtraParserDetails -> ExtraParserDetails
+-- editParserOptions f epd = epd {epdParserOptions = f (epdParserOptions epd)}
 
 data ExtraOutputDetails = ExtraOutputDetails 
   { eodOutputName :: String
