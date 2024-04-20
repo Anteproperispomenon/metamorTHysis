@@ -160,9 +160,10 @@ makeReturnFunction' ond strName (ReturnClauses [] srs [] []) = do
   varName1 <- newName "v"
   varName2 <- newName "s"
   typVar1  <- newName "str"
+  monVar   <- newName "mon"
   let rets = map (($ varName2) . ($ varName1)) srs
       stateType = pure $ ConT (ondStateType ond)
-  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> $stateType -> ($(pure $ VarT typVar1) , $stateType) |]
+  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> $stateType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1) , $stateType) |]
   let signDec = SigD funcName sign
       bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets) []]
   return (funcName, [signDec, bodyDec])
@@ -171,9 +172,10 @@ makeReturnFunction' ond strName (ReturnClauses [] [] nrs []) = do
   varName1 <- newName "v"
   varName2 <- newName "n"
   typVar1  <- newName "str"
+  monVar   <- newName "mon"
   let rets = map (($ varName2) . ($ varName1)) nrs
       nextType = pure $ ConT (ondPhoneType ond)
-  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> Maybe $nextType -> ($(pure $ VarT typVar1)) |]
+  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> Maybe $nextType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1)) |]
   let signDec = SigD funcName sign
       bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets) []]
   return (funcName, [signDec, bodyDec])
@@ -183,10 +185,11 @@ makeReturnFunction' ond strName (ReturnClauses [] [] [] xrs) = do
   varName2 <- newName "n"
   varName3 <- newName "s"
   typVar1  <- newName "str"
+  monVar   <- newName "mon"
   let rets = map (($ varName3) . ($ varName2) . ($ varName1)) xrs
       stateType = pure $ ConT (ondStateType ond)
       nextType  = pure $ ConT (ondPhoneType ond)
-  sign <- [t| (IsString $(pure $ VarT typVar1)) => [CharCase] -> Maybe $nextType -> $stateType -> ($(pure $ VarT typVar1) , $stateType) |]
+  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> Maybe $nextType -> $stateType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1) , $stateType) |]
   let signDec = SigD funcName sign
       bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2, VarP varName3] (GuardedB rets) []]
   return (funcName, [signDec, bodyDec])
@@ -254,6 +257,7 @@ addPhoneActionClause ond oc PlainRet cpi pad rcs = case pad of
     expr <- createCaseExp oc cpi
     othw <- [| otherwise |]
     let rslt = \v -> (NormalG othw, AppE expr (VarE v)) 
+    -- createCaseExpAlt oc cpi (VarE)
     return $ addPlainRet rslt rcs
   _ -> do 
     qReportError $ "Couldn't create guard/clause (1) for output \"" ++ show cpi ++ "\"." 
@@ -262,19 +266,25 @@ addPhoneActionClause ond oc StateRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
     expr <- createCaseExp oc cpi
     othw <- [| otherwise |]
-    let rslt = \v s -> (NormalG othw, TupE [Just (AppE expr (VarE v)), Just $ VarE s]  ) 
+    cso  <- newName "thatCase"
+    let rslt = \v s -> (NormalG othw, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> 
+          TupE [Just lowExp, Just $ VarE s]) 
     return $ addStateRet rslt rcs
   (PhoneActionData md [] []) -> do
     expr <- createCaseExp oc cpi
     othw <- [| otherwise |]
+    cso  <- newName "thatCase"
     func <- makeModify ond md 
-    let rslt = \v s -> (NormalG othw, TupE [Just (AppE expr (VarE v)), Just $ func s])
+    let rslt = \v s -> (NormalG othw, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp ->
+          TupE [Just lowExp, Just $ func s])
     return $ addStateRet rslt rcs
   (PhoneActionData md cs []) -> do
     expr <- createCaseExp oc cpi
     func <- makeModify  ond md
     pred <- makeConfirm ond cs
-    let rslt = \v s -> (NormalG $ pred s, TupE [Just (AppE expr (VarE v)), Just $ func s])
+    cso  <- newName "thatCase"
+    let rslt = \v s -> (NormalG $ pred s, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> 
+          TupE [Just lowExp, Just $ func s])
     return $ addStateRet rslt rcs
   _ -> do 
     qReportError $ "Couldn't create guard/clause (2) for output \"" ++ show cpi ++ "\"." 
@@ -283,12 +293,14 @@ addPhoneActionClause ond oc CondPlainRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
     expr <- createCaseExp oc cpi
     othw <- [| otherwise |]
-    let rslt = \v _ -> (NormalG $ othw, (AppE expr (VarE v))  ) 
+    cso  <- newName "thatCase"
+    let rslt = \v _ -> (NormalG $ othw, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> lowExp ) 
     return $ addCondPlainRet rslt rcs
   (PhoneActionData [] [] ns) -> do
     expr <- createCaseExp oc cpi
+    cso  <- newName "thatCase"
     let pred x   = intersperseInfixEDef (VarE 'otherwise) (VarE '(&&)) (map ($ x) ns)
-        rslt v n = (NormalG $ pred n, AppE expr (VarE v))
+        rslt v n = (NormalG $ pred n, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> lowExp)
     return $ addCondPlainRet rslt rcs
   _ -> do 
     qReportError $ "Couldn't create guard/clause (3) for output \"" ++ show cpi ++ "\"." 
@@ -297,21 +309,27 @@ addPhoneActionClause ond oc CondStateRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
     expr <- createCaseExp oc cpi
     othw <- [| otherwise |]
-    let rslt = \v _ s -> (NormalG othw, TupE [Just (AppE expr (VarE v)), Just $ VarE s]  ) 
+    cso  <- newName "thatCase"
+    let rslt = \v _ s -> (NormalG othw, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> 
+          TupE [Just lowExp, Just $ VarE s]  ) 
     return $ addCondStateRet rslt rcs
   (PhoneActionData md cs []) -> do
     expr <- createCaseExp oc cpi
     func <- makeModify  ond md
     prdc <- makeConfirm ond cs
-    let rslt = \v _ s -> (NormalG $ prdc s, TupE [Just (AppE expr (VarE v)), Just $ func s])
+    cso  <- newName "thatCase"
+    let rslt = \v _ s -> (NormalG $ prdc s, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> 
+          TupE [Just lowExp, Just $ func s])
     return $ addCondStateRet rslt rcs
   (PhoneActionData md cs ns) -> do
     expr <- createCaseExp oc cpi
     func  <- makeModify  ond md
     pred1 <- makeConfirm ond cs
+    cso   <- newName "thatCase"
     let pred2 x     = intersperseInfixEDef (VarE 'otherwise) (VarE '(&&)) (map ($ x) ns)
         pred3 n s   = andE (pred1 s) (pred2 n)
-        rslt  v n s = (NormalG $ pred3 n s, TupE [Just (AppE expr (VarE v)), Just $ func s])
+        rslt  v n s = (NormalG $ pred3 n s, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> 
+          TupE [Just lowExp, Just $ func s])
     return $ addCondStateRet rslt rcs
 
 
@@ -394,6 +412,34 @@ makeReturnItem ond (PhoneResult [] cPats ocs) rcs = do
   let grd = (\v -> (NormalG othw, AppE thisExp (VarE v)))
   return $ addPlainRet grd rcs
 makeReturnItem ond (PhoneResult )
+-}
+
+{-
+createCaseExpAlt :: (Quote q, Quasi q) => OutputCase -> [CharPatternItem] -> Exp -> (Exp -> Exp) -> q Exp
+createCaseExpAlt ocs cpats expr mkTup =
+  [| do
+       { thatCase <- $(createCaseExp ocs cpats) $(pure expr)
+       ; return $(mkTup <$> [| thatCase |])
+       }
+  |]
+-}
+
+-- | To be used when you need to return more than
+--   just the value of the letter.
+combineCaseExp :: Exp -> Name -> (Exp -> Exp) -> Exp
+combineCaseExp mainExp varName makeTup = DoE Nothing 
+  [ BindS (VarP varName) mainExp
+  , NoBindS (AppE (VarE 'return) (makeTup (VarE varName)))
+  ]
+
+{-
+createCaseExpAlt' :: (Quote q, Quasi q) => OutputCase -> [CharPatternItem] -> (Exp -> Exp -> Exp) -> (Exp -> Exp -> Exp -> Exp) -> q (Exp -> Exp -> Exp)
+createCaseExpAlt' ocs cpats expr mkTup =
+  [| do
+       { thatCase <- $(createCaseExp ocs cpats) $(pure expr)
+       ; return $(mkTup <$> [| thatCase |])
+       }
+  |]
 -}
 
 -- | Create an expression that can be applied to 

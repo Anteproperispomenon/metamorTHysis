@@ -250,7 +250,7 @@ match err f = do
         -- MatchReturn rets -> msum $ map matchReturn rets
         MatchReturn ret  -> matchReturn ret
         MatchContinue mc -> match err mc
-        MatchFail str    -> lift $ err str
+        MatchFail fstr   -> lift $ err (fstr x)
         MatchOptions ret cont
           -> match err cont <|> matchReturn ret
           -- -> match err cont <|> msum (map matchReturn ret)

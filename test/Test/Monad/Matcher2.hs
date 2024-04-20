@@ -33,14 +33,14 @@ myMatch2 C = MatchReturn $ plainReturn "(bc)"
 myMatch2 D = MatchOptions (plainReturn "(bd)") myMatch4
 
 myMatch3 :: (MonadFail m) => Example -> MatchResult m Example () () String
-myMatch3 A = MatchFail $ fail "ca"
+myMatch3 A = MatchFail $ \_ -> "ca"
 myMatch3 B = MatchReturn $ plainReturn "(cb)"
 myMatch3 C = ('c':) <$> MatchContinue myMatch4
 myMatch3 D = MatchReturn $ plainReturn "(cd)"
 
 myMatch4 :: (MonadFail m) => Example -> MatchResult m Example () () String
 myMatch4 A = MatchReturn $ plainReturn "[bda]"
-myMatch4 B = MatchFail $ fail "bdb"
+myMatch4 B = MatchFail $ \_ -> "bdb"
 myMatch4 C = MatchReturn $ plainReturn "[bdc]"
 myMatch4 D = MatchReturn $ plainReturn "[bdd]"
 

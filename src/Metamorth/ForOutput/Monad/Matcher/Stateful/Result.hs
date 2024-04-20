@@ -101,7 +101,7 @@ data MatchResult m i v s r
   --   @
   --
   --   So that the function isn't partial.
-  | MatchFail String
+  | MatchFail (i -> String)
 
 instance (Functor m) => Functor (MatchResult m i v s) where
   -- fmap f (MatchReturn rets)       = MatchReturn (map (fmap f) rets)

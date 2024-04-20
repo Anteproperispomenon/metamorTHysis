@@ -2,7 +2,7 @@
 {-# LANGUAGE PatternSynonyms #-}
 {-# OPTIONS_GHC -Wno-redundant-constraints -Wno-unused-top-binds -Wno-unused-matches #-}
 
-module Test.TH.Kwakwala
+module Test.TH.Mongolian
   ( Phoneme(..)
   -- , umistaParser
   -- , grubbParser
@@ -19,15 +19,16 @@ import Metamorth.Interaction.TH
 import Metamorth.Interpretation.Parser.TH (ParserOptions(..))
 
 declareFullParsers 
-  "examples/phonemes/kwakwala.thym"
-  [ ("examples/parsing/kwakwala_umista.thyp", (defExtraParserDetails "_ums") {epdParserName = "umistaParser", epdOtherNames = ["Umista", "Ums", "U", "U'mista"], epdUnifyBranches = False} )
-  , ("examples/parsing/kwakwala_grubb.thyp" , (defExtraParserDetails "_grb") {epdParserName = "grubbParser" , epdOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]} )
+  "examples/phonemes/example_mongolian_01.thym"
+  [ ("examples/parsing/parsing_example_01.thyp", (defExtraParserDetails "_lat") {epdParserName = "latinParser", epdOtherNames = ["Latin", "Lat", "L"], epdUnifyBranches = True} )
+  -- , ("examples/parsing/kwakwala_grubb.thyp" , (defExtraParserDetails "_grb") {epdParserName = "grubbParser" , epdOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]} )
   ]
-  [ ("examples/output/kwakwala_umista.thyo", defExtraOutputDetails {eodSuffix = "_umsout", eodOutputName = "umistaOutput", eodOtherNames = ["Umista", "Ums", "U", "U'mista"]})
-  , ("examples/output/kwakwala_grubb.thyo" , defExtraOutputDetails {eodSuffix = "_grbout", eodOutputName = "grubbOutput" , eodOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]})
+  [ ("examples/output/example_mongolian_01.thyo", defExtraOutputDetails {eodSuffix = "_latout", eodOutputName = "latinOutput", eodOtherNames = ["Latin", "Lat", "L"]})
+  -- , ("examples/output/kwakwala_grubb.thyo" , defExtraOutputDetails {eodSuffix = "_grbout", eodOutputName = "grubbOutput" , eodOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]})
   ]
 
 -- What's weird is that addDependentFile sometimes works and sometimes doesn't
+-- oh
 
 {-
 $( do

@@ -1812,8 +1812,8 @@ charPatternGuard _classMap _endWordFunc _notEndWordFunc (CharOptCase _ c) charVa
 charPatternGuard  classMap _endWordFunc _notEndWordFunc (CharClass _ cnm) charVarName = do
   (funcName, _) <- eitherMaybe' (M.lookup cnm classMap) ("Couldn't find class name: \"" <> cnm <> "\".")
   return $ AppE (AppE (VarE 'any) (VarE funcName)) (VarE charVarName)
-charPatternGuard _classMap _endWordFunc _notEndWordFunc WordStart _charVarName = Left $ "Can't have a 'WordStart' makrer in the middle of a Word."
-charPatternGuard _classMap _endWordFunc _notEndWordFunc NotStart  _charVarName = Left $ "Can't have a 'NotStart' marker in the middle of a Word."
+charPatternGuard _classMap _endWordFunc _notEndWordFunc WordStart _charVarName = Left "Can't have a 'WordStart' makrer in the middle of a Word."
+charPatternGuard _classMap _endWordFunc _notEndWordFunc NotStart  _charVarName = Left "Can't have a 'NotStart' marker in the middle of a Word."
 charPatternGuard _classMap  endWordFunc _notEndWordFunc WordEnd    charVarName = return $ AppE (liftPredT endWordFunc   ) (VarE charVarName)
 charPatternGuard _classMap _endWordFunc  notEndWordFunc NotEnd     charVarName = return $ AppE (liftPred  notEndWordFunc) (VarE charVarName)
 
@@ -1823,8 +1823,8 @@ charPatternGuard' _classMap _endWordFunc _notEndWordFunc (CharOptCase _ c) charV
 charPatternGuard'  classMap _endWordFunc _notEndWordFunc (CharClass _ cnm) charVarName = do
   (funcName, chrs) <- eitherMaybe' (M.lookup cnm classMap) ("Couldn't find class name: \"" <> cnm <> "\".")
   return (AppE (AppE (VarE 'any) (VarE funcName)) (VarE charVarName), any isCasable chrs)
-charPatternGuard' _classMap _endWordFunc _notEndWordFunc WordStart _charVarName = Left $ "Can't have a 'WordStart' marker in the middle of a Word."
-charPatternGuard' _classMap _endWordFunc _notEndWordFunc NotStart  _charVarName = Left $ "Can't have a 'NotStart' marker in the middle of a Word."
+charPatternGuard' _classMap _endWordFunc _notEndWordFunc WordStart _charVarName = Left "Can't have a 'WordStart' marker in the middle of a Word."
+charPatternGuard' _classMap _endWordFunc _notEndWordFunc NotStart  _charVarName = Left "Can't have a 'NotStart' marker in the middle of a Word."
 charPatternGuard' _classMap  endWordFunc _notEndWordFunc WordEnd    charVarName = return (AppE (liftPredT endWordFunc   ) (VarE charVarName), False)
 charPatternGuard' _classMap _endWordFunc  notEndWordFunc NotEnd     charVarName = return (AppE (liftPred  notEndWordFunc) (VarE charVarName), False)
 

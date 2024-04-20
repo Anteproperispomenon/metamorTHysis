@@ -3,10 +3,11 @@
 -- stack test --ghc-options='-dth-dec-file'
 
 import Test.TH.Basic
-import Test.TH.TwoOrths as Two
-import Test.TH.Grouped qualified as G
+import Test.TH.TwoOrths qualified as Two
+import Test.TH.Grouped  qualified as G
 import Test.TH.InAndOut as InOut
 import Test.TH.Kwakwala as Kwak
+import Test.TH.Mongolian as Mongolian
 
 import System.IO
 
@@ -94,6 +95,13 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing Mongolian"
+  let mongol1 = TLE.decodeUtf8 <$> Mongolian.convertOrthographyBS InTest_latin OutTest_latin mongolianText1
+  case mongol1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text
@@ -105,3 +113,6 @@ exampleText2 = "inuit (nunaqaqqaaqŝimajut) inuktitut uqauŝirngautiqarmata. inu
 kwakText1 :: T.Text 
 kwakText1 = "dadapa dadats'e'akw dagens dagens da'dagens didzu'yu digi'lats'i di'deganu di'xhstanu di'yu dukhwelaxhden dzadzuts'a dzekhwa dagens dzekhwa ghwilhghwa'ehla dzemba gawekh'anem ga'yas gembuts gensuxh gen'sa'os gigalilha'sidzi' gukwdzi ghadlekw ghaghe'o ghaghe'o ghedzekh"
 
+
+mongolianText1 :: T.Text
+mongolianText1 = "úlaanbaatar"

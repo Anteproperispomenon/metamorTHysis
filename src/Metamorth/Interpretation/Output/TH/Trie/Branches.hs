@@ -185,7 +185,7 @@ generateBranches' ond tmp = do
   
   -- lift $ qDebugNotice $ "Wait a minute..."
 
-  failExp <- lift [| MatchFail "Example" |]
+  failExp <- lift [| MatchFail $ \x -> "Error encountered at phoneme " ++ (show x) |]
   let failPat = Match WildP (NormalB failExp) []
       phoneType = ConT $ ondPhoneType ond
       stateType = ConT $ ondStateType ond
