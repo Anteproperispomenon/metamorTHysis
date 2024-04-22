@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE MultiWayIf #-}
 
 module Metamorth.Interpretation.Output.TH.Trie.Branches
   ( generateBranches
@@ -113,6 +114,16 @@ generateBranches3 ond tmap = do
     (nom1, _, decs1) <- generateBranches' ond tm1
     (nom2, _, decs2) <- generateBranches' ond tm2'
     (nom3, _, decs3) <- generateBranches' ond tm3'
+
+    -- warnings for things...
+    let tm1X = fmap (undoTheThing . doTheThing) tm1
+        tm2X = fmap (undoTheThing . doTheThing) tm2
+        tm3X = fmap (undoTheThing . doTheThing) tm3
+    
+    when (tm1 /= tm1X) $ lift $ qReportWarning "Possible issue when merging tries (1)"
+    when (tm2 /= tm2X) $ lift $ qReportWarning "Possible issue when merging tries (2)"
+    when (tm3 /= tm3X) $ lift $ qReportWarning "Possible issue when merging tries (3)"
+
     return (GroupedTrieDecs (nom1, decs1) (nom2, decs2) (nom3, decs3))
   where
     evalStateT' = flip State.evalStateT
@@ -127,10 +138,36 @@ generateBranches2 ond tmap = do
         tm3  = notStartTrie grpd
         tm2' = mergeTrieSets tm2 tm1
         tm3' = mergeTrieSets tm3 tm1
-    -- (nom1, _, decs1) <- generateBranches' ond tm1
-    (nom2, _, decs2) <- generateBranches' ond tm2'
-    (nom3, _, decs3) <- generateBranches' ond tm3'
-    return ( (nom2, decs2), (nom3, decs3))
+    if | TM.null tm2 && TM.null tm3 -> do
+          -- We now know that this branch is taken.
+          -- lift $ qDebugNotice "In the null branch of generateBranches2."
+          (nom, _, decs) <- generateBranches' ond tm1
+          return ((nom, decs), (nom, []))
+       | (TM.null tm2) -> do
+          (nom1, _, decs1) <- generateBranches' ond tm1
+          (nom2, _, decs2) <- generateBranches' ond tm3'
+
+          return ( (nom1, decs1), (nom2, decs2))
+
+       | otherwise -> do
+        -- when ((TM.count tm2 <= 3) && (TM.count tm3 <= 3)) $ do
+        --   lift $ qDebugNoticeUnflushed $ "small tm2: " ++ show tm2
+        --   lift $ qDebugNotice          $ "small tm3: " ++ show tm3
+
+        -- (nom1, _, decs1) <- generateBranches' ond tm1
+        (nom2, _, decs2) <- generateBranches' ond tm2'
+        (nom3, _, decs3) <- generateBranches' ond tm3'
+    
+        -- warnings for things...
+        let tm1X = fmap (undoTheThing . doTheThing) tm1
+            tm2X = fmap (undoTheThing . doTheThing) tm2
+            tm3X = fmap (undoTheThing . doTheThing) tm3
+        
+        when (tm1 /= tm1X) $ lift $ qReportWarning "Possible issue when merging tries (1)"
+        when (tm2 /= tm2X) $ lift $ qReportWarning "Possible issue when merging tries (2)"
+        when (tm3 /= tm3X) $ lift $ qReportWarning "Possible issue when merging tries (3)"
+    
+        return ( (nom2, decs2), (nom3, decs3))
   where
     evalStateT' = flip State.evalStateT
 

@@ -567,7 +567,10 @@ parseNextCheckS = do
               phoneName <- ask
               tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
               return Nothing
-    -- There IS a second value here.
+    -- There IS a second value here in this case.
+    -- Therefore it should only be a property
+    -- that can take on a second value, e.g. a
+    -- trait or an aspect.
     (Just val) -> case (M.lookup prop (opsTraitDictionary dicts)) of
       (Just (Just vs)) -> if (val `elem` vs)
         then return $ Just $ PhoneFollowedByTraitAtR prop val

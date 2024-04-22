@@ -9,6 +9,7 @@ module Metamorth.Interpretation.Output.TH.Trie
 import Control.Arrow ((&&&))
 import Control.Monad
 
+import Data.Functor
 import Data.Functor.Identity
 
 import Data.String (IsString(..))
@@ -41,7 +42,7 @@ import Metamorth.ForOutput.Monad.Matcher.Stateful
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 import Metamorth.Helpers.Q
-import Metamorth.Helpers.TH (strE, intersperseInfixEDef, andE, boolE)
+import Metamorth.Helpers.TH (strE, intersperseInfixEDef, andE, boolE, trueE, falseE)
 import Metamorth.Helpers.Monad
 
 import Metamorth.ForOutput.Char
@@ -299,8 +300,8 @@ addPhoneActionClause ond oc CondPlainRet cpi pad rcs = case pad of
   (PhoneActionData [] [] ns) -> do
     expr <- createCaseExp oc cpi
     cso  <- newName "thatCase"
-    let pred x   = intersperseInfixEDef (VarE 'otherwise) (VarE '(&&)) (map ($ x) ns)
-        rslt v n = (NormalG $ pred n, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> lowExp)
+    let prdc x   = intersperseInfixEDef (VarE 'otherwise) (VarE '(&&)) (map ($ x) ns)
+        rslt v n = (NormalG $ prdc n, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> lowExp)
     return $ addCondPlainRet rslt rcs
   _ -> do 
     qReportError $ "Couldn't create guard/clause (3) for output \"" ++ show cpi ++ "\"." 
@@ -342,6 +343,7 @@ collectActionData ond ps = toEither $ do
       (notEnds' , rst4) = partition isNotEnd rst3
       (checks'  , _rst) = partition isCheckNext rst4
       
+      -- This could be done more safely.
       confirms = map (\(PRConfirmState zs) -> zs) confirms'
       modifys  = map (\(PRModifyState  zs) -> zs) modifys'
       atEnds   = map (\PRAtEnd  -> appliedTo 'isNothing) atEnds'
@@ -378,9 +380,13 @@ getLookups ond (PhoneFollowedByAspectAt asp aspVal) = do
   aspVal' <- M.lookup aspVal dict
   return (\nom -> InfixE (Just (VarE nom)) (VarE '(==)) (Just (AppE (ConE 'Just) (ConE aspVal'))))
 getLookups ond (PhoneFollowedByPhone str) = do
-  Nothing -- don't know how to do these.
-
-
+  -- Gonna use a case statement to look it up.
+  (phoneNom, phoneAsps) <- M.lookup str (ondPhonemes ond)
+  let phoneAsps' = phoneAsps $> WildP
+  return $ \thisNom -> CaseE (VarE thisNom) 
+    [ Match (ConP 'Just [] [ConP phoneNom [] phoneAsps']) (NormalB trueE) []
+    , Match WildP (NormalB falseE) []
+    ]
 
 {-
 data PhoneFollow
