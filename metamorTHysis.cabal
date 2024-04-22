@@ -141,6 +141,7 @@ test-suite metamorTHysis-test
       Test.Monad.Matcher
       Test.Monad.Matcher2
       Test.TH.Basic
+      Test.TH.Following
       Test.TH.Grouped
       Test.TH.InAndOut
       Test.TH.Kwakwala

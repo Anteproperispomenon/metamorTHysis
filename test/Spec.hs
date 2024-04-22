@@ -8,6 +8,7 @@ import Test.TH.Grouped  qualified as G
 import Test.TH.InAndOut as InOut
 import Test.TH.Kwakwala as Kwak
 import Test.TH.Mongolian as Mongolian
+import Test.TH.Following qualified as Fol
 
 import System.IO
 
@@ -95,7 +96,7 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
-  putStrLn "Testing Mongolian"
+  putStrLn "Testing Mongolian..."
   let mongol1 = TLE.decodeUtf8 <$> Mongolian.convertOrthographyBS InTest_latin OutTest_latin mongolianText1
   case mongol1 of
     (Left err) -> putStrLn $ "Error: " ++ err
@@ -103,6 +104,12 @@ main = do
 
   let mongol2 = TLE.decodeUtf8 <$> Mongolian.convertOrthographyBS InTest_latin OutCyrillic mongolianText1
   case mongol2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+  putStrLn "Testing Follow patterns..."
+  let follow1 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InFollowA Fol.OutFollowA followText1
+  case follow1 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
@@ -121,4 +128,10 @@ kwakText1 = "dadapa dadats'e'akw dagens dagens da'dagens didzu'yu digi'lats'i di
 mongolianText1 :: T.Text
 mongolianText1 = "úlaanbaatar"
 
+-- Just some random sounds thrown together...
+followText1 :: T.Text
+followText1 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft"
+
 -- hmm...
+
+

@@ -1,0 +1,44 @@
+
+# Example orthography for testing
+# some things out.
+
+====
+
+* vowel
+  a
+  e
+  i
+  o
+  oo
+  u
+  aw
+  schwa
+* consonant
+  ** labial
+    b
+    p
+    f
+    w
+    v
+    m
+  ** alveolar
+    n
+    d
+    t
+    s
+    l
+    r
+    sh
+    ch
+    zh
+    dzh
+    ts
+    dz
+    th
+    dh
+  ** palatal_velar
+    j
+    k
+    g
+    ng
+    h
