@@ -6,8 +6,8 @@ module Metamorth.Interaction.TH
   ( createParsers
   , declareParsers
   , declareFullParsers
-  , ExtraParserDetails(.., ExtraParserDetails, epdParserName, epdOtherNames, epdUnifyBranches, epdGroupGuards, epdCheckStates, epdMainFuncName, epdNameSuffix)
-  , ParserOptions(..)
+  , ExtraParserDetails(ExtraParserDetails, epdParserName, epdOtherNames, epdUnifyBranches, epdGroupGuards, epdCheckStates, epdMainFuncName, epdNameSuffix)
+  -- , ParserOptions(..)
   , defExtraParserDetails
   , defExtraParserDetails'
   -- , editParserOptions
@@ -107,7 +107,9 @@ data ExtraParserDetails = ExtraParserDetails'
   , epdOtherNames'    :: [String]
   } deriving (Show, Eq)
 
+{-# COMPLETE ExtraParserDetails #-}
 
+-- | A record pattern synonym that exposes all options at the top level.
 pattern ExtraParserDetails :: String -> [String] -> Bool -> Bool -> Bool -> String -> String -> ExtraParserDetails
 pattern ExtraParserDetails 
   { epdParserName
@@ -205,6 +207,13 @@ declareFullParsers fp1 fps2 fps3 = do
   return (funcDecs ++ ds4 ++ d1 ++ (concat ds2) ++ (concat ds3) ++ inMapDec ++ outMapDec)
 
 -- I wonder why addLocalDependentFile doesn't work?
+-- Answer: It's not that it doesn't work, it's that
+-- stack won't try to rebuild if none of the .hs files
+-- have changed. i.e. if you change Spec.hs slightly,
+-- stack will trigger a rebuild, which will cause any
+-- modules that depend on a modified external file
+-- (i.e. one added via `addLocalDependentFile`) to
+-- recompile.
 
 -- | Create a `GeneratedDecs` from the desired input files.
 createParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q GeneratedDecs

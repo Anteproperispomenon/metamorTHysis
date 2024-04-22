@@ -79,7 +79,7 @@ sh : s h
 s : s
 x : x
 gh : g h
-gh : ĝ
+# gh : ĝ
 # r : r
 w : w
 f : f

@@ -101,6 +101,10 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  let mongol2 = TLE.decodeUtf8 <$> Mongolian.convertOrthographyBS InTest_latin OutCyrillic mongolianText1
+  case mongol2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
@@ -116,3 +120,5 @@ kwakText1 = "dadapa dadats'e'akw dagens dagens da'dagens didzu'yu digi'lats'i di
 
 mongolianText1 :: T.Text
 mongolianText1 = "úlaanbaatar"
+
+-- hmm...

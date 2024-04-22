@@ -24,6 +24,7 @@ declareFullParsers
   -- , ("examples/parsing/kwakwala_grubb.thyp" , (defExtraParserDetails "_grb") {epdParserName = "grubbParser" , epdOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]} )
   ]
   [ ("examples/output/example_mongolian_01.thyo", defExtraOutputDetails {eodSuffix = "_latout", eodOutputName = "latinOutput", eodOtherNames = ["Latin", "Lat", "L"]})
+  , ("examples/output/example_mongolian_02.thyo", defExtraOutputDetails {eodSuffix = "_cyrout", eodOutputName = "cyrillicOutput", eodOtherNames = ["Cyrillic", "Cyr", "C"]})
   -- , ("examples/output/kwakwala_grubb.thyo" , defExtraOutputDetails {eodSuffix = "_grbout", eodOutputName = "grubbOutput" , eodOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]})
   ]
 
