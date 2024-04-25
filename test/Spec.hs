@@ -112,6 +112,13 @@ main = do
   case follow1 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+  putStrLn "Testing group-follow..."
+  let follow2 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InFollowA Fol.OutFollowB followText1
+  case follow2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.

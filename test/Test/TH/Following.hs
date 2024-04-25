@@ -19,5 +19,7 @@ declareFullParsers
   "examples/phonemes/example_follow.thym"
   [ ("examples/parsing/example_follow_01.thyp", (defExtraParserDetails "_f01") {epdParserName = "follow1Parser", epdOtherNames = ["f1"]} )
   ]
-  [ ("examples/output/example_follow_01.thyo", defExtraOutputDetails {eodSuffix = "_f01out", eodOutputName = "follow1Output", eodOtherNames = ["f1"]})  
+  [ ("examples/output/example_follow_01.thyo", defExtraOutputDetails {eodSuffix = "_f01out", eodOutputName = "follow1Output", eodOtherNames = ["f1"]}) 
+  , ("examples/output/example_follow_02.thyo", defExtraOutputDetails {eodSuffix = "_f02out", eodOutputName = "follow2Output", eodOtherNames = ["f2"]}) 
   ]
+

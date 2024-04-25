@@ -181,6 +181,9 @@ addLocalDependentFile' = addLocalDependentFile
 
 -- join $ runQ <$> producePropertyData <$> fromRight defaultPhonemeStructure <$> execPhonemeParser parsePhonemeFile <$> TIO.readFile "local/example1.thy"
 
+-- | Declare input parsers only, not declaring
+--   the output parsers. Only use this if your
+--   list of output files is empty.
 declareParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
 declareParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
@@ -193,7 +196,10 @@ declareParsers fp1 fps2 fps3 = do
 
   return (d1 ++ (concat ds2) ++ (concat ds3))
 
-
+-- | Declare the full parser, parsing from
+--   any input type to any output type. This
+--   will fail if either the input list or
+--   the output list is empty.
 declareFullParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
 declareFullParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
@@ -234,6 +240,9 @@ createParsers phonemePath parserPaths outputPaths = do
   
   -- Get the phoneme database and the decs.
   (pdb, phoneDecs) <- producePhonemeDatabase pps
+
+  -- Check the group map:
+  -- qDebugNotice $ "Group Map: " ++ show (pdbGroupMemberFuncs pdb)
 
   -- get the parser files
   -- Note that this is probably fairly inefficient;
@@ -390,7 +399,7 @@ makePhonemeInformation pdb = PhonemeNameInformation
   { pniPhones   = M.map unwrap $ pdbPhonemeInfo pdb
   , pniAspects  = aspectTable pdt
   , pniTraits   = M.empty
-  , pniGroups   = M.empty -- oh well.
+  , pniGroups   = pdbGroupMemberFuncs pdb
   , pniWordTypeNames = pdbWordTypeNames pdb
   , pniCaseExpr  = AppE (VarE 'const) (ConE 'LowerCase)
   , pniPhoneType = pdbTopPhonemeType pdb
@@ -404,7 +413,7 @@ getTheOutput pdb txt eod = do
   let pni = makePhonemeInformation pdb
       aspectSet = M.map (M.keysSet . snd . snd) (pniAspects pni)
       phoneSet  = M.keysSet $ pniPhones pni
-  let eParseRslt = AT.parseOnly (parseOutputFile S.empty M.empty aspectSet phoneSet) txt
+  let eParseRslt = AT.parseOnly (parseOutputFile (M.keysSet (pdbGroupMemberFuncs pdb)) M.empty aspectSet phoneSet) txt
       newNameStr = eodOutputName eod
       newNameSfx = eodSuffix eod
   -- (decs, hdrX) <- case eParseRslt of
