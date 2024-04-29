@@ -48,7 +48,7 @@ import Data.Map.Merge.Strict qualified as MM
 
 import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
-
+import Metamorth.Helpers.Q
 
 -- | A type to make understanding the output
 --   of `producePropertyData` easier.
@@ -618,15 +618,81 @@ produceSubMapClause constr         Nothing   _ = Clause [ConP constr [] [WildP]]
 produceSubMapClause constr (Just funcName) var = Clause [ConP constr [] [VarP var]] (NormalB (AppE (VarE funcName) (VarE var))) []
 
 
+{-
+data PhonemeProperties
+   = PhonemeProperties 
+       { phAspects :: [String]
+       , phTraits  :: [(String, Maybe String)]
+       } deriving (Show, Eq)
 
-producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q (M.Map String (Name, [Type]), GroupProps, [Dec])
+, traitTable   :: M.Map String (Name, Maybe (Name, M.Map String Name))
+-}
+
+-- -> M.Map String (Name, Maybe (Name, M.Map String Name)) 
+
+makePhoneWildPat :: Name -> PhonemeProperties -> Pat
+makePhoneWildPat phoneNom phoneProps
+  = ConP phoneNom [] ((phAspects phoneProps) $> WildP)
+
+-- | Create the clauses for a function
+--   that tells whether a specific phoneme
+--   has a certain trait or not. Note that
+--   we use (Name -> Clause) as the value
+--   of the `M.Map`, since we may not know
+--   whether we have the pattern synonym
+--   name at this point in the construction.
+createTraitClauses 
+  :: M.Map String (Name -> Clause) -- accumulator
+  -> String 
+  -> Name
+  -> Maybe (Name, M.Map String Name)
+  -> String 
+  -> PhonemeProperties
+  -> Q (M.Map String (Name -> Clause))
+createTraitClauses acc trtStr trtNom Nothing phoneNom phoneProps = do
+  let srchVal = (trtStr, Nothing)
+  if (srchVal `elem` (phTraits phoneProps))
+    then return (M.insert phoneNom (\nom -> Clause [wildPat nom] (NormalB trueE) []) acc)
+    else do 
+      let mRslt = find altPred (phTraits phoneProps)
+      case mRslt of
+        Nothing -> return acc
+        (Just (_,Nothing)) -> return acc -- already handled.
+        (Just (_,Just rslt)) -> do
+          qReportError $ "Trait \"" ++ trtStr ++ "\" is a boolean trait; having phoneme \"" ++ phoneNom ++ "\" set it to value \"" ++ rslt ++ "\" will not work." 
+          return acc
+  where 
+    wildPat nom = makePhoneWildPat nom phoneProps
+    altPred (theTrait, _) = theTrait == trtStr
+
+createTraitClauses acc trtStr trtNom (Just (trtDNom, trtCstrs)) phoneNom phoneProps = do
+  let mRslt = find altPred (phTraits phoneProps)
+  case mRslt of
+    Nothing -> return acc -- This phoneme doesn't use this trait.
+    (Just (_,Nothing)) -> do -- This phoneme doesn't specify a value for this trait.
+      reportError $ "Phoneme \"" ++ phoneNom ++ "\" doesn't specify a value for trait \"" ++ trtStr ++ "\"."
+      return acc
+    (Just (_,Just thisCstr)) -> do -- This phoneme DOES specifiy a value for this trait.
+      let mMatch = M.lookup thisCstr trtCstrs
+      case mMatch of
+        Nothing -> do -- failed to find 
+          reportError $ "Phoneme \"" ++ phoneNom ++ "\": Trait \"" ++ trtStr ++ "\" does not have a value known as \"" ++ thisCstr ++ "\"."
+          return acc
+        (Just cstrNom) -> do
+          let thisClause nom = Clause [wildPat nom] (NormalB $ justE (ConE cstrNom)) []
+          return (M.insert phoneNom thisClause acc)
+  where
+    wildPat nom = makePhoneWildPat nom phoneProps
+    altPred (theTrait, _) = theTrait == trtStr
+
+producePhonemeSet :: PropertyData -> Name -> M.Map String PhonemeProperties -> Q (M.Map String (Name, [Type]), GroupProps, [Dec])
 producePhonemeSet propData subName phoneSet = do
   -- Need to have a way to supply the user-side
   -- name string to this function.
 
   -- The name to map from phonemes to traits
   -- STILL TODO.
-  -- funcName <- newName ((nameBase subName) <> "_traits")
+  -- funcName <- newName ((nameBase subName) <> "_traits") -- changed how we do this
 
 
   -- isGroupFuncName
@@ -676,7 +742,7 @@ producePhonemeSet propData subName phoneSet = do
 -- | Make a record update expression, to be used
 --   when making the `phonemeProperties` function.
 --   Note that this returns an `Exp`ression, *not* a
---   function declaration or clause.
+--   function declaration or `Clause`.
 makeRecordUpdate :: Name -> M.Map String (Name, Maybe (Name, M.Map String Name)) -> M.Map String (Name,Type) -> PhonemeProperties -> Exp
 makeRecordUpdate defPropName traitsInfo traitFields phoneProps
   = RecUpdE (VarE defPropName) phoneStuff'
