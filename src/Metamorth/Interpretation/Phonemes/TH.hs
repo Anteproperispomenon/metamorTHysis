@@ -378,7 +378,8 @@ producePropertyData' pps = do
   
   -- To make the record type for Phoneme Traits...
   -- traitFields = M.map (fst . fst) trtMap
-  traitRecTypeName <- newName "PhonemeProps"
+  traitRecTypeNameT <- newName "PhonemePropsT"
+  traitRecTypeNameD <- newName "PhonemePropsD"
   let traitRecTypes = forMap trtMap $ \((trtRecName, mTrtInfo), _) -> case mTrtInfo of
         Nothing -> (trtRecName, ConT ''Bool)
         (Just (typeNom,_)) -> (trtRecName, maybeType $ ConT typeNom)
@@ -396,12 +397,12 @@ producePropertyData' pps = do
   -- with the names of the fields.
   let trtRecOutput = if (M.null traitRecTypes)
         then Nothing
-        else Just (traitRecTypeName, propRecTypes, defRecordName)
+        else Just (traitRecTypeNameT, propRecTypes, defRecordName)
 
   -- Create the record type declaration.
   let trtRecordDec = case trtRecOutput of
         Nothing -> []
-        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeName traitRecTypeName (M.elems prs) [eqClass, showClass] ]
+        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeNameT traitRecTypeNameD (M.elems prs) [eqClass, showClass] ]
   
 
   -- (The type on the next line may be out of date)
@@ -414,14 +415,14 @@ producePropertyData' pps = do
   -- defRecordName <- newName "defaultPhonemeTraits"
   let defRecordSig = case trtRecOutput of
         Nothing  -> []
-        (Just _) -> [SigD defRecordName (ConT traitRecTypeName)]
+        (Just _) -> [SigD defRecordName (ConT traitRecTypeNameT)]
   
   -- A declaration of the default record value/function.
   -- e.g.
   --  > defaultPhonemeProps = PhonemeProps False Nothing Nothing False Nothing
   let defRecordDec = case trtRecOutput of
         Nothing  -> []
-        (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeName) (map (produceDefaultRecV . snd) $ M.elems xs) ) []]
+        (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeNameD) (map (produceDefaultRecV . snd) $ M.elems xs) ) []]
   
   return (aspMap1, trtMap1, trtRecOutput, aspDecs <> trtDecs <> trtRecordDec <> defRecordSig <> defRecordDec)
 
