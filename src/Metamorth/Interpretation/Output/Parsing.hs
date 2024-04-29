@@ -550,6 +550,10 @@ parseNextCheckS :: OutputParser (Maybe PhonePatternRaw)
 parseNextCheckS = do
   (prop, mval) <- lift parseNextCheck
   dicts <- get
+  -- NOTE: May want to change the order of the
+  -- error messages, in case the user is explicitly
+  -- NOT importing a group/aspect/trait that overlaps
+  -- with another value. Unlikely, but possible.
   case mval of
     -- If nothing, then following chances,
     -- from most likely to least likely:
