@@ -32,6 +32,7 @@ import Data.Char (ord, chr, isSpace, isLower, isAlpha)
 import Data.Text qualified as T
 import Data.Text (Text)
 
+import Metamorth.Helpers.Applicative 
 import Metamorth.Helpers.Char
 import Metamorth.Helpers.List
 import Metamorth.Helpers.Parsing
@@ -453,10 +454,10 @@ getCaseType = AT.peekChar' >>= \case
   _ -> fail "Not a case type."
     
 -- | Simplified version of @f <*> (pure x)@.
-(<%>) :: Applicative f => f (a -> b) -> a -> f b    
-f <%> x = f <*> (pure x)
-
-infixl 4 <%>
+-- (<%>) :: Applicative f => f (a -> b) -> a -> f b    
+-- f <%> x = f <*> (pure x)
+-- 
+-- infixl 4 <%>
 
 -- Simple helper for `getCaseType`.
 getCaseType' :: AT.Parser (CaseSource -> OutputCase)

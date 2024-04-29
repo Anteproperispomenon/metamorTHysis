@@ -139,6 +139,6 @@ mongolianText1 = "úlaanbaatar"
 followText1 :: T.Text
 followText1 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft"
 
--- hmm...
+-- hmm... ...
 
 

@@ -2,6 +2,12 @@
 # Example orthography for testing
 # some things out.
 
+trait rough
+
+trait nasal
+
+trait example : exam1 exam2
+
 ====
 
 * vowel
@@ -15,30 +21,30 @@
   schwa
 * consonant
   ** labial
-    b
+    b : example=exam1
     p
-    f
+    f : example=exam2
     w
     v
-    m
+    m : nasal
   ** alveolar
-    n
+    n : nasal
     d
-    t
-    s
+    t : example=exam2
+    s : example=exam1
     l
-    r
+    r : rough
     sh
     ch
     zh
-    dzh
+    dzh : example=exam2
     ts
     dz
-    th
+    th : rough
     dh
   ** palatal_velar
     j
-    k
+    k : example=exam1
     g
-    ng
-    h
+    ng : nasal
+    h : rough
