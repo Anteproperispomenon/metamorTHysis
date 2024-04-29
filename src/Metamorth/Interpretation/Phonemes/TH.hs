@@ -46,6 +46,7 @@ import Metamorth.Interpretation.Phonemes.Types
 import Data.Map.Strict       qualified as M
 import Data.Map.Merge.Strict qualified as MM
 
+import Metamorth.Helpers.Monad
 import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
 import Metamorth.Helpers.Q
@@ -265,14 +266,16 @@ producePhonemeDatabase pps = do
 produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name, M.Map (String, String) Name, Name, GroupProps), [Dec])
 produceVariousData pps = do
   propData <- producePropertyData pps
+
   let propDecs = propertyDecs propData
       phoneInv = ppsPhonemeInventory pps
-  (phonDats, phonGrps, patNoms, isFuncNames, mainTypeName, phonDecs) <- producePhonemeInventory propData phoneInv
+  (phonDats, phonGrps, patNoms, isFuncNames, mainTypeName, traitFuncTree, phonDecs) <- producePhonemeInventory propData phoneInv
   -- let phonDecs = snd phonData
   --     phonDats = fst phonData
   return ((propData, phonDats, patNoms, isFuncNames, mainTypeName, phonGrps), (propDecs <> phonDecs))
 
 
+-- Map String (Name, Type, Map String (Name -> Clause))
 
 producePropertyData :: PhonemeParsingStructure -> Q PropertyData
 producePropertyData pps = do
@@ -471,21 +474,105 @@ producePhonemePatterns topType mp = do
         patRslt = PatSynD patName (PrefixPatSyn patVars) ImplBidir (nestedConPat cstrList baseConstr (map VarP patVars))
     return (patName, [patSign, patRslt])
 
-producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, Name, [Dec])
+producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, Name, M.Map String (Name, Type, M.Map String (Name -> Clause)), [Dec])
 producePhonemeInventory propData phi = do
   mainName <- newName "Phoneme"
-  ((phoneHi, groupProps, decs), isGroupFuncsStuff) <- runStateT (producePhonemeInventory' "Phoneme" mainName propData phi) M.empty
+  baseClauseMaps <- makeInitialClauseMap $ traitTable propData
+  ((phoneHi, groupProps, decs), isGroupFuncsStuff) <- runStateT (producePhonemeInventory' "Phoneme" mainName propData phi) (PhoneInvState M.empty baseClauseMaps)
   patMap <- producePhonemePatterns mainName (phonemeConstructors groupProps)
   let patDecs = concat $ M.elems $ M.map snd patMap
       patNoms = M.map fst patMap
 
-  return (phoneHi, groupProps, patNoms, isGroupFuncsStuff, mainName, decs <> patDecs)
+  return (phoneHi, groupProps, patNoms, pisMatrix isGroupFuncsStuff, mainName, pisClauses isGroupFuncsStuff, decs <> patDecs)
 
+data PhoneInvState = PhoneInvState
+  { pisMatrix  :: M.Map (String, String) Name
+  , pisClauses :: M.Map String (Name, Type, M.Map String (Name -> Clause))
+  }
+
+modifyMatrix :: Monad m => (M.Map (String, String) Name -> M.Map (String, String) Name) -> StateT PhoneInvState m ()
+modifyMatrix f = do
+  x <- get
+  put $! x {pisMatrix = f $! pisMatrix x }
+--  Monad m => (s -> s) -> StateT s m ()
+
+modifyClauses :: Monad m => String -> (M.Map String (Name -> Clause) -> M.Map String (Name -> Clause)) -> StateT PhoneInvState m ()
+modifyClauses trtStr f = do
+  x <- get 
+  let clsMap = pisClauses x
+      y = forAdjust trtStr clsMap $ \(funcNom, typ, thisMap) -> (funcNom, typ, f thisMap)
+  put $! x {pisClauses = y}
+  where
+    forAdjust :: Ord k => k -> M.Map k a -> (a -> a) -> M.Map k a
+    forAdjust k mp g = M.adjust g k mp
+
+-- | Modify the clauses with a monadic action.
+modifyClausesM :: Monad m => String -> (M.Map String (Name -> Clause) -> m (M.Map String (Name -> Clause))) -> StateT PhoneInvState m ()
+modifyClausesM trtStr f = do
+  st <- get 
+  let clsMap = pisClauses st
+      y = M.lookup trtStr clsMap
+  -- forAdjust trtStr clsMap $ \(funcNom, typ, thisMap) -> (funcNom, typ, f thisMap)
+  case y of
+    Nothing -> return ()
+    (Just (funcNom, typ, thisMap)) -> do
+      thatMap <- lift $ f thisMap
+      put $! st {pisClauses = M.insert trtStr (funcNom, typ, thatMap) clsMap}
+
+-- | Modify the clauses with an action in `Q`. This version
+--   reports a warning if one of the traits can't be found.
+modifyClausesQ :: String -> (M.Map String (Name -> Clause) -> Q (M.Map String (Name -> Clause))) -> StateT PhoneInvState Q ()
+modifyClausesQ trtStr f = do
+  st <- get 
+  let clsMap = pisClauses st
+      y = M.lookup trtStr clsMap
+  -- forAdjust trtStr clsMap $ \(funcNom, typ, thisMap) -> (funcNom, typ, f thisMap)
+  case y of
+    Nothing -> lift (reportWarning $ "modifyClausesQ : Couldn't find trait \"" ++ trtStr ++ "\".")
+    (Just (funcNom, typ, thisMap)) -> do
+      thatMap <- lift $ f thisMap
+      put $! st {pisClauses = M.insert trtStr (funcNom, typ, thatMap) clsMap}
+
+
+-- | Create the initial "empty" trait `Clause` map
+--   from the trait table found in `PropertyData`.
+makeInitialClauseMap :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> Q (M.Map String (Name, Type, M.Map String (Name -> Clause)))
+makeInitialClauseMap = M.traverseWithKey makeVal
+  where
+    makeVal :: String -> (Name, Maybe (Name, M.Map String Name)) -> Q (Name, Type, M.Map String (Name -> Clause))
+    makeVal trtStr (_nom, Nothing) = do
+      funcName <- newName $ "is" ++ dataName trtStr
+      return (funcName, ConT ''Bool, M.empty)
+    makeVal trtStr (_nom, Just (typNom, _conMap)) = do
+      funcName <- newName $ "is" ++ dataName trtStr
+      return (funcName, AppT (ConT ''Maybe) (ConT typNom), M.empty)
+
+
+-- M.Map String (Name, Maybe (Name, M.Map String Name))
+{-
+createTraitClauses 
+  :: M.Map String (Name -> Clause) -- accumulator
+  -> String 
+  -> Name
+  -> Maybe (Name, M.Map String Name)
+  -> String 
+  -> PhonemeProperties
+  -> Q (M.Map String (Name -> Clause))
+createTraitClauses acc trtStr trtNom (Just (trtDNom, trtCstrs)) phoneNom phoneProps = do
+
+forFoldM :: (Foldable t, Monad m) => b -> t a -> (b -> a -> m b) -> m b
+-}
 
 -- producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
-producePhonemeInventory' :: String -> Name -> PropertyData -> PhonemeInventory -> StateT (M.Map (String, String) Name) Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
+producePhonemeInventory' :: String -> Name -> PropertyData -> PhonemeInventory -> StateT PhoneInvState Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
 producePhonemeInventory' _thisGrpStr nm propData (PhonemeSet mp) = do
   (mpX, grpProps, decs) <- lift $ producePhonemeSet propData nm mp
+  -- Handle the trait thingies.
+  -- Quite awkward, but I think it should work...
+  forWithKey_ (traitTable propData) $ \trtStr (oldNom, mCstrs) -> do
+    modifyClausesQ trtStr $ \clsMap -> forFoldM clsMap (M.assocs mp) $ \acc (phoneStr, phoneProps) -> do
+      createTraitClauses acc trtStr oldNom mCstrs phoneStr phoneProps    
+
   return (makeLeaves mpX, grpProps, decs)
 producePhonemeInventory' thisGrpStr nm propData (PhonemeGroup mp) = do
   -- rslts :: M.Map String (Name, ((M.Map String PhonemeHierarchy), [Dec]) )
@@ -537,7 +624,7 @@ producePhonemeInventory' thisGrpStr nm propData (PhonemeGroup mp) = do
           newFuncBod2 = Clause [WildP] (NormalB (ConE 'False)) []
           newFuncDefn = FunD newFuncName [newFuncBod1, newFuncBod2]
           newFuncDecl = [newFuncSign, newFuncDefn]
-      modify $ M.insert (thisGrpStr, anotherGroupStr) newFuncName
+      modifyMatrix $ M.insert (thisGrpStr, anotherGroupStr) newFuncName
       return (Just newFuncName, newFuncDecl)
     
     let newSubFuncNames = M.map fst newSubFuncs

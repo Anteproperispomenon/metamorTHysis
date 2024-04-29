@@ -1,5 +1,6 @@
 module Metamorth.Helpers.Map
   ( forWithKey
+  , forWithKey_
   , fromSelfList
   , forMapWithKey
   , forMaybeMap
@@ -10,6 +11,7 @@ module Metamorth.Helpers.Map
   , forMapFromSetM
   ) where
 
+import Data.Functor (($>))
 import Data.Functor.Identity
 
 import Data.Maybe
@@ -26,6 +28,9 @@ import Data.Set qualified as S
 forWithKey :: Applicative t => M.Map k a -> (k -> a -> t b) -> t (M.Map k b)
 forWithKey mp f = M.traverseWithKey f mp
 {-# INLINE forWithKey #-}
+
+forWithKey_ :: Applicative t => M.Map k a -> (k -> a -> t b) -> t ()
+forWithKey_ mp f = (M.traverseWithKey f mp) $> ()
 
 -- | Create a `M.Map` from a simple list,
 --   where every element is used as both
