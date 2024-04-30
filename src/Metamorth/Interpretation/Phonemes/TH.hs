@@ -159,7 +159,7 @@ data PhonemeDatabase = PhonemeDatabase
   -- | Functions for checking whether a function has
   --   a trait, and whether that trait is a value trait
   --   (@True@) or a boolean trait (@False@).
-  , pdbTraitInformation :: M.Map String (Name, Bool)
+  , pdbTraitInformation :: M.Map String (Name, (Maybe (Name, M.Map String Name)))
   -- | Make an uncased expression an upper-case expression.
   , pdbMkMaj :: Exp -> Exp
   -- | Make an uncased expression a  lower-case expression.
@@ -251,17 +251,33 @@ producePhonemeDatabase pps = do
   -- fmap phiPatternName
   -- traitFuncTree :: Map String (Name, Type, Map String (Name -> Clause))
   -- makeTraitFunc :: M.Map String Name -> Type -> M.Map String (Name -> Clause) -> ([Clause], Bool)
-  -- Making the trait functions...
-  let phoneNames = fmap phiPatternName phoneInfoMap
   
-  traitDecsNames <- forM traitFuncTree $ \(funcName, retType, clsMap) -> do
+  -- traitTable   :: M.Map String (Name, Maybe (Name, M.Map String Name))
+
+  -- Getting the phoneme names...
+  let phoneNames = fmap phiPatternName phoneInfoMap
+      traitDicts = snd <$> traitTable propData
+  
+  -- Making the trait functions...
+  traitDecsNames <- forWithKey traitFuncTree $ \trtStr (funcName, retType, clsMap) -> do
     funcType <- [t| $(pure (ConT mainTypeName)) -> $(pure retType) |]
     let funcSign = SigD funcName funcType
         (nowClauses, trtType) = makeTraitFunc phoneNames retType clsMap
         funcDefn = FunD funcName nowClauses
-    return ([funcSign, funcDefn], (funcName, trtType))
+        trtCstr' = M.lookup trtStr traitDicts
+        trtCstrs = join trtCstr'
+    -- These errors shouldn't occur, but just in case they do,
+    -- here are the warnings.
+    when (isNothing trtCstr') $ do
+      reportWarning $ "Issue with trait \"" ++ trtStr ++ "\" when creating \"is" ++ (dataName trtStr) ++ "\" function; can't find trait in dictionary (internal error)."
+    when (trtType && (isNothing trtCstrs)) $ do
+      reportWarning $ "Issue with trait \"" ++ trtStr ++ "\": trait type doesn't match type in dictionary (internal error 1)."
+    when ((not trtType) && (isJust trtCstrs)) $ do
+      reportWarning $ "Issue with trait \"" ++ trtStr ++ "\": trait type doesn't match type in dictionary (internal error 2)."
+    return ([funcSign, funcDefn], (funcName, trtCstrs))
 
-  let (traitDecs, traitNames) = F.unzip traitDecsNames
+  let traitDecs  = fst <$> traitDecsNames
+      traitNames = snd <$> traitDecsNames
       traitDecs' = concat $ M.elems traitDecs
 
   -- Classes already of type `Type`.

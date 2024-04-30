@@ -21,5 +21,6 @@ declareFullParsers
   ]
   [ ("examples/output/example_follow_01.thyo", defExtraOutputDetails {eodSuffix = "_f01out", eodOutputName = "follow1Output", eodOtherNames = ["f1"]}) 
   , ("examples/output/example_follow_02.thyo", defExtraOutputDetails {eodSuffix = "_f02out", eodOutputName = "follow2Output", eodOtherNames = ["f2"]}) 
+  , ("examples/output/example_follow_03.thyo", defExtraOutputDetails {eodSuffix = "_f03out", eodOutputName = "follow3Output", eodOtherNames = ["f3"]}) 
   ]
 

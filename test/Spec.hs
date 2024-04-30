@@ -117,7 +117,11 @@ main = do
   case follow2 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
-
+  putStrLn "Testing trait-follow..."
+  let follow3 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InFollowA Fol.OutFollowC followText2
+  case follow3 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
 
 
@@ -138,6 +142,9 @@ mongolianText1 = "úlaanbaatar"
 -- Just some random sounds thrown together...
 followText1 :: T.Text
 followText1 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft"
+
+followText2 :: T.Text
+followText2 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft iŋaninis"
 
 -- hmm... ...
 

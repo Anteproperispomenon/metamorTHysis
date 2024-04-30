@@ -398,7 +398,7 @@ makePhonemeInformation :: PhonemeDatabase -> PhonemeNameInformation
 makePhonemeInformation pdb = PhonemeNameInformation
   { pniPhones   = M.map unwrap $ pdbPhonemeInfo pdb
   , pniAspects  = aspectTable pdt
-  , pniTraits   = M.empty
+  , pniTraits   = pdbTraitInformation pdb
   , pniGroups   = pdbGroupMemberFuncs pdb
   , pniWordTypeNames = pdbWordTypeNames pdb
   , pniCaseExpr  = AppE (VarE 'const) (ConE 'LowerCase)
@@ -413,7 +413,12 @@ getTheOutput pdb txt eod = do
   let pni = makePhonemeInformation pdb
       aspectSet = M.map (M.keysSet . snd . snd) (pniAspects pni)
       phoneSet  = M.keysSet $ pniPhones pni
-  let eParseRslt = AT.parseOnly (parseOutputFile (M.keysSet (pdbGroupMemberFuncs pdb)) M.empty aspectSet phoneSet) txt
+      
+      traitDict = pdbTraitInformation pdb 
+      -- From Map String (Name, Maybe (Name, Map String Name))
+      -- To   Map String (Maybe (Set String))\
+      traitMaps = fmap (\(_, mb) -> fmap (\(_,mp) -> M.keysSet mp) mb) traitDict
+  let eParseRslt = AT.parseOnly (parseOutputFile (M.keysSet (pdbGroupMemberFuncs pdb)) traitMaps aspectSet phoneSet) txt
       newNameStr = eodOutputName eod
       newNameSfx = eodSuffix eod
   -- (decs, hdrX) <- case eParseRslt of
@@ -573,6 +578,8 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
 
 {-
 
+opsTraitDictionary' :: M.Map String (Maybe (S.Set String))
+
 -- | The main runner of the output file.
 parseOutputFile 
   -- | The `S.Set` of group names.
@@ -609,6 +616,12 @@ data PhonemeDatabase = PhonemeDatabase
   -- | The `Name` of the "Word" type, along
   --   with its two constructors.
   , pdbWordTypeNames  :: (Name, (Name, Name))
+  -- | Functions for checking membership in a group.
+  , pdbGroupMemberFuncs :: M.Map String Name
+  -- | Functions for checking whether a function has
+  --   a trait, and whether that trait is a value trait
+  --   (@True@) or a boolean trait (@False@).
+  , pdbTraitInformation :: M.Map String (Name, (Maybe (Name, M.Map String Name)))
   -- | Make an uncased expression an upper-case expression.
   , pdbMkMaj :: Exp -> Exp
   -- | Make an uncased expression a  lower-case expression.
