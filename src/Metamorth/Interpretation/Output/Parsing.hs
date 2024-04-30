@@ -590,7 +590,7 @@ parseNextCheckS = do
     -- trait or an aspect.
     (Just val) -> case (M.lookup prop (opsTraitDictionary' dicts)) of
       (Just (Just vs)) -> if (val `elem` vs)
-        then if (isJust ((M.lookup prop (opsAspectDictionary dicts)))) 
+        then if (isJust ((M.lookup prop (opsTraitDictionary dicts)))) 
           then return $ Just $ PhoneFollowedByTraitAtR prop val
           else do
               tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
