@@ -34,6 +34,7 @@ module Metamorth.Helpers.TH
   , retE
   , returnExp
   , infixBind
+  , infixRBind
   , infixCont
   ) where
 
@@ -294,6 +295,9 @@ justE expr = AppE (ConE 'Just) expr
 --   @ exp1 >>= exp2 @
 infixBind :: Exp -> Exp -> Exp
 infixBind exp1 exp2 = InfixE (Just exp1) (VarE '(>>=)) (Just exp2)
+
+infixRBind :: Exp -> Exp -> Exp
+infixRBind exp1 exp2 = InfixE (Just exp1) (VarE '(=<<)) (Just exp2)
 
 -- | Create the expression
 --   @ exp1 >> exp2 @

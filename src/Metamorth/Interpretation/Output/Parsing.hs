@@ -593,18 +593,18 @@ parseNextCheckS = do
         then if (isJust ((M.lookup prop (opsTraitDictionary dicts)))) 
           then return $ Just $ PhoneFollowedByTraitAtR prop val
           else do
-              tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v1);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
               return Nothing
         else do
           phoneName <- ask
           when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
-            tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v2);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
           tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
           return Nothing
       (Just _) -> do
           phoneName <- ask
           when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
-            tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v3);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
           tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
           return Nothing
       Nothing -> case (M.lookup prop (opsAspectDictionary' dicts)) of

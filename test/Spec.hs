@@ -144,8 +144,36 @@ followText1 :: T.Text
 followText1 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft"
 
 followText2 :: T.Text
-followText2 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft iŋaninis init"
+followText2 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft iŋaninis init etes beedʒ ekiŋ"
 
 -- hmm... ...
 
-
+{-
+   b : example=exam1
+    p
+    f : example=exam2
+    w
+    v
+    m : nasal
+  ** alveolar
+    n : nasal
+    d
+    t : example=exam2
+    s : example=exam1
+    l
+    r : rough
+    sh
+    ch
+    zh
+    dzh : example=exam2
+    ts
+    dz
+    th : rough
+    dh
+  ** palatal_velar
+    j
+    k : example=exam1
+    g
+    ng : nasal
+    h : rough
+-}

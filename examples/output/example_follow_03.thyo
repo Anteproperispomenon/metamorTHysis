@@ -13,6 +13,8 @@ import group palatal_velar
 
 import trait nasal
 
+import trait example
+
 ====
 
 # vowels
@@ -30,6 +32,9 @@ schwa : ə
 aw >palatal_velar  : ɑ
 a  >alveolar       : æ
 i  >nasal          : ɪ
+schwa >example     : ɵ
+e >example=exam1   : é
+e >example=exam2   : è
 
 # labial
 b : b
@@ -53,6 +58,7 @@ ts : c
 dz : d z
 th : θ
 dh : ð
+dzh : d ʒ
 
 # palatal/alveolar
 j : j
