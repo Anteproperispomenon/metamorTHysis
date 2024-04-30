@@ -7,7 +7,7 @@ default case : /at
 # Apostrophes
 # class apost : ' ` U+0313 U+0315
 
-# class underline : U+02CD U+0320 U+0332
+# class underline : U+02CD U+0320 U+0332 U+0331
 
 # class lh : Ɫ ɫ ɬ U+A7AD
 
@@ -52,20 +52,20 @@ k'  : k U+0313
 kw  : k w
 kw' : k U+0315 w
 
-q   : k U+02CD
-q'  : k U+02CD U+0313
-qw  : k U+02CD w
-qw' : k U+02CD U+0315 w
+q   : k U+0331
+q'  : k U+0331 U+0313
+qw  : k U+0331 w
+qw' : k U+0331 U+0315 w
 
 g   : g
 gw  : g w
-gh  : g U+02CD
-ghw : g U+02CD w
+gh  : g U+0331
+ghw : g U+0331 w
 
 x   : x
 xw  : x w
-xh  : x U+02CD
-xhw : x U+02CD w
+xh  : x U+0331
+xhw : x U+0331 w
 
 h   : h
 glt : '
@@ -75,12 +75,12 @@ e     : e
 i     : i
 o     : o
 u     : y
-schwa : a U+02CD
+schwa : a U+0331
 
 ^ glt a     : a
 ^ glt e     : e
 ^ glt i     : i
 ^ glt o     : o
 ^ glt u     : y
-^ glt schwa : a U+02CD
+^ glt schwa : a U+0331
 

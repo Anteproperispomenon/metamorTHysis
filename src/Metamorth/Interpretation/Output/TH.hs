@@ -156,7 +156,7 @@ makeOutputDatabase opo pni = do
   let ond = OutputNameDatabase
         { ondPhonemes  = pniPhones  pni
         , ondAspects   = pniAspects pni -- just pass it in directly, not much point doing otherwise.
-        , ondTraits    = M.empty
+        , ondTraits    = changeTraits $ pniTraits pni
         , ondGroups    = groupDict
         , ondStateType = stRecName
         , ondStates    = stDict
@@ -166,6 +166,9 @@ makeOutputDatabase opo pni = do
         , ondDefState  = makeDefaultState stRecNameC stDict
         }
   return (stDecs, ond, opoOutputTrie opo)
+  where
+    changeTraits :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> M.Map String (Name, Maybe (M.Map String Name))
+    changeTraits = fmap (\(nom, mb) -> (nom, fmap snd mb))
 
 {-
 , pniAspects :: M.Map String (Name, (Name, M.Map String Name))

@@ -144,7 +144,7 @@ followText1 :: T.Text
 followText1 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft"
 
 followText2 :: T.Text
-followText2 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft iŋaninis"
+followText2 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft iŋaninis init"
 
 -- hmm... ...
 

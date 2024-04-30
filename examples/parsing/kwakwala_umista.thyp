@@ -6,7 +6,7 @@ phoneme set : kwakwala
 # Apostrophes
 class apost : ' ` U+0313 U+0315
 
-class underline : U+02CD U+0320 U+0332
+class underline : U+02CD U+0320 U+0332 U+0331
 
 class lh : Ɫ ɫ ɬ U+A7AD
 
