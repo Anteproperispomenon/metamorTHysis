@@ -2,6 +2,7 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   -- * Low-level helpers
   ( countHoriz
   , consumeEndComment
+  , parseBool
   -- * Parsing Items in Lists
   , parseQuoteString
   , parseQuoteText
@@ -10,17 +11,30 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   -- * Parsing Lists Themselves
   , parseKeySep
   , parseListSep
+  -- * Parsing Indents
+  , findIndent
+  , findIndentQQ1
+  , indentedTo
+  , indentedToQQ1
   ) where
+
+import Data.Functor
 
 import Control.Applicative
 
-import Data.Attoparsec.Text qualified as AT
+import Control.Monad
+import Control.Monad.Trans.Class
+
+import Data.Attoparsec.Text       qualified as AT
+import Data.Attoparsec.Combinator qualified as AC
 
 import Data.Text qualified as T
 
 import Data.Char
 
 import Metamorth.Helpers.Parsing
+
+import Metamorth.Interaction.Quasi.Parser.Types
 
 -- | Consume and count horizontal spaces. Tabs 
 --   are treated as two spaces.
@@ -89,7 +103,7 @@ parseUnquoteText = AT.takeWhile (\x -> not (isSpace x) && x /= '\"' && x /= ',' 
 parseKeySep :: AT.Parser ()
 parseKeySep = do
   skipHoriz
-  AT.satisfy (\x -> x == ':' || x == '=')
+  _ <- AT.satisfy (\x -> x == ':' || x == '=')
   skipHoriz
   return ()
 
@@ -115,4 +129,66 @@ parseListSepY = do
   skipHoriz1
   _ <- optional parseListSepX
   return ()
+
+-- | Either runs a parser indented by a certain
+--   number of spaces (followed by a comment), or 
+--   parses a comment.
+indentedTo :: Int -> AT.Parser a -> AT.Parser (Maybe a)
+indentedTo n prs = (consumeEndComment $> Nothing) <|> do
+  x <- countHoriz
+  -- Might want to rethink how failure occurs...
+  when (x /= n) $ do
+    txt <- AT.takeWhile (\c -> c /= '\n' && c /= '\r')
+    fail $ "The following line is incorrectly indented:\n\"" ++ (T.unpack txt) ++ "\""
+  rslt <- prs
+  consumeEndComment
+  return $ Just rslt
+
+-- | Either runs a parser indented by a certain
+--   number of spaces (followed by a comment), or 
+--   parses a comment.
+indentedToQQ1 :: Int -> ParserQQ1 a -> ParserQQ1 (Maybe a)
+indentedToQQ1 n prs = (liftQQ1 consumeEndComment $> Nothing) <|> do
+  x <- liftQQ1 countHoriz
+  case x of
+    0 -> fail "End of this Orthography"
+    z | z == n -> do
+      rslt <- prs
+      liftQQ1 consumeEndComment
+      return $ Just rslt
+    _ -> do
+      txt <- liftQQ1 $ AC.lookAhead $ AT.takeWhile (\c -> c /= '\n' && c /= '\r')
+      lift $ tellError $ "The following line is incorrectly indented:\n\"" ++ (T.unpack txt) ++ "\""
+      return Nothing
+
+findIndent :: AT.Parser a -> AT.Parser (Int, a)
+findIndent prs = do
+  AT.skipMany consumeEndComment
+  n <- countHoriz
+  x <- prs
+  consumeEndComment
+  return (n,x)
+  
+findIndentQQ1 :: ParserQQ1 a -> ParserQQ1 (Int, a)
+findIndentQQ1 prs = do
+  liftQQ1 $ AT.skipMany consumeEndComment
+  n <- liftQQ1 countHoriz
+  x <- prs
+  liftQQ1 consumeEndComment
+  return (n,x)
+
+parseBool :: AT.Parser Bool
+parseBool = do
+  txt <- AT.takeWhile isAlpha
+  case (checkBoolString txt) of
+    (Just True)  -> return True
+    (Just False) -> return False
+    Nothing      -> fail $ "Couldn't parse string as boolean: \"" ++ T.unpack txt ++ "\"." 
+
+checkBoolString :: T.Text -> Maybe Bool
+checkBoolString txt
+  | (txt' == "yes" || txt' == "y" || txt' == "t" || txt' == "true"  || txt' == "on" ) = Just True
+  | (txt' == "no"  || txt' == "n" || txt' == "f" || txt' == "false" || txt' == "off") = Just False
+  | otherwise = Nothing
+  where txt' = T.toLower txt
 
