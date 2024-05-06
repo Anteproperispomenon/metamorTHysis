@@ -25,6 +25,8 @@ module Metamorth.Helpers.List
   -- * Re-Ordered Functions
   , withZip
   , withZipM
+  -- * Variants of Common Functions
+  , partitionMap
   -- * Re-Exports
   , liftEitherList
   ) where
@@ -140,3 +142,17 @@ firstJust :: [Maybe a] -> Maybe a
 firstJust [] = Nothing
 firstJust ((Just x ):_) = Just x
 firstJust (Nothing:xs) = firstJust xs
+
+-- | Like `partition`, but modifies the value of
+--   a matching item. Useful for pattern matching
+--   on specific items.
+partitionMap :: (a -> Maybe b) -> [a] -> ([b],[a])
+partitionMap p xs = foldr (selectMap1 p) ([],[]) xs
+{-# INLINE partitionMap #-}
+
+selectMap1 :: (a -> Maybe b) -> a -> ([b], [a]) -> ([b], [a])
+selectMap1 p x ~(ys,ns)
+  | (Just z) <- p x
+  = (z:ys, ns)
+  | otherwise
+  = (ys, x:ns)

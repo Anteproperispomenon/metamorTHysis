@@ -20,6 +20,11 @@ module Metamorth.Interpretation.Output.Types.Alt
   , isAtEnd
   , isNotEnd
   , isCheckNext
+  , partConfirmStates
+  , partModifyStates
+  , partAtEnds
+  , partNotEnds
+  , partCheckNexts
   ) where
 
 -- Alternate forms of types.
@@ -41,6 +46,7 @@ import Data.Set        qualified as S
 
 import Data.Ord (Down(..))
 
+import Metamorth.Helpers.List (partitionMap)
 import Metamorth.Helpers.Ord
 
 import Metamorth.Interpretation.Output.Types
@@ -83,6 +89,35 @@ isNotEnd _ = False
 isCheckNext :: PhoneResultActionX -> Bool
 isCheckNext (PRCheckNext _) = True
 isCheckNext _ = False
+
+-- | Partition Confirm States.
+partConfirmStates :: [PhoneResultActionX] -> ([CheckStateX], [PhoneResultActionX])
+partConfirmStates = partitionMap $ \case
+  (PRConfirmState cs) -> Just cs
+  _ -> Nothing
+
+-- | Partition Modify States
+partModifyStates :: [PhoneResultActionX] -> ([ModifyStateX], [PhoneResultActionX])
+partModifyStates = partitionMap $ \case
+  (PRModifyState cs) -> Just cs
+  _ -> Nothing
+
+-- | Partition 'At-Ends'
+partAtEnds :: [PhoneResultActionX] -> ([()], [PhoneResultActionX])
+partAtEnds = partitionMap $ \case
+  PRAtEnd -> Just ()
+  _ -> Nothing
+
+-- | Partition 'Not-Ends'
+partNotEnds :: [PhoneResultActionX] -> ([()], [PhoneResultActionX])
+partNotEnds = partitionMap $ \case
+  PRNotEnd -> Just ()
+  _ -> Nothing
+
+partCheckNexts :: [PhoneResultActionX] -> ([PhoneFollow], [PhoneResultActionX])
+partCheckNexts = partitionMap $ \case
+  (PRCheckNext cs) -> Just cs
+  _ -> Nothing
 
 type PhoneResult = PhoneResultX [PhoneResultActionX]
 -- type PhoneResult str = PhoneResultX str    [PhoneResultActionX]

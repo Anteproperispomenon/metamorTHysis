@@ -253,6 +253,7 @@ necessaryPhoneRet (PhoneActionData [] [] zs) = CondPlainRet
 necessaryPhoneRet (PhoneActionData _  _  _ ) = CondStateRet
 
 addPhoneActionClause :: (Quasi q, Quote q) => OutputNameDatabase -> OutputCase -> RetType -> [CharPatternItem] -> PhoneActionData -> ReturnClauses -> q ReturnClauses
+-- Plain returns only
 addPhoneActionClause ond oc PlainRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
     expr <- createCaseExp oc cpi
@@ -263,6 +264,7 @@ addPhoneActionClause ond oc PlainRet cpi pad rcs = case pad of
   _ -> do 
     qReportError $ "Couldn't create guard/clause (1) for output \"" ++ show cpi ++ "\"." 
     return rcs -- error
+-- Stateful Clauses
 addPhoneActionClause ond oc StateRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
     expr <- createCaseExp oc cpi
@@ -282,14 +284,15 @@ addPhoneActionClause ond oc StateRet cpi pad rcs = case pad of
   (PhoneActionData md cs []) -> do
     expr <- createCaseExp oc cpi
     func <- makeModify  ond md
-    pred <- makeConfirm ond cs
+    prdc <- makeConfirm ond cs
     cso  <- newName "thatCase"
-    let rslt = \v s -> (NormalG $ pred s, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> 
+    let rslt = \v s -> (NormalG $ prdc s, combineCaseExp (AppE expr (VarE v)) cso $ \lowExp -> 
           TupE [Just lowExp, Just $ func s])
     return $ addStateRet rslt rcs
   _ -> do 
     qReportError $ "Couldn't create guard/clause (2) for output \"" ++ show cpi ++ "\"." 
     return rcs -- error
+-- Conditional clauses
 addPhoneActionClause ond oc CondPlainRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
     expr <- createCaseExp oc cpi
@@ -306,6 +309,7 @@ addPhoneActionClause ond oc CondPlainRet cpi pad rcs = case pad of
   _ -> do 
     qReportError $ "Couldn't create guard/clause (3) for output \"" ++ show cpi ++ "\"." 
     return rcs -- error
+-- Any kind of clause.
 addPhoneActionClause ond oc CondStateRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
     expr <- createCaseExp oc cpi
@@ -333,10 +337,10 @@ addPhoneActionClause ond oc CondStateRet cpi pad rcs = case pad of
           TupE [Just lowExp, Just $ func s])
     return $ addCondStateRet rslt rcs
 
-
 collectActionData :: OutputNameDatabase -> [PhoneResultActionX] -> Either String PhoneActionData
 collectActionData ond [] = return $ PhoneActionData [] [] []
 collectActionData ond ps = toEither $ do
+  {-
   let (confirms', rst1) = partition isConfirmState ps
       (modifys' , rst2) = partition isModifyState  rst1
       (atEnds'  , rst3) = partition isAtEnd rst2
@@ -350,6 +354,18 @@ collectActionData ond ps = toEither $ do
       notEnds  = map (\PRNotEnd -> appliedTo 'isJust) notEnds'
       checks   = map (\(PRCheckNext chk) -> chk) checks'
   
+      checksX = mapMaybe (getLookups ond) checks
+   -}
+  -- Doing it more safely.
+  let (confirms, rst1) = partConfirmStates ps
+      (modifys , rst2) = partModifyStates  rst1
+      (atEnds' , rst3) = partAtEnds rst2
+      (notEnds', rst4) = partNotEnds rst3
+      (checks  , _rst) = partCheckNexts rst4
+      
+      atEnds  = map (\_ -> appliedTo 'isNothing)  atEnds'
+      notEnds = map (\_ -> appliedTo 'isJust   ) notEnds'
+
       checksX = mapMaybe (getLookups ond) checks
 
   return $ PhoneActionData modifys confirms (atEnds ++ notEnds ++ checksX)
