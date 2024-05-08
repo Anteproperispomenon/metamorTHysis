@@ -21,8 +21,6 @@ import Metamorth.Interaction.Quasi.Parser.Types
 
 
 
-
-
 {-
 pattern ExtraParserDetails :: String -> [String] -> Bool -> Bool -> Bool -> String -> String -> ExtraParserDetails
 pattern ExtraParserDetails 
@@ -72,7 +70,8 @@ parseOrthographyBlocks = do
     parseOrthographyBlock
   
   lift $ many'_ consumeEndComment
-  return blocks
+  -- Fix up the orthographies.
+  verifyAndFillInOrthographies blocks
 
 parseOrthographyBlock :: ParserQQ OrthographyDetails
 parseOrthographyBlock = do

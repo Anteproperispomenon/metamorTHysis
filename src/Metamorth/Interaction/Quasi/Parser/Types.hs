@@ -38,6 +38,8 @@ module Metamorth.Interaction.Quasi.Parser.Types
 import Control.Applicative
 import Control.Monad
 
+import Data.Maybe
+
 import Data.String (IsString(..))
 
 import Metamorth.Helpers.Error
@@ -168,38 +170,65 @@ tellMessages strs = ParserQQ $ tell (map ParserMessage strs)
 
 setInputFile :: FilePath -> ParserQQ1 ()
 setInputFile fp = ParserQQ1 $ do
+  z <- gets odInputFile
+  when (isJust z) $ do
+    lift $ tellWarning "Setting input file more than once."
   modify' $ \x -> x {odInputFile = Just fp}
 
 setOutputFile :: FilePath -> ParserQQ1 ()
 setOutputFile fp = ParserQQ1 $ do
+  z <- gets odOutputFile
+  when (isJust z) $ do
+    lift $ tellWarning "Setting output file more than once."
   modify' $ \x -> x {odOutputFile = Just fp}
 
 setUnifyBranches :: Bool -> ParserQQ1 ()
 setUnifyBranches bl = ParserQQ1 $ do
+  z <- gets odUnifyBranches
+  when (isJust z) $ do
+    lift $ tellWarning "Setting \"Unify Branches\" flag more than once."
   modify' $ \x -> x {odUnifyBranches = Just bl}
 
 setGroupGuards :: Bool -> ParserQQ1 ()
 setGroupGuards bl = ParserQQ1 $ do
+  z <- gets odGroupGuards
+  when (isJust z) $ do
+    lift $ tellWarning "Setting \"Group Guards\" flag more than once."
   modify' $ \x -> x {odGroupGuards = Just bl}
 
 setCheckStates :: Bool -> ParserQQ1 ()
 setCheckStates bl = ParserQQ1 $ do
+  z <- gets odCheckStates
+  when (isJust z) $ do
+    lift $ tellWarning "Setting \"Check States\" flag more than once."
   modify' $ \x -> x {odCheckStates = Just bl}
 
 setInputName :: String -> ParserQQ1 ()
 setInputName str = ParserQQ1 $ do
+  z <- gets odInputName
+  when (isJust z) $ do
+    lift $ tellWarning "Setting Input Function name more than once."
   modify' $ \x -> x {odInputName = Just str}
 
 setOutputName :: String -> ParserQQ1 ()
 setOutputName str = ParserQQ1 $ do
+  z <- gets odOutputName
+  when (isJust z) $ do
+    lift $ tellWarning "Setting Output Function name more than once."
   modify' $ \x -> x {odOutputName = Just str}
 
 setInSuffix :: String -> ParserQQ1 ()
 setInSuffix str = ParserQQ1 $ do
+  z <- gets odInSuffix
+  when (isJust z) $ do
+    lift $ tellWarning "Setting Input Suffix more than once."
   modify' $ \x -> x {odInSuffix = Just str}
 
 setOutSuffix :: String -> ParserQQ1 ()
 setOutSuffix str = ParserQQ1 $ do
+  z <- gets odOutSuffix
+  when (isJust z) $ do
+    lift $ tellWarning "Setting Output name more than once."
   modify' $ \x -> x {odOutSuffix = Just str}
 
 addCLIName :: String -> ParserQQ1 ()
@@ -236,3 +265,4 @@ getOrthName = ParserQQ1 $ gets odName
   --   for the CLI interface.
 
 -}
+
