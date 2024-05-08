@@ -5,6 +5,8 @@ module Metamorth.Interaction.Quasi
 
 import Data.Maybe
 
+import Control.Monad (when)
+
 import Metamorth.Helpers.Error
 import Metamorth.Helpers.TH (forMap)
 import Metamorth.Helpers.Q
@@ -34,11 +36,13 @@ quasiFail = fail "Can only use \"metamorth\" at the top-level."
 makeTheDecs :: String -> Q [Dec]
 makeTheDecs str = do
   let txt = T.pack str
+      -- eRslt = AT.parseOnly (embedQQ parseOrthographyDetailsDebug) txt
       eRslt = AT.parseOnly (embedQQ parseOrthographyDetails) txt
   case eRslt of
     (Left err) -> do 
       reportError $ "Parse Error: " ++ err
       return []
+    -- (Right ((pfp, ods, odsDebug, ondDebug), msgs)) -> do
     (Right ((pfp, ods), msgs)) -> do
       let (errs,wrns,_mmsgs) =  partitionMessages msgs
       mapM_ reportError   errs
@@ -84,6 +88,11 @@ makeTheDecs str = do
               )
           irslts = catMaybes irslts'
           orslts = catMaybes orslts'
+      when (null irslts) $ reportWarning  "No input specification files listed."
+      when (null orslts) $ reportWarning "No output specification files listed."
       -- qDebugNotice $ "Phoneme path: \"" ++ pfp ++ "\"."
+      -- qDebugNoticeUnflushed $ "Raw Orthography Details: " ++ show odsDebug
+      -- qDebugNoticeUnflushed $ "Raw Orthography Set: " ++ ondDebug
+      -- qDebugNotice $ "Orthography Details: " ++ show ods
       declareFullParsers pfp irslts orslts
 

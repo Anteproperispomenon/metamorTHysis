@@ -2,6 +2,9 @@ module Metamorth.Interaction.Quasi.Parser
   ( parseOrthographyBlock
   , parseOrthographyBlocks
   , parseOrthographyDetails
+  , parseOrthographyDetailsDebug
+  -- * Debug
+  , parseIndentedOptions
   ) where
 
 import Data.List (intercalate)
@@ -72,6 +75,16 @@ parseOrthographyDetails = do
   dts <- parseOrthographyBlocks
   return (fp, dts)
 
+parseOrthographyDetailsDebug :: ParserQQ (FilePath, [OrthographyDetails], [OrthographyDetails], String)
+parseOrthographyDetailsDebug = do
+  lift $ many'_ consumeEndComment
+  fp <- parsePhoneFileName
+  lift $ many'_ consumeEndComment
+  dts  <- parseOrthographyBlocks'
+  ond  <- verifyOrthographies dts
+  dts' <- fillInOrthographies ond dts
+  return (fp, dts', dts, show ond)
+
 
 parseOrthographyBlocks :: ParserQQ [OrthographyDetails]
 parseOrthographyBlocks = do
@@ -83,13 +96,22 @@ parseOrthographyBlocks = do
   -- Fix up the orthographies.
   verifyAndFillInOrthographies blocks
 
+parseOrthographyBlocks' :: ParserQQ [OrthographyDetails]
+parseOrthographyBlocks' = do
+  blocks <- AT.many1 $ do
+    lift $ many'_ consumeEndComment
+    parseOrthographyBlock
+  
+  lift $ many'_ consumeEndComment
+  return blocks
+
 parseOrthographyBlock :: ParserQQ OrthographyDetails
 parseOrthographyBlock = do
   orthNom <- lift $ takeIdentifier isAlpha isFollowId
   lift $ do
     skipHoriz
     _ <- optional $ do
-      AT.char ':'
+      _ <- AT.char ':'
       skipHoriz
     consumeEndComment
   embedQQ1_ (T.unpack orthNom) parseIndentedOptions
@@ -103,6 +125,8 @@ parsePhoneFileName = do
   lift parseKeySep
   lift (parseQuoteString <|> parseUnquoteString)
 
+--------------------------------
+-- Parsing Options
 
 parseIndentedOptions :: ParserQQ1 ()
 parseIndentedOptions = do
@@ -134,6 +158,7 @@ parseOption = AT.choice
 parseInputFile :: ParserQQ1 ()
 parseInputFile = do
   _ <- "input"
+  _ <- optional "-file"
   liftQQ1 parseKeySep
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInputFile str
@@ -141,9 +166,10 @@ parseInputFile = do
 parseOutputFile :: ParserQQ1 ()
 parseOutputFile = do
   _ <- "output"
+  _ <- optional "-file"
   liftQQ1 parseKeySep
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
-  setInputFile str
+  setOutputFile str -- oh wow that was it?
 
 parseCLINames :: ParserQQ1 ()
 parseCLINames = do

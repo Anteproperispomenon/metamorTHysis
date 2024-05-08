@@ -12,6 +12,7 @@ module Metamorth.Interaction.Quasi.Parser.Types
   , liftQQ1
   , embedQQ1
   , embedQQ1_
+  , testQQ1
   -- * Operations
   -- ** For ParserQQ
   , tellError
@@ -140,6 +141,11 @@ embedQQ1_ nom (ParserQQ1 prs) = execStateT prs emptySt
         Nothing
         Nothing
         []
+
+testQQ1 :: ParserQQ1 a -> AT.Parser (a, OrthographyDetails, [ParserMessage])
+testQQ1 prs = do
+  ((rslt,ods), msgs) <- embedQQ (embedQQ1 "TestOrth" prs)
+  return (rslt, ods, msgs)
 
 --------------------------------
 -- Actual functions to use

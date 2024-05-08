@@ -5,10 +5,12 @@
 import Test.TH.Basic
 import Test.TH.TwoOrths qualified as Two
 import Test.TH.Grouped  qualified as G
-import Test.TH.InAndOut as InOut
-import Test.TH.Kwakwala as Kwak
+import Test.TH.InAndOut  as InOut
+import Test.TH.Kwakwala  as Kwak
 import Test.TH.Mongolian as Mongolian
 import Test.TH.Following qualified as Fol
+
+import Test.TH.KwakQuasi qualified as KwakQ
 
 import System.IO
 
@@ -93,6 +95,12 @@ main = do
   putStrLn "Testing Kwak'wala..."
   let kwak1 = TLE.decodeUtf8 <$> Kwak.convertOrthographyBS InGrubb OutUmista kwakText1
   case kwak1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+  putStrLn "Testing Kwak'wala from QuasiQuoter..."
+  let kwak2 = TLE.decodeUtf8 <$> KwakQ.convertOrthographyBS KwakQ.InGrubb KwakQ.OutUmista kwakText1
+  case kwak2 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 

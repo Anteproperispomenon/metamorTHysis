@@ -22,12 +22,14 @@ import Metamorth.Interaction.Quasi
 
 phonemes : "examples/phonemes/kwakwala.thym"
 
-Umista
+Umista  
   input  : "examples/parsing/kwakwala_umista.thyp"
   output : "examples/output/kwakwala_umista.thyo"
   suffix : "_ums"
   parser-name : "umistaParser"
   output-name : "umistaOutput"
+  unify-branches : off
+
 
 Grubb
   input  : "examples/parsing/kwakwala_grubb.thyp"

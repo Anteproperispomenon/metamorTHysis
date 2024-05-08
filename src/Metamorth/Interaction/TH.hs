@@ -257,7 +257,7 @@ createParsers phonemePath parserPaths outputPaths = do
       (Left err)           -> (qReport True err) >> return Nothing
       (Right (txt,epd,fp)) -> do
         addLocalDependentFile' fp
-        Just <$> getParserData pdb txt epd
+        Just <$> getParserData fp pdb txt epd
   
   let parserResultsBoth = map fst parserResultsBoth'
       parserResults     = map fst parserResultsBoth
@@ -353,13 +353,13 @@ readOutputFile (fp, eod) = do
       return $ Right (txt, eod)
 
 
-getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name)), [(Exp, Exp)])
-getParserData pdb txt epd = do
+getParserData :: FilePath -> PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name)), [(Exp, Exp)])
+getParserData fp pdb txt epd = do
   -- here
   let eParseRslt = AT.parseOnly parseOrthographyFile txt
       newNameStr = epdParserName epd
   ((dcs1, spi, funcNom), typeNom) <- case eParseRslt of
-    (Left err) -> fail $ "Couldn't parse input: " ++ err
+    (Left err) -> fail $ "Couldn't parse input file \"" ++ fp ++ "\": " ++ err
     -- (HeaderData, ParserParsingState, [String])
     (Right (hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of

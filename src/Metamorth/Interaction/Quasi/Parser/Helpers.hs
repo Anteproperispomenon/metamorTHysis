@@ -18,6 +18,8 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   , indentedToQQ1
   -- * Fixing up Orthographies
   , verifyAndFillInOrthographies
+  , verifyOrthographies
+  , fillInOrthographies
   ) where
 
 import Data.Functor
@@ -166,6 +168,7 @@ indentedToQQ1 n prs = (liftQQ1 consumeEndComment $> Nothing) <|> do
     _ -> do
       txt <- liftQQ1 $ AC.lookAhead $ AT.takeWhile (\c -> c /= '\n' && c /= '\r')
       lift $ tellError $ "The following line is incorrectly indented:\n\"" ++ (T.unpack txt) ++ "\""
+      liftQQ1 consumeEndComment -- Maybe?
       return Nothing
 
 findIndent :: AT.Parser a -> AT.Parser (Int, a)
@@ -228,7 +231,7 @@ addToSetWM (Just x) st ppr = do
   let ovr = x `melem` st
   if ovr
     then tellWarning (ppr x) $> (minsert x st)
-    else return $ minsert x    st
+    else return $ minsert x st
 
 addToSetEM :: (Ord a) => Maybe a -> MultiSet a -> (a -> String) -> ParserQQ (MultiSet a)
 addToSetEM Nothing st _ = return st
@@ -236,7 +239,7 @@ addToSetEM (Just x) st ppr = do
   let ovr = x `melem` st
   if ovr
     then tellError (ppr x) $> (minsert x st)
-    else return $ minsert x    st
+    else return $ minsert x st
 
 addToSetW :: (Ord a) => a -> MultiSet a -> (a -> String) -> ParserQQ (MultiSet a)
 addToSetW x st ppr = do
@@ -256,8 +259,8 @@ addToSetE :: (Ord a) => a -> MultiSet a -> (a -> String) -> ParserQQ (MultiSet a
 addToSetE x st ppr = do
   let ovr = x `melem` st
   if ovr
-    then tellError (ppr x) $> st
-    else return $ minsert x    st
+    then tellError (ppr x) $> (minsert x st)
+    else return $ minsert x st
 
 addsToSetE :: (Ord a) => [a] -> MultiSet a -> ([a] -> String) -> ParserQQ (MultiSet a)
 addsToSetE xs st ppr = do
@@ -270,7 +273,7 @@ extraSuffixes :: [String]
 extraSuffixes = map (\n -> printf "_prs%03d" n) [(1 :: Int)..]
 
 extraNames :: String -> [String]
-extraNames nom = nom : (map (\n -> printf (nom ++ "%03d") n) [(1 :: Int)..])
+extraNames nom = nom : map (\n -> printf (nom ++ "%03d") n) [(1 :: Int)..]
 
 -- | The automatically generated function names.
 starterFunctions :: MultiSet String
@@ -289,13 +292,13 @@ verifyOrthographies' ods (od:rst) = do
     "The parser specification file \"" ++ fp ++ "\" is used more than once."
   ods2' <- addToSetWM (odOutputFile od) ods2 $ \fp ->
     "The output specification file \"" ++ fp ++ "\" is used more than once."
-  ods3  <- addToSetEM (odInputName  od) (odsFuncName ods) $ \nom ->
+  ods3  <- addToSetWM (odInputName  od) (odsFuncName ods) $ \nom ->
     "The function name \"" ++ nom ++ "\" is used more than once."
-  ods3' <- addToSetEM (odOutputName od) ods3 $ \nom ->
+  ods3' <- addToSetWM (odOutputName od) ods3 $ \nom ->
     "The function name \"" ++ nom ++ "\" is used more than once."
   ods4  <- addToSetWM (odInSuffix od) (odsSuffix ods) $ \suf ->
     "The suffix \"" ++ suf ++ "\" is used more than once."
-  ods4' <- addToSetWM (odInSuffix od) ods4 $ \suf ->
+  ods4' <- addToSetWM (odOutSuffix od) ods4 $ \suf ->
     "The suffix \"" ++ suf ++ "\" is used more than once."
   ods5  <- addsToSetW (odCLINames od) (odsCLINames ods) $ \noms ->
     "The CLI name(s) " ++ quotedList noms ++ "are already in use."
@@ -311,8 +314,8 @@ fillInOrthographies ods dts = fillInOrthographies' (filter (`mnotElem` sfxs) ext
 fillInOrthographies' :: [String] -> OrthographyDetailsSet -> [OrthographyDetails] -> ParserQQ [OrthographyDetails]
 fillInOrthographies' _ _ [] = return []
 fillInOrthographies' (sfx1:sfx2:sfxs) ods (od:rst) = do
-  let inSfx   = maybe sfx1 (\x -> if isDuplicate x sfxMS then sfx1 else x) (odInSuffix od)
-      outSfx  = maybe sfx2 (\x -> if isDuplicate x sfxMS then sfx2 else x) (odInSuffix od)
+  let inSfx   = maybe sfx1 (\x -> if isDuplicate x sfxMS then sfx1 else x) (odInSuffix  od)
+      outSfx  = maybe sfx2 (\x -> if isDuplicate x sfxMS then sfx2 else x) (odOutSuffix od)
 
       inName  = maybe defParseName  (\x -> if isDuplicate x fncMS then defParseName  else x) (odInputName  od)
       outName = maybe defOutputName (\x -> if isDuplicate x fncMS then defOutputName else x) (odOutputName od)
