@@ -1,6 +1,7 @@
 module Metamorth.Interaction.Quasi.Parser
   ( parseOrthographyBlock
   , parseOrthographyBlocks
+  , parseOrthographyDetails
   ) where
 
 import Data.List (intercalate)
@@ -63,6 +64,15 @@ data OrthographyDetails = OrthographyDetails
   } deriving (Show, Eq)
 -}
 
+parseOrthographyDetails :: ParserQQ (FilePath, [OrthographyDetails])
+parseOrthographyDetails = do
+  lift $ many'_ consumeEndComment
+  fp <- parsePhoneFileName
+  lift $ many'_ consumeEndComment
+  dts <- parseOrthographyBlocks
+  return (fp, dts)
+
+
 parseOrthographyBlocks :: ParserQQ [OrthographyDetails]
 parseOrthographyBlocks = do
   blocks <- AT.many1 $ do
@@ -83,6 +93,16 @@ parseOrthographyBlock = do
       skipHoriz
     consumeEndComment
   embedQQ1_ (T.unpack orthNom) parseIndentedOptions
+
+--------------------------------
+-- Parsing the Phoneme file
+
+parsePhoneFileName :: ParserQQ String
+parsePhoneFileName = do
+  _ <- "phonemes" <|> "phoneme set" <|> "phoneme-set" <|> "phones"
+  lift parseKeySep
+  lift (parseQuoteString <|> parseUnquoteString)
+
 
 parseIndentedOptions :: ParserQQ1 ()
 parseIndentedOptions = do

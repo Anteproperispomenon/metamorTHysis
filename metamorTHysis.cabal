@@ -151,6 +151,7 @@ test-suite metamorTHysis-test
       Test.TH.Following
       Test.TH.Grouped
       Test.TH.InAndOut
+      Test.TH.KwakQuasi
       Test.TH.Kwakwala
       Test.TH.Mongolian
       Test.TH.TwoOrths
