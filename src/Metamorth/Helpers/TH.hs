@@ -33,6 +33,7 @@ module Metamorth.Helpers.TH
   , justE
   , retE
   , returnExp
+  , tupleE
   , infixBind
   , infixRBind
   , infixCont
@@ -312,6 +313,9 @@ andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
 
 retE :: Exp
 retE = VarE 'return
+
+tupleE :: [Exp] -> Exp
+tupleE lst = TupE (map Just lst)
 
 -- | A version of `return` that uses `($)` to
 --   get the "right" answer.

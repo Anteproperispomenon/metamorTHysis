@@ -163,6 +163,7 @@ defExtraParserDetails str = ExtraParserDetails'
 data ExtraOutputDetails = ExtraOutputDetails 
   { eodOutputName :: String
   , eodSuffix     :: String
+  , eodExtension  :: String
   , eodOtherNames :: [String]
   } deriving (Show, Eq)
 
@@ -170,6 +171,7 @@ defExtraOutputDetails :: ExtraOutputDetails
 defExtraOutputDetails  = ExtraOutputDetails
   { eodOutputName = "mainOutput"
   , eodSuffix     = "_op1"
+  , eodExtension  = ".op"
   , eodOtherNames = []
   }
 
@@ -307,7 +309,7 @@ createParsers phonemePath parserPaths outputPaths = do
 
   -- Make the map of output names.
   outputOrthNameMap  <- [| M.fromList $(pure $ ListE outputNamers') |]
-  outputOrthNameType <- [t| M.Map String $(pure $ ConT $ fst outOrthTypeDec) |]
+  outputOrthNameType <- [t| M.Map String ($(pure $ ConT $ fst outOrthTypeDec), String) |]
   outputOrthNameName <- newName "outputOrthNameMap"
   let outputOrthNameSign = SigD outputOrthNameName outputOrthNameType
       outputOrthNameDefn = ValD (VarP outputOrthNameName) (NormalB $ outputOrthNameMap) []
@@ -434,8 +436,9 @@ getTheOutput pdb txt eod = do
         "" -> newName $ "OutOrth" ++ newNameSfx
         x  -> newName $ "Out" ++ dataName x
 
-      let otherNames = map strE $ eodOtherNames eod
-          otherPairs = map (,ConE hdrOut) otherNames
+      let otherNames = map strE  $ eodOtherNames eod
+          thisExt    = stringExp $ eodExtension  eod
+          otherPairs = map (,tupleE [ConE hdrOut, thisExt]) otherNames
 
       return ((((hdrOut, userFuncName), (hdrOut, userFuncNameBS)), decs), otherPairs)
   

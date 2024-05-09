@@ -63,6 +63,7 @@ makeTheDecs str = do
               , Just (outFile, ExtraOutputDetails
                  { eodOutputName = fromMaybe "whoopsOut" $ odOutputName od
                  , eodSuffix     = fromMaybe "_xo"       $ odOutSuffix od
+                 , eodExtension  = fromMaybe ".op"       $ odExtension od
                  , eodOtherNames = odCLINames od
                  })
               )
@@ -83,6 +84,7 @@ makeTheDecs str = do
               , Just (outFile, ExtraOutputDetails
                  { eodOutputName = fromMaybe "whoopsOut" $ odOutputName od
                  , eodSuffix     = fromMaybe "_xo"       $ odOutSuffix od
+                 , eodExtension  = fromMaybe ".op"       $ odExtension od
                  , eodOtherNames = odCLINames od
                  })
               )

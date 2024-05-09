@@ -152,6 +152,7 @@ parseOption = AT.choice
   , parseUnifyBranches
   , parseGroupGuards
   , parseCheckStates
+  , parseExtension
   , parseFailedOption
   ]
 
@@ -213,6 +214,14 @@ parseOutputName = do
   liftQQ1 parseKeySep
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setOutputName str
+
+parseExtension :: ParserQQ1 ()
+parseExtension = do
+  _ <- "ext"
+  _ <- optional "ension"
+  liftQQ1 parseKeySep
+  ext <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
+  setExtension ext
 
 parseFailedOption :: ParserQQ1 ()
 parseFailedOption = do

@@ -51,6 +51,7 @@ library
       Metamorth.Helpers.Q
       Metamorth.Helpers.QP
       Metamorth.Helpers.QS
+      Metamorth.Helpers.String
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
       Metamorth.Interaction.Quasi

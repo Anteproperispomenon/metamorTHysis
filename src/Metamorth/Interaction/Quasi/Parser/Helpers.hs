@@ -40,6 +40,7 @@ import Data.Char
 import Data.Maybe
 
 import Metamorth.Helpers.Parsing
+import Metamorth.Helpers.String
 
 import Metamorth.Interaction.Quasi.Parser.Types
 
@@ -223,6 +224,8 @@ data OrthographyDetailsSet = OrthographyDetailsSet
   -- | The strings used to identify this parser
   --   for the CLI interface.
   , odsCLINames   :: MultiSet String
+  -- | The extensions for output files.
+  , odsExtensions :: MultiSet String
   } deriving (Show, Eq)
 
 addToSetWM :: (Ord a) => Maybe a -> MultiSet a -> (a -> String) -> ParserQQ (MultiSet a)
@@ -277,11 +280,17 @@ extraNames nom = nom : map (\n -> printf (nom ++ "%03d") n) [(1 :: Int)..]
 
 -- | The automatically generated function names.
 starterFunctions :: MultiSet String
-starterFunctions = M.fromAscList [("convertOrthography",1),("convertOrthographyBS",1),("convertOrthographyLazy",1)]
+starterFunctions = M.fromAscList 
+  [ ("convertOrthography",1)
+  , ("convertOrthographyBS",1)
+  , ("convertOrthographyLazy",1)
+  , ("inputOrthNameMap",1)
+  , ("outputOrthNameMap",1)
+  ]
 
 verifyOrthographies :: [OrthographyDetails] -> ParserQQ OrthographyDetailsSet
-verifyOrthographies [] = return $ OrthographyDetailsSet M.empty M.empty starterFunctions M.empty M.empty
-verifyOrthographies od = verifyOrthographies' (OrthographyDetailsSet M.empty M.empty starterFunctions M.empty M.empty) od
+verifyOrthographies [] = return $ OrthographyDetailsSet M.empty M.empty starterFunctions M.empty M.empty M.empty
+verifyOrthographies od = verifyOrthographies' (OrthographyDetailsSet M.empty M.empty starterFunctions M.empty M.empty M.empty) od
 
 verifyOrthographies' :: OrthographyDetailsSet -> [OrthographyDetails] -> ParserQQ OrthographyDetailsSet
 verifyOrthographies' ods [] = return ods
@@ -300,10 +309,22 @@ verifyOrthographies' ods (od:rst) = do
     "The suffix \"" ++ suf ++ "\" is used more than once."
   ods4' <- addToSetWM (odOutSuffix od) ods4 $ \suf ->
     "The suffix \"" ++ suf ++ "\" is used more than once."
-  ods5  <- addsToSetW (odCLINames od) (odsCLINames ods) $ \noms ->
+  ods5  <- addsToSetW (map toLowerT $ odCLINames od) (odsCLINames ods) $ \noms ->
     "The CLI name(s) " ++ quotedList noms ++ "are already in use."
-  let ods' = OrthographyDetailsSet ods1 ods2' ods3' ods4' ods5
+  ods6  <- addToSetWM (dotify $ toLowerT <$> odExtension od) (odsExtensions ods) $ \ext ->
+    "The extension \"" ++ ext ++ "\" is used more than once."
+  -- Add the name of the orthography as an option,
+  -- if it's not already listed. 
+  let ods5' = ninsert (toLowerT $ odName od) ods5
+  let ods' = OrthographyDetailsSet ods1 ods2' ods3' ods4' ods5' ods6
   verifyOrthographies' ods' rst
+
+-- | Make an extension start with a @.@.
+dotify :: Maybe String -> Maybe String
+dotify Nothing   = Nothing
+dotify (Just []) = Nothing
+dotify jxt@(Just ('.':_)) = jxt
+dotify (Just ext) = Just ('.':ext)
 
 -- | Fill in missing necessary details.
 fillInOrthographies :: OrthographyDetailsSet -> [OrthographyDetails] -> ParserQQ [OrthographyDetails]
@@ -331,7 +352,8 @@ fillInOrthographies' (sfx1:sfx2:sfxs) ods (od:rst) = do
                 , odOutputName    = Just outName
                 , odInSuffix      = Just inSfx
                 , odOutSuffix     = Just outSfx
-                , odCLINames      = odCLINames od
+                , odCLINames      = map toLowerT $ odCLINames od
+                , odExtension     = dotify $ toLowerT <$> odExtension od
                 }
 
   (newOd:) <$> fillInOrthographies' sfxs ods rst
@@ -401,11 +423,23 @@ melem = M.member
 mnotElem :: (Ord a) => a -> MultiSet a -> Bool
 mnotElem = M.notMember
 
+-- | Insert an element into a `MultiSet`,
+--   increasing the count if it's already
+--   in it.
 minsert :: (Ord a) => a -> MultiSet a -> MultiSet a
 minsert x ms = M.insertWith (+) x 1 ms
+
+-- | Insert without increasing the count.
+--   Note that since `M.insertWith` runs
+--   @op new_value old_value@, we have to
+--   flip it to keep the old value.
+ninsert :: (Ord a) => a -> MultiSet a -> MultiSet a
+ninsert x ms = M.insertWith (flip const) x 1 ms
 
 isDuplicate :: (Ord a) => a -> MultiSet a -> Bool
 isDuplicate x ms
   | (Just n) <- M.lookup x ms
   = n > 1
   | otherwise = False
+
+

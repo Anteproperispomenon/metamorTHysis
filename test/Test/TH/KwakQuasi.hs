@@ -13,6 +13,8 @@ module Test.TH.KwakQuasi
   , convertOrthographyBS
   , InOrth(..)
   , OutOrth(..)
+  , inputOrthNameMap
+  , outputOrthNameMap
   ) where
 
 import Metamorth.Interaction.Quasi
@@ -29,6 +31,7 @@ Umista
   parser-name : "umistaParser"
   output-name : "umistaOutput"
   unify-branches : off
+  extension : .umi
 
 
 Grubb
@@ -37,6 +40,7 @@ Grubb
   suffix : "_grb"
   parser-name : "grubbParser"
   output-name : "grubbOutput"
+  extension : ".grb"
 
 |]
 
