@@ -8,6 +8,10 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   , parseQuoteText
   , parseUnquoteString
   , parseUnquoteText
+  , parseQuoteLineText
+  , parseQuoteLineString
+  , parseUnquoteLineText
+  , parseUnquoteLineString
   -- * Parsing Lists Themselves
   , parseKeySep
   , parseListSep
@@ -98,6 +102,54 @@ parseQuoteText = do
   _ <- AT.char '\"'
   return txt
 
+-- | More complex `T.Text` version that treats 
+--   backslashes differently.
+--   Note that this **DOES** work on quotations
+--   that have linebreaks in them.
+parseQuoteLineText :: AT.Parser T.Text
+parseQuoteLineText = do
+  _ <- AT.char '\"'
+  parseQuoteLineText'
+
+parseQuoteLineText' :: AT.Parser T.Text
+parseQuoteLineText' = do
+  txt <- AT.takeWhile (\x -> x /= '\\' && x /= '\n' && x /= '\r' && x /= '\"')
+  z <- AT.peekChar
+  case z of
+    Nothing -> return txt
+    (Just '\n') -> return txt
+    (Just '\r') -> return txt
+    (Just '\"') -> do
+      _ <- AT.anyChar
+      return txt
+    (Just '\\') -> do
+      _ <- AT.anyChar
+      w <- AT.peekChar
+      case w of
+        Nothing -> return (txt `T.snoc` '\\')
+        (Just 'n') -> do
+          c <- AT.anyChar
+          ((txt `T.snoc` c) <>) <$> parseQuoteLineText'
+        (Just '\\') -> do
+          c <- AT.anyChar
+          ((txt `T.snoc` c) <>) <$> parseQuoteLineText'
+        (Just '#') -> do
+          c <- AT.anyChar
+          ((txt `T.snoc` c) <>) <$> parseQuoteLineText'
+        (Just '-') -> do
+          c <- AT.anyChar
+          ((txt `T.snoc` c) <>) <$> parseQuoteLineText'
+        (Just _) -> do
+          ((txt `T.snoc` '\\') <>) <$> parseQuoteLineText'
+    (Just _) -> return txt
+          
+-- | More complex `String` version that treats 
+--   backslashes differently.
+--   Note that this **DOES** work on quotations
+--   that have linebreaks in them.
+parseQuoteLineString :: AT.Parser String
+parseQuoteLineString = T.unpack <$> parseQuoteLineText
+
 -- | Parsing a String that doesn't have spaces,
 --   separators, or quotation marks.
 parseUnquoteString :: AT.Parser String
@@ -107,6 +159,56 @@ parseUnquoteString = T.unpack <$> parseUnquoteText
 --   separators, or quotation marks.
 parseUnquoteText :: AT.Parser T.Text
 parseUnquoteText = AT.takeWhile (\x -> not (isSpace x) && x /= '\"' && x /= ',' && x /= ';' && x /= '|')
+
+-- | Parsing unquoted text for a description. This
+--   is a bit more complicated, since we need to keep
+--   backslashes in mind.
+parseUnquoteLineText :: AT.Parser T.Text
+parseUnquoteLineText = T.dropWhileEnd isSpace <$> parseUnquoteLineText'
+
+-- So that we can run an operation on the
+-- resulting `T.Text` only once. 
+parseUnquoteLineText' :: AT.Parser T.Text
+parseUnquoteLineText' = do
+  txt <- AT.takeWhile (\x -> x /= '#' && x /= '\\' && x /= '-' && x /= '\n' && x /= '\r')
+  z <- AT.peekChar
+  case z of
+    Nothing     -> return txt
+    (Just '#' ) -> return txt
+    (Just '\n') -> return txt
+    (Just '\r') -> return txt
+    (Just '\\') -> do
+      _ <- AT.anyChar  -- consume the backslash
+      x <- AT.peekChar
+      case x of
+        Nothing -> return (txt `T.snoc` '\\')
+        (Just 'n') -> do 
+          _ <- AT.anyChar
+          ((txt `T.snoc` '\n') <>) <$> parseUnquoteLineText'
+        (Just '#') -> do
+          c <- AT.anyChar
+          ((txt `T.snoc` c) <>) <$> parseUnquoteLineText'
+        (Just '\\') -> do
+          c <- AT.anyChar
+          ((txt `T.snoc` c) <>) <$> parseUnquoteLineText'
+        -- Allow any number of hyphens.
+        (Just '-') -> do
+          hyp <- AT.takeWhile (== '-')
+          ((txt <> hyp) <>) <$> parseUnquoteLineText'
+        (Just _) -> do
+          -- Just proceed with the next character as normal.
+          ((txt `T.snoc` '\\') <>) <$> parseUnquoteLineText'
+    (Just '-') -> do
+      c <- AC.lookAhead (optional "--")
+      case c of
+        Nothing -> do
+          hyp <- AT.anyChar
+          ((txt `T.snoc` hyp) <>) <$> parseUnquoteLineText'
+        (Just _) -> return txt
+    _ -> return txt
+
+parseUnquoteLineString :: AT.Parser String
+parseUnquoteLineString = T.unpack <$> parseUnquoteLineText
 
 -- | Parse the separator between a key and its value.
 --   Can be either @':'@ or @'='@.
@@ -286,6 +388,7 @@ starterFunctions = M.fromAscList
   , ("convertOrthographyLazy",1)
   , ("inputOrthNameMap",1)
   , ("outputOrthNameMap",1)
+  , ("languageDetails",1)
   ]
 
 verifyOrthographies :: [OrthographyDetails] -> ParserQQ OrthographyDetailsSet
@@ -354,6 +457,7 @@ fillInOrthographies' (sfx1:sfx2:sfxs) ods (od:rst) = do
                 , odOutSuffix     = Just outSfx
                 , odCLINames      = map toLowerT $ odCLINames od
                 , odExtension     = dotify $ toLowerT <$> odExtension od
+                , odDescription   = odDescription od
                 }
 
   (newOd:) <$> fillInOrthographies' sfxs ods rst

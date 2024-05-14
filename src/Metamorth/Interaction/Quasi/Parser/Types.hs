@@ -32,6 +32,7 @@ module Metamorth.Interaction.Quasi.Parser.Types
   , setInSuffix
   , setOutSuffix
   , setExtension
+  , setDescription
   , addCLIName
   , addCLINames
   , getOrthName
@@ -79,6 +80,8 @@ data OrthographyDetails = OrthographyDetails
   -- | The extension used when outputting files
   --   of this orthography.
   , odExtension     :: Maybe String
+  -- | A brief description of the orthography.
+  , odDescription   :: Maybe String
   } deriving (Show, Eq)
 
 newtype ParserQQ' m a = ParserQQ { unpackParserQQ :: WriterT [ParserMessage] m a }
@@ -127,6 +130,7 @@ embedQQ1 nom (ParserQQ1 prs) = runStateT prs emptySt
         Nothing
         []
         Nothing
+        Nothing
 
 -- | Embed a `ParserQQ1` into a plain `ParserQQ`. This one
 --   ignores the return value and just returns the state.
@@ -146,6 +150,7 @@ embedQQ1_ nom (ParserQQ1 prs) = execStateT prs emptySt
         Nothing
         Nothing
         []
+        Nothing
         Nothing
 
 testQQ1 :: ParserQQ1 a -> AT.Parser (a, OrthographyDetails, [ParserMessage])
@@ -259,6 +264,14 @@ setExtension ext = ParserQQ1 $ do
   when (isJust z) $ do
     lift $ tellWarning "Setting Extension more than once."
   modify' $ \x -> x {odExtension = Just ext}
+
+setDescription :: String -> ParserQQ1 ()
+setDescription dsc = ParserQQ1 $ do
+  z <- gets odDescription
+  when (isJust z) $ do
+    lift $ tellWarning "Setting Extension more than once."
+  modify' $ \x -> x {odDescription = Just dsc}
+
 
 getOrthName :: ParserQQ1 String
 getOrthName = ParserQQ1 $ gets odName

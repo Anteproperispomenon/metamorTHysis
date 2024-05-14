@@ -34,6 +34,7 @@ library
       Metamorth.ForOutput.Monad.Matcher.Stateful
       Metamorth.ForOutput.Monad.Matcher.Stateful.Result
       Metamorth.ForOutput.Monad.Matcher.Undo
+      Metamorth.ForOutput.Quasi.Types
       Metamorth.Helpers.Applicative
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either

@@ -67,23 +67,25 @@ data OrthographyDetails = OrthographyDetails
   } deriving (Show, Eq)
 -}
 
-parseOrthographyDetails :: ParserQQ (FilePath, [OrthographyDetails])
+parseOrthographyDetails :: ParserQQ (FilePath, Maybe String, [OrthographyDetails])
 parseOrthographyDetails = do
-  lift $ many'_ consumeEndComment
-  fp <- parsePhoneFileName
-  lift $ many'_ consumeEndComment
+  -- lift $ many'_ consumeEndComment
+  -- fp <- parsePhoneFileName
+  -- lift $ many'_ consumeEndComment
+  (fp, mLang) <- parseHeader
   dts <- parseOrthographyBlocks
-  return (fp, dts)
+  return (fp, mLang, dts)
 
-parseOrthographyDetailsDebug :: ParserQQ (FilePath, [OrthographyDetails], [OrthographyDetails], String)
+parseOrthographyDetailsDebug :: ParserQQ (FilePath, Maybe String, [OrthographyDetails], [OrthographyDetails], String)
 parseOrthographyDetailsDebug = do
-  lift $ many'_ consumeEndComment
-  fp <- parsePhoneFileName
-  lift $ many'_ consumeEndComment
+  -- lift $ many'_ consumeEndComment
+  -- fp <- parsePhoneFileName
+  -- lift $ many'_ consumeEndComment
+  (fp, mLang) <- parseHeader
   dts  <- parseOrthographyBlocks'
   ond  <- verifyOrthographies dts
   dts' <- fillInOrthographies ond dts
-  return (fp, dts', dts, show ond)
+  return (fp, mLang, dts', dts, show ond)
 
 
 parseOrthographyBlocks :: ParserQQ [OrthographyDetails]
@@ -125,6 +127,31 @@ parsePhoneFileName = do
   lift parseKeySep
   lift (parseQuoteString <|> parseUnquoteString)
 
+parseLanguageName :: ParserQQ String
+parseLanguageName = do
+  _ <- "lang"
+  _ <- optional "uage"
+  lift parseKeySep
+  lift (parseQuoteString <|> parseUnquoteString)
+
+parseHeader :: ParserQQ (String, Maybe String)
+parseHeader = do
+  lift $ many'_ consumeEndComment
+  opt1 <- (Right <$> parsePhoneFileName) <|> (Left <$> parseLanguageName)
+  lift $ many'_ consumeEndComment
+  case opt1 of
+    (Right fp) -> do
+      lang <- optional $ do
+        lng <- parseLanguageName
+        lift $ many'_ consumeEndComment
+        return lng
+      return (fp, lang)
+    (Left lang) -> do
+      fp <- parsePhoneFileName
+      lift $ many'_ consumeEndComment
+      return (fp, Just lang)
+
+
 --------------------------------
 -- Parsing Options
 
@@ -153,6 +180,8 @@ parseOption = AT.choice
   , parseGroupGuards
   , parseCheckStates
   , parseExtension
+  , parseDescription
+  -- Must be the final option.
   , parseFailedOption
   ]
 
@@ -222,6 +251,13 @@ parseExtension = do
   liftQQ1 parseKeySep
   ext <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setExtension ext
+
+parseDescription :: ParserQQ1 ()
+parseDescription = do
+  _ <- "dsc" <|> "description"
+  liftQQ1 parseKeySep
+  dsc <- liftQQ1 (parseQuoteLineString <|> parseUnquoteLineString)
+  setDescription dsc
 
 parseFailedOption :: ParserQQ1 ()
 parseFailedOption = do

@@ -32,6 +32,7 @@ Umista
   output-name : "umistaOutput"
   unify-branches : off
   extension : .umi
+  description : "Orthography developed by the U'mista Cultural Centre."
 
 
 Grubb
