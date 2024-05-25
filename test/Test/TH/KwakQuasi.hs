@@ -21,6 +21,7 @@ import Metamorth.Interaction.Quasi
 
 [metamorth|
 
+language : "Kwak'wala"
 
 phonemes : "examples/phonemes/kwakwala.thym"
 

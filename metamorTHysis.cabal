@@ -89,6 +89,7 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase
@@ -120,6 +121,7 @@ executable metamorTHysis-exe
   hs-source-dirs:
       app
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase
@@ -163,6 +165,7 @@ test-suite metamorTHysis-test
   hs-source-dirs:
       test
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase

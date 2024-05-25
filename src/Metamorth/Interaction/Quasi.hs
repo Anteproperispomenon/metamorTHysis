@@ -116,7 +116,7 @@ makeTheDecs str = do
       -- qDebugNoticeUnflushed $ "Raw Orthography Set: " ++ ondDebug
       -- qDebugNotice $ "Orthography Details: " ++ show ods
 
-      extraDeets <- [d| languageDetails :: ExtraLanguageDetails
+      extraDeets <- [d| languageDetails :: (Maybe String, M.Map String String) -- ExtraLanguageDetails
                         languageDetails = ExtraLanguageDetails mLang descMap |]
 
       finalDecs <- declareFullParsers pfp irslts orslts

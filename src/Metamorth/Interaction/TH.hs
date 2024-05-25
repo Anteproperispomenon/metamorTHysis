@@ -452,11 +452,14 @@ makeOutputOrthType :: (Quote q) => M.Map Name Name -> q (Name, Dec)
 makeOutputOrthType mps = do
   mainTypeName <- newName "OutOrth"
   let funcs = map (,[]) $ M.keys mps
-  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC])
+  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC, enumC, boundC, liftC])
   where
-    ordC  = ConT ''Ord
-    eqC   = ConT ''Eq
-    showC = ConT ''Show
+    ordC   = ConT ''Ord
+    eqC    = ConT ''Eq
+    showC  = ConT ''Show
+    enumC  = ConT ''Enum
+    boundC = ConT ''Bounded
+    liftC  = ConT ''Lift
 
 -- | Create the data type that will allow you
 --   to select the input orthography.
@@ -464,11 +467,14 @@ makeInputOrthType :: (Quote q) => M.Map Name Name -> q (Name, Dec)
 makeInputOrthType mps = do
   mainTypeName <- newName "InOrth"
   let funcs = map (,[]) $ M.keys mps
-  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC])
+  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC, enumC, boundC, liftC])
   where
-    ordC  = ConT ''Ord
-    eqC   = ConT ''Eq
-    showC = ConT ''Show
+    ordC   = ConT ''Ord
+    eqC    = ConT ''Eq
+    showC  = ConT ''Show
+    enumC  = ConT ''Enum
+    boundC = ConT ''Bounded
+    liftC  = ConT ''Lift
 
 
 -- | Make the full function that can easily
