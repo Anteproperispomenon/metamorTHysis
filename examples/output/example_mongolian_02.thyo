@@ -1,0 +1,60 @@
+
+name : cyrillic
+
+default case : /at
+
+====
+
+state position : front back
+
+====
+
+
+# Vowels
+
+i : и
+i i : и й
+
+(a front) : э
+(a back)  : а
+
+# o
+(o front) : ө
+(o back)  : о
+
+# u
+(u front) : ү
+(u back)  : у
+
+# Consonants
+
+m : м
+n : н
+p : п
+b : б
+t : т
+d : д
+g : г
+k : к
+l : л
+r : р
+ts : з
+# ch : ж
+ch : ч
+sh : ш
+s : с
+x : х
+gh : ж
+#gh : g h
+#gh : ĝ
+w : в
+f : ф
+
+# Other
+
+# Since compound words can "reset" the vowel
+# harmony, we need a way to indicate the
+# internal boundaries of compound words.
+# Also: need to escape '-' since it's a 
+# special character.
+sep : \- 

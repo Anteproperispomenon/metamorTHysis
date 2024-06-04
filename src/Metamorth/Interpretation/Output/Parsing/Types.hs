@@ -41,6 +41,7 @@ import Metamorth.Helpers.Maybe
 import Metamorth.Helpers.Char
 
 import Metamorth.Interpretation.Output.Types
+import Metamorth.Interpretation.Output.Types.Alt
 
 --------------------------------
 -- Types for Parsing
@@ -106,7 +107,9 @@ data OutputParsingState = OutputParsingState
   , opsDefaultCasing   :: OutputCase
   -- | The main trie to be used for determining
   --   output.
-  , opsOutputTrie      :: TM.TMap PhonePattern (M.Map OutputCase OutputPattern)
+  , opsOutputTrie      :: TM.TMap PhonePatternAlt (S.Set PhoneResult)
+  -- Old version
+  -- , opsOutputTrie      :: TM.TMap PhonePattern (M.Map OutputCase OutputPattern)
   } deriving (Show, Eq)
 
 -- | Use this when running a function that might
@@ -257,7 +260,7 @@ data CharPatternRaw
 
 getPlainChar :: CharPatternRaw -> Maybe CharPatternItem
 getPlainChar (PlainCharR c)
-  | isCasable c = Just $ CasableChar c
+  | isCasable c = Just $ CasableChar   c
   | otherwise   = Just $ UncasableChar c
 getPlainChar _ = Nothing
 

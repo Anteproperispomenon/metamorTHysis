@@ -8,8 +8,8 @@ Simple Error type that has three levels
 of message: plain messages, warnings,
 and errors. 
 
-`Metamorth.Helpers.Error.RWS` and 
-`Metamorth.Helpers.Error.Writer` have
+"Metamorth.Helpers.Error.RWS" and 
+"Metamorth.Helpers.Error.Writer" have
 helpers when dealing with those specific
 Monad transformers.
 

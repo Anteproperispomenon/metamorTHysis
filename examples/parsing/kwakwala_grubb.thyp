@@ -1,0 +1,90 @@
+orthography : grubb
+phoneme set : kwakwala
+
+====
+
+# Apostrophes
+class apost : ' ` U+0313 U+0315
+
+====
+
+m  : m
+m' : *apost m
+n  : n
+n' : *apost n
+
+l  : l
+l' : *apost l
+lh : l h
+
+j  : y
+j' : *apost y
+
+w  : w
+w' : *apost w
+
+p  : p
+p' : p *apost
+b  : b
+
+t   : t
+ts  : t s
+ts  : c
+ts' : t *apost s
+ts' : c *apost
+tl  : t l
+tl' : t *apost l
+
+d   : d
+dl  : d l
+dz  : d z
+dz  : z
+s   : s
+
+k   : k
+k'  : k *apost
+kw  : k w
+kw' : k *apost w
+kw  : k w *apost
+
+q   : q
+q'  : q *apost
+q   : k h
+q'  : k *apost h
+q'  : k h *apost
+qw  : q w
+qw' : q *apost w
+qw' : q w *apost
+qw' : k *apost h w
+qw' : k h *apost w
+qw' : k h w *apost
+
+g   : g
+gw  : g w
+gh  : g h
+ghw : g h w
+
+x   : x
+xw  : x w
+xh  : x h
+xhw : x h w
+
+h   : j
+h   : h
+glt : *apost
+
+a     : a
+e     : e h
+i     : i
+o     : o
+u     : y
+schwa : e
+
+====
+
+glt a     : ^ a
+glt e     : ^ e h
+glt i     : ^ i
+glt o     : ^ o
+glt u     : ^ y
+glt schwa : ^ e

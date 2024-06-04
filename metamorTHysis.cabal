@@ -26,12 +26,16 @@ source-repository head
 library
   exposed-modules:
       Metamorth.ForOutput.Char
+      Metamorth.ForOutput.Functor.Cased
+      Metamorth.ForOutput.Functor.Cased3
       Metamorth.ForOutput.Monad.EitherFail
       Metamorth.ForOutput.Monad.Matcher
       Metamorth.ForOutput.Monad.Matcher.Result
       Metamorth.ForOutput.Monad.Matcher.Stateful
       Metamorth.ForOutput.Monad.Matcher.Stateful.Result
       Metamorth.ForOutput.Monad.Matcher.Undo
+      Metamorth.ForOutput.Quasi.Types
+      Metamorth.Helpers.Applicative
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
       Metamorth.Helpers.Error
@@ -42,20 +46,32 @@ library
       Metamorth.Helpers.Map
       Metamorth.Helpers.Maybe
       Metamorth.Helpers.Misc
+      Metamorth.Helpers.Monad
       Metamorth.Helpers.Ord
       Metamorth.Helpers.Parsing
       Metamorth.Helpers.Q
       Metamorth.Helpers.QP
       Metamorth.Helpers.QS
+      Metamorth.Helpers.String
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
+      Metamorth.Interaction.Quasi
+      Metamorth.Interaction.Quasi.Parser
+      Metamorth.Interaction.Quasi.Parser.Helpers
+      Metamorth.Interaction.Quasi.Parser.Types
       Metamorth.Interaction.TH
       Metamorth.Interpretation.Output.Parsing
       Metamorth.Interpretation.Output.Parsing.Trie
       Metamorth.Interpretation.Output.Parsing.Types
       Metamorth.Interpretation.Output.TH
       Metamorth.Interpretation.Output.TH.Constructors
+      Metamorth.Interpretation.Output.TH.Misc
+      Metamorth.Interpretation.Output.TH.Trie
+      Metamorth.Interpretation.Output.TH.Trie.Branches
+      Metamorth.Interpretation.Output.TH.Types
       Metamorth.Interpretation.Output.Types
+      Metamorth.Interpretation.Output.Types.Alt
+      Metamorth.Interpretation.Output.Types.Interact
       Metamorth.Interpretation.Parser.Parsing
       Metamorth.Interpretation.Parser.Parsing.Trie
       Metamorth.Interpretation.Parser.Parsing.Types
@@ -73,6 +89,7 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase
@@ -104,6 +121,7 @@ executable metamorTHysis-exe
   hs-source-dirs:
       app
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase
@@ -134,7 +152,12 @@ test-suite metamorTHysis-test
       Test.Monad.Matcher
       Test.Monad.Matcher2
       Test.TH.Basic
+      Test.TH.Following
       Test.TH.Grouped
+      Test.TH.InAndOut
+      Test.TH.KwakQuasi
+      Test.TH.Kwakwala
+      Test.TH.Mongolian
       Test.TH.TwoOrths
       Paths_metamorTHysis
   autogen-modules:
@@ -142,6 +165,7 @@ test-suite metamorTHysis-test
   hs-source-dirs:
       test
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase

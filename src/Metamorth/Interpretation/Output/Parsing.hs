@@ -2,9 +2,15 @@ module Metamorth.Interpretation.Output.Parsing
   -- * Main Parsers
   ( parseOutputFile
   -- * Other Parsers
+  , parsePhonemeList
   , parsePhonemeListS
   -- * Testing
   , testOutputFile
+  , testOutputParser
+  -- * Debug
+  , parsePhonemePatMulti
+  , parsePhonemePatMulti'
+  , parsePatternSection
   ) where
 
 import Control.Applicative
@@ -15,6 +21,7 @@ import Control.Monad.Trans.Class
 import Control.Monad.Trans.RWS.CPS
 
 import Data.Functor
+import Data.Maybe
 
 import Data.Attoparsec.Text qualified as AT
 
@@ -25,6 +32,7 @@ import Data.Char (ord, chr, isSpace, isLower, isAlpha)
 import Data.Text qualified as T
 import Data.Text (Text)
 
+import Metamorth.Helpers.Applicative 
 import Metamorth.Helpers.Char
 import Metamorth.Helpers.List
 import Metamorth.Helpers.Parsing
@@ -34,12 +42,13 @@ import Metamorth.Helpers.Error.RWS
 import Metamorth.Interpretation.Output.Parsing.Trie
 import Metamorth.Interpretation.Output.Parsing.Types
 import Metamorth.Interpretation.Output.Types
+import Metamorth.Interpretation.Output.Types.Alt
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
 -- A lot of the code here is taken from
--- `Metamorth.Interpretation.Parser.Parsing`.
+-- "Metamorth.Interpretation.Parser.Parsing".
 
 ----------------------------------------------------------------
 -- Main Parser
@@ -47,8 +56,12 @@ import Data.Set        qualified as S
 
 -- | A quick tester for the output file, that just
 --   gives empty sets for the various dictionaries.
-testOutputFile :: AT.Parser (OutputParserOutput, [ParserMessage])
+testOutputFile :: AT.Parser (OutputParserOutput, OutputHeader, [ParserMessage])
 testOutputFile = parseOutputFile S.empty M.empty M.empty S.empty
+
+testOutputParser :: OutputParser x -> T.Text -> Either String (OutputParsingState)
+testOutputParser prsr txt = tup2'3 <$> AT.parseOnly (embedOutputParser S.empty M.empty M.empty S.empty prsr) txt
+  where tup2'3 (_,y,_) = y
 
 -- | The main runner of the output file.
 parseOutputFile 
@@ -63,9 +76,9 @@ parseOutputFile
   -- | A `S.Set` of the phonemes used for this
   --   output.
   -> S.Set String
-  -> AT.Parser (OutputParserOutput, [ParserMessage])
+  -> AT.Parser (OutputParserOutput, OutputHeader, [ParserMessage])
 parseOutputFile grps trts asps phones = do
-  (_hdr, cas) <- parseHeaderSection
+  (hdr, cas) <- parseHeaderSection
   (_, ops, msgs) <- embedOutputParser grps trts asps phones $ do
     -- Fill out actions here.
     -- (hdr, cas) <- parseHeaderSection
@@ -80,7 +93,7 @@ parseOutputFile grps trts asps phones = do
         , opoAspectDictionary = opsAspectDictionary ops
         , opoOutputTrie = opsOutputTrie ops
         }
-  return (opo, msgs)
+  return (opo, hdr, msgs)
 
 ----------------------------------------------------------------
 -- Section Parsers
@@ -89,20 +102,42 @@ parseOutputFile grps trts asps phones = do
 parseHeaderSection :: AT.Parser (OutputHeader, OutputCase)
 parseHeaderSection = do
   many_ parseEndComment
-  casity <- AT.option OCNull $ do
-    _ <- "default" 
-    skipHoriz1
-    _ <- "case"
-    skipHoriz
-    _ <- (AT.char ':') <|> (AT.char '=')
-    skipHoriz
-    cas <- getCaseType
-    some_ parseEndComment
-    return cas
+  name1 <- optional (parseHeaderName <* (some_ parseEndComment))
+  casity <- AT.option OCNull parseDefaultCase
+  some_ parseEndComment
+  name2 <- case name1 of
+    Nothing  -> optional (parseHeaderName <* (some_ parseEndComment))
+    (Just x) -> return (Just x)
+  
+  let name3 = fromMaybe "" name2
+  
   _ <- ("====" <?> "Header: Separator1")
   _ <- ((AT.takeWhile (== '=')) <?> "Header: Separator2")
   parseEndComment
-  return ((), casity)
+  let finalHeader = OutputHeader {ohOrthName = name3}
+  return (finalHeader, casity)
+
+parseDefaultCase :: AT.Parser OutputCase
+parseDefaultCase = do
+  _ <- "default" 
+  skipHoriz1
+  _ <- "case"
+  skipHoriz
+  _ <- (AT.char ':') <|> (AT.char '=')
+  skipHoriz
+  cas <- getCaseType
+  return cas
+
+parseHeaderName :: AT.Parser String
+parseHeaderName = do
+  skipHoriz
+  _ <- "name"
+  skipHoriz
+  (AT.char ':') <|> (AT.char '=') <|> (AT.char ' ') <|> (AT.char '\t')
+  skipHoriz
+  -- hmm...s
+  T.unpack <$> takeIdentifier isAlpha isFollowId
+
 
 -- | Parse the class declaration section.
 --   This also includes states.
@@ -121,9 +156,10 @@ parseStateDecSection = do
 parsePatternSection :: OutputParser ()
 parsePatternSection = do
   many_ $ lift parseEndComment
-  some_ $ do
+  AT.many1' $ do
     parsePhonemePatMulti
-    AT.many1 $ lift parseEndComment
+    AT.many1' $ lift parseEndComment
+  return ()
   -- hmm...
 
 ----------------------------------------------------------------
@@ -418,10 +454,10 @@ getCaseType = AT.peekChar' >>= \case
   _ -> fail "Not a case type."
     
 -- | Simplified version of @f <*> (pure x)@.
-(<%>) :: Applicative f => f (a -> b) -> a -> f b    
-f <%> x = f <*> (pure x)
-
-infixl 4 <%>
+-- (<%>) :: Applicative f => f (a -> b) -> a -> f b    
+-- f <%> x = f <*> (pure x)
+-- 
+-- infixl 4 <%>
 
 -- Simple helper for `getCaseType`.
 getCaseType' :: AT.Parser (CaseSource -> OutputCase)
@@ -515,45 +551,80 @@ parseNextCheckS :: OutputParser (Maybe PhonePatternRaw)
 parseNextCheckS = do
   (prop, mval) <- lift parseNextCheck
   dicts <- get
+  -- NOTE: May want to change the order of the
+  -- error messages, in case the user is explicitly
+  -- NOT importing a group/aspect/trait that overlaps
+  -- with another value. Unlikely, but possible.
   case mval of
     -- If nothing, then following chances,
     -- from most likely to least likely:
     -- Group, Trait, Phoneme, Aspect.
     Nothing -> if (prop `elem` (opsGroupDictionary dicts))
       then return $ Just $ PhoneFollowedByGroupR prop
-      else case (M.lookup prop (opsTraitDictionary dicts)) of
-        -- Works with either type of trait.
-        (Just _) -> return $ Just $ PhoneFollowedByTraitR prop
-        Nothing -> if (prop `elem` (opsPhoneDictionary dicts))
-          then return $ Just $ PhoneFollowedByPhoneR prop
-          else case (M.lookup prop (opsAspectDictionary dicts)) of
-            (Just _) -> return $ Just $ PhoneFollowedByAspectR prop
-            Nothing  -> do
-              phoneName <- ask
-              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
+      else if (prop `elem` (opsGroupDictionary' dicts))
+        then do 
+          tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
+          return Nothing
+        else case (M.lookup prop (opsTraitDictionary dicts)) of
+          -- Works with either type of trait.
+          (Just _) -> return $ Just $ PhoneFollowedByTraitR prop
+          Nothing -> case (M.lookup prop (opsTraitDictionary' dicts)) of
+            (Just _) -> do
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
               return Nothing
-    -- There IS a second value here.
-    (Just val) -> case (M.lookup prop (opsTraitDictionary dicts)) of
+            Nothing -> if (prop `elem` (opsPhoneDictionary dicts))
+              then return $ Just $ PhoneFollowedByPhoneR prop
+              else case (M.lookup prop (opsAspectDictionary dicts)) of
+                (Just _) -> return $ Just $ PhoneFollowedByAspectR prop
+                Nothing  -> case (M.lookup prop (opsAspectDictionary' dicts)) of
+                  (Just _) -> do
+                    tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+                    return Nothing
+                  Nothing -> do
+                    phoneName <- ask
+                    tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
+                    return Nothing
+    -- There IS a second value here in this case.
+    -- Therefore it should only be a property
+    -- that can take on a second value, e.g. a
+    -- trait or an aspect.
+    (Just val) -> case (M.lookup prop (opsTraitDictionary' dicts)) of
       (Just (Just vs)) -> if (val `elem` vs)
-        then return $ Just $ PhoneFollowedByTraitAtR prop val
+        then if (isJust ((M.lookup prop (opsTraitDictionary dicts)))) 
+          then return $ Just $ PhoneFollowedByTraitAtR prop val
+          else do
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v1);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
         else do
           phoneName <- ask
+          when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v2);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
           tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
           return Nothing
       (Just _) -> do
           phoneName <- ask
+          when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v3);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
           tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
           return Nothing
-      Nothing -> case (M.lookup prop (opsAspectDictionary dicts)) of
+      Nothing -> case (M.lookup prop (opsAspectDictionary' dicts)) of
         (Just vs) -> if (val `elem` vs)
-          then return $ Just $ PhoneFollowedByAspectAtR prop val
+          then if (isJust ((M.lookup prop (opsAspectDictionary dicts))))
+            then return $ Just $ PhoneFollowedByAspectAtR prop val
+            else do
+              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
           else do
             phoneName <- ask
+            when (prop `notElem` (M.keysSet $ opsAspectDictionary dicts)) $
+              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
             tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for aspect \"" ++ prop ++ "\"."
             return Nothing
-        Nothing -> if (prop `elem` (opsGroupDictionary dicts))
+        Nothing -> if (prop `elem` (opsGroupDictionary' dicts))
           then do
             phoneName <- ask
+            when (prop `notElem` (opsGroupDictionary dicts)) $
+              tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
             tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a group: \">" ++ prop ++ "=" ++ val ++ "\"."
             return Nothing
           else if (prop `elem` (opsPhoneDictionary dicts))
@@ -679,6 +750,7 @@ mkList fx = (:[]) <$> fx
 parsePhonemePatMulti :: OutputParser ()
 parsePhonemePatMulti = do
   pr <- parsePhonemePatMulti'
+  -- return ()
   addOutputPattern pr
 
 parsePhonemePatMulti' :: OutputParser ([PhonePattern], OutputPattern)
@@ -708,7 +780,7 @@ parsePhonemePatMulti' = do
     -- return ()
     
     sdict <- gets opsStateDictionary
-    let ePhonePats = validatePhonePattern sdict (NE.toList phones)
+    let  ePhonePats = validatePhonePattern sdict (NE.toList phones)
     case ePhonePats of
       (Left  errs) -> do 
         mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]

@@ -28,7 +28,7 @@ matchThingy BC = MatchContinue matchThingy2
 matchThingy CD = MatchContinue matchThingy3
 matchThingy DE = myReturn "de"
 matchThingy EF = myReturn "ef"
-matchThingy FG = MatchOptions (myReturn' "fg") matchThingy4
+matchThingy FG = MatchOptions [myReturn' "fg"] matchThingy4
 matchThingy GH = myReturn "gh"
 
 matchThingy2 :: Example -> MatchResult Maybe Example () String
@@ -50,25 +50,25 @@ matchThingy3 FG = myReturn "exampleF"
 matchThingy3 GH = myReturn "exampleG"
 
 matchThingy4 :: Example -> MatchResult Maybe Example () String
-matchThingy4 AB = MatchFail $ return "nope"
+matchThingy4 AB = MatchFail "nope"
 matchThingy4 BC = MatchContinue matchThingy2
 matchThingy4 CD = myReturn "fgcd"
 matchThingy4 DE = MatchContinue matchThingy5
 matchThingy4 EF = myReturn "efg"
 matchThingy4 FG = myReturn "foggy"
-matchThingy4 GH = MatchFail $ return "nope"
+matchThingy4 GH = MatchFail "nope"
 
 matchThingy5 :: Example -> MatchResult Maybe Example () String
-matchThingy5 AB = MatchFail $ return "nope"
-matchThingy5 BC = MatchFail $ return "nope"
+matchThingy5 AB = MatchFail "nope"
+matchThingy5 BC = MatchFail "nope"
 matchThingy5 CD = myReturn "cdefg"
 matchThingy5 DE = myReturn "okay now what"
-matchThingy5 EF = MatchFail $ return "nope"
-matchThingy5 FG = MatchFail $ return "nope"
-matchThingy5 GH = MatchFail $ return "nope"
+matchThingy5 EF = MatchFail "nope"
+matchThingy5 FG = MatchFail "nope"
+matchThingy5 GH = MatchFail "nope"
 
 myReturn :: String -> MatchResult Maybe Example () String
-myReturn str = MatchReturn $ PlainReturn $ \_ -> Just str
+myReturn str = MatchReturn [PlainReturn $ \_ -> Just str]
 
 myReturn' :: String -> MatchReturn Maybe Example () String
 myReturn' str = PlainReturn $ \_ -> Just str

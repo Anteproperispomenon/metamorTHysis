@@ -23,7 +23,9 @@ module Metamorth.Helpers.Trie
   , unifyPaths
   , annotateTrie
   , getSubTries
+  , getSubTriesOld
   , deleteBranch
+  , deleteBranches
   , getFirstSteps
   , matchPred
   , mapBranches
@@ -101,15 +103,15 @@ getSubTriesX tm
 
 -- | Get a list of the sub-tries of a trie, along
 --   with their elements and prefix.
-getSubTries :: (Ord c) => TM.TMap c a -> [(c,(Maybe a, TM.TMap c a))]
-getSubTries tm
+getSubTriesOld :: (Ord c) => TM.TMap c a -> [(c,(Maybe a, TM.TMap c a))]
+getSubTriesOld tm
   = map (\x -> (x, (TM.match [x] tm))) keys1c
   where
     keys1c = mapMaybe len1' $ TS.toList $ TS.prefixes $ TM.keysTSet tm
 
--- | Newer version of `getSubTries`.
-getSubTriesNew :: forall c a. (Ord c) => TM.TMap c a -> [(c,(Maybe a, TM.TMap c a))]
-getSubTriesNew (TMI.TMap (TMI.Node val0 cmap))
+-- | Newer version of `getSubTriesOld`.
+getSubTries :: forall c a. (Ord c) => TM.TMap c a -> [(c,(Maybe a, TM.TMap c a))]
+getSubTries (TMI.TMap (TMI.Node val0 cmap))
   = map extractNode (M.assocs cmap)
   where
     extractNode :: (c, TM.TMap c a) -> (c, (Maybe a, TM.TMap c a))
@@ -170,6 +172,11 @@ unifyPaths = annotifyTrie
 deleteBranch :: (Ord c) => c -> TM.TMap c a -> TM.TMap c a
 deleteBranch x (TMI.TMap (TMI.Node val0 cmap))
   = TMI.TMap (TMI.Node val0 (M.delete x cmap))
+
+-- | Delete the branches starting with any of the
+--   listed values.
+deleteBranches :: (Ord c) => [c] -> TM.TMap c a -> TM.TMap c a
+deleteBranches cs tm = foldl (flip deleteBranch) tm cs
 
 -- | Get the first "steps" of a `TM.TMap`.
 --   i.e. get the first element of any possible

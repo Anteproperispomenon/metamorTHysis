@@ -97,16 +97,18 @@ data MatchResult m i v s r
   --   ... MatchContinue $ \case
   --     A -> ...
   --     ...
-  --     _ -> MatchFail "Bad Path"
+  --     _ -> MatchFail $ \_ -> "Bad Path"
   --   @
   --
   --   So that the function isn't partial.
-  | MatchFail String
+  | MatchFail (i -> String)
 
 instance (Functor m) => Functor (MatchResult m i v s) where
-  fmap f (MatchReturn ret)       = MatchReturn (fmap f ret)
-  fmap f (MatchContinue cont)    = MatchContinue $ \inp -> f <$> cont inp
-  fmap f (MatchOptions ret cont) = MatchOptions (fmap f ret) (\inp -> f <$> cont inp)
+  -- fmap f (MatchReturn rets)       = MatchReturn (map (fmap f) rets)
+  fmap f (MatchReturn rets)       = MatchReturn (fmap f rets)
+  fmap f (MatchContinue cont)     = MatchContinue $ \inp -> f <$> cont inp
+  fmap f (MatchOptions rets cont) = MatchOptions (fmap f rets) (\inp -> f <$> cont inp)
+  -- fmap f (MatchOptions rets cont) = MatchOptions (map (fmap f) rets) (\inp -> f <$> cont inp)
   fmap _ (MatchFail x) = MatchFail x
 
 -- | Matching on return values. This is to
@@ -120,19 +122,32 @@ data MatchReturn m i v s r
   --   so far. If you want to ignore it,
   --   just use @PlainReturn (\_ -> pure x)@.
   = PlainReturn (v -> m r)
+  -- | Like `PlainReturn`, but also has the ability
+  --   to examine and/or modify the state value. This
+  --   constructor thus subsumes the @get@, @put@ and
+  --   @modify@ operations from modules such as
+  --   "Control.Monad.Trans.State.Strict".
   | StateReturn (v -> s -> m (r,s))
   -- | Returning the results, but using
   --   the next value in the stream to
   --   determine what exactly should be
   --   returned. 
   | ConditionalReturn (v -> Maybe i -> m r)
+  -- | Combines `StateReturn` and `ConditionalReturn`.
+  --   Again, this constructor combines many
+  --   less-powerful operations into one function.
+  --   e.g. It can be used when the state modification
+  --   depends on the following phoneme, but the 
+  --   output string doesn't.
   | ConditionalStateReturn (v -> Maybe i -> s -> m (r,s))
 
--- | A simpler version of `StateReturn` that doesn't
---   modify the state.
+-- | A simpler version of `StateReturn`
+--   that doesn't modify the state.
 checkStateReturn :: (Functor m) => (v -> s -> m r) -> MatchReturn m i v s r
 checkStateReturn f = StateReturn $ \v s -> (,s) <$> f v s
 
+-- | A simpler version of `ConditionalStateReturn` 
+--   that doesn't modify the state.
 checkConditionalStateReturn :: (Functor m) => (v -> Maybe i -> s -> m r) -> MatchReturn m i v s r
 checkConditionalStateReturn f = ConditionalStateReturn $ \v i s -> (,s) <$> f v i s
 

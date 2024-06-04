@@ -54,7 +54,7 @@ import Metamorth.Helpers.Q
 --   makeFunc :: String -> QP Dec
 --   makeFunc myName = do
 --     theName <- newName myName
---     [d| $(pure $ VarP theName) = \x -> x * x |]
+--     [d| $(pure $ VarP theName) = \\x -> x * x |]
 --   
 --   createFunc :: String -> String -> Q Dec
 --   createFunc pfx myName = runQP pfx $ makeFunc myName

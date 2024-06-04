@@ -5,8 +5,8 @@
 
 module Metamorth.Interpretation.Output.Types
   -- * Important Types
-  ( OutputParserOutput(..)
-  , OutputPattern(..)
+  -- ( OutputParserOutput(..)
+  ( OutputPattern(..)
   , pattern OutputPatternPair
   -- * Various types
   , OutputCase(..)
@@ -31,7 +31,7 @@ module Metamorth.Interpretation.Output.Types
 
 import Data.Ord (Down(..))
 
-import Data.String (IsString)
+import Data.String (IsString(..))
 
 import Data.Map.Strict qualified as M
 
@@ -114,7 +114,7 @@ data CaseApply
 -- | The pattern of Phonemes on the left-hand-side
 --   of a pattern.
 type PhonePattern = PhonePatternF [CheckStateX] [PhoneFollow]
-{-# COMPLETE PhonemeName, PhoneAtStart, PhoneNotStart, PhoneAtEnd, PhoneNotEnd, PhoneFollow :: PhonePattern #-}
+{-# COMPLETE PhonemeName, PhoneAtStart, PhoneNotStart, PhoneAtEnd, PhoneNotEnd, PhoneFollow #-}
 
 pattern PhonemeName :: [CheckStateX] -> PhoneName -> PhonePattern
 pattern PhonemeName st nom = PhonemeNameX st nom
@@ -175,6 +175,9 @@ data PhoneNameX str = PhoneName
 
 type PhoneName = PhoneNameX String
 
+instance (IsString (PhoneNameX String)) where
+  fromString str = PhoneName str []
+
 -- Setting up the Ord instance:
 -- The newtype to use:
 newtype StringStar = StringStar String
@@ -185,7 +188,7 @@ instance Ord StringStar where
   compare "*" "*" = EQ
   compare "*" _   = GT
   compare _   "*" = LT
-  compare st1 st2  = compare st1 st2
+  compare (StringStar st1) (StringStar st2) = compare st1 st2
 
 -- Create Ord instance to use
 deriving instance Ord (PhoneNameX StringStar)
@@ -276,28 +279,7 @@ data CharPattern = CharPattern
 
 -- SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
 
-type OutputHeader = ()
-
--- | The Output from an `OutputParser`.
-data OutputParserOutput = OutputParserOutput
-  -- | The state dictionary. This is updated as
-  --   the parser parses the state declarations.
-  { opoStateDictionary :: M.Map String (Maybe (S.Set String))
-  -- | The Group "Dictionary". This is supplied by
-  --   the phoneme parser when the output files
-  --   are run.
-  , opoGroupDictionary :: S.Set String
-  -- | The Trait Dictionary. This is supplied by
-  --   the phoneme parser when the output files
-  --   are run. The `S.Set` contains the possible
-  --   values for the trait, if relevant.
-  , opoTraitDictionary :: M.Map String (Maybe (S.Set String))
-  -- | The Aspect Dictionary. This is supplied by
-  --   the phoneme parser when the output files
-  --   are run. The `S.Set` contains the possible
-  --   values for the trait.
-  , opoAspectDictionary :: M.Map String (S.Set String)
-  -- | The main trie to be used for determining
-  --   output.
-  , opoOutputTrie       :: TM.TMap PhonePattern (M.Map OutputCase OutputPattern)
+data OutputHeader = OutputHeader
+  { ohOrthName :: String
   } deriving (Show, Eq)
+

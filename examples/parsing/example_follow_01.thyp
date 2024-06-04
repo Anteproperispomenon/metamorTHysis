@@ -1,0 +1,64 @@
+
+orthography : followA
+phoneme set : follow
+
+====
+
+# no classes/states?
+
+====
+
+# vowels
+a : a
+a : æ
+e : e
+i : i
+o : o
+oo : ʊ
+oo : o o
+aw : a w
+aw : ɒ
+aw : ɑ
+schwa : ə
+schwa : u h
+
+
+# labial
+b : b
+p : p
+f : f
+w : w
+v : v
+m : m
+
+# alveolar
+n : n
+d : d
+t : t
+s : s
+l : l
+r : r
+sh : ʃ
+sh : s h
+ch : c h
+ch : t ʃ
+zh : z h
+zh : ʒ
+ts : t s
+ts : c
+dz : d z
+th : t h
+th : θ
+dh : d h
+dh : ð
+dzh : d ʒ
+dzh : d z h
+
+# palatal/alveolar
+j : j
+k : k
+g : g
+ng : n g
+ng : ŋ
+h : x # to avoid conflicts
+h : h

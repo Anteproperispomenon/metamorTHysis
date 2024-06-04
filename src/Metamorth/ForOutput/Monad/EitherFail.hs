@@ -35,6 +35,8 @@ module Metamorth.ForOutput.Monad.EitherFail
 
 import Control.Applicative
 
+import Control.Monad
+
 -- | A simple wrapper around @`Either` (Maybe String) a@
 --   so that the resulting `Monad` can support `MonadFail`,
 --   `Alternative`, `MonadPlus`, etc...
@@ -100,6 +102,8 @@ instance Alternative EitherFail where
   x@(RightF _) <|> _ = x
   -- Adding a newline between errors.
   (LeftF str1) <|> (LeftF str2) = LeftF $ str1 <> "\n" <> str2
+
+instance MonadPlus EitherFail
 
 instance Semigroup (EitherFail a) where
   EmptyF <> x = x

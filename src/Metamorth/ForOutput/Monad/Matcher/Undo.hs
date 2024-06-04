@@ -46,6 +46,11 @@ module Metamorth.ForOutput.Monad.Matcher.Undo
   , matches
   , matchesL
   , matchesDefL
+  -- ** Automatic MonadFail Versions
+  , matchF
+  , matchesF
+  , matchesLF
+  , matchesDefLF
   -- * Low-Level Operations
   , proceed
   , preview
@@ -312,11 +317,11 @@ match err f = do
     Nothing  -> lift $ err "Not Enough Input."
     (Just x) -> do
       case (f x) of
-        MatchReturn ret  -> matchReturn ret
+        MatchReturn rets -> msum $ map matchReturn rets
         MatchContinue mc -> match err mc
         MatchFail str    -> lift $ err str
-        MatchOptions ret cont
-          -> match err cont <|> matchReturn ret
+        MatchOptions rets cont
+          -> match err cont <|> msum (map matchReturn rets)
 
 -- matchReturn :: (MonadPlus m, Monoid v) => (String -> m r) -> MatchReturn m i v r -> MatcherT i v m r
 matchReturn :: (MonadPlus m, Undoable v) => MatchReturn m i v r -> MatcherT i v m r
@@ -412,4 +417,26 @@ matchesDefL acc err f = do
     (Just _) -> do
       y <- match err f
       matchesDefL (acc <> y) err f
+
+-- | Variant of `match` that uses `fail` from `MonadFail`
+--   as the first argument.
+matchF :: (MonadPlus m, MonadFail m, Monoid v, Undoable v) => (i -> MatchResult m i v r) -> MatcherT i v m r
+matchF = match fail
+
+-- | Variant of `matches` that uses `fail` from `MonadFail`
+--   as the first argument.
+matchesF :: (MonadPlus m, MonadFail m, Monoid v, Undoable v) => (i -> MatchResult m i v r) -> MatcherT i v m [r]
+matchesF = matches fail
+
+-- | Variant of `matchesL` that uses `fail` from `MonadFail`
+--   as the first argument.
+matchesLF :: (MonadPlus m, MonadFail m, Monoid v, Undoable v, Monoid r) => (i -> MatchResult m i v r) -> MatcherT i v m r
+matchesLF = matchesL fail
+
+-- | Variant of `matchesDefL` that uses `fail` from `MonadFail`
+--   as the second argument
+matchesDefLF :: (MonadPlus m, MonadFail m, Monoid v, Undoable v, Semigroup r) => r -> (i -> MatchResult m i v r) -> MatcherT i v m r
+matchesDefLF acc = matchesDefL acc fail
+
+
 

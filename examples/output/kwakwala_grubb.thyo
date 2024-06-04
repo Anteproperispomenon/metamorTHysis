@@ -1,0 +1,77 @@
+name : grubb
+
+default case : /at
+
+====
+
+# no states or classes
+
+====
+
+m  : m
+m' : ' m
+n  : n
+n' : ' n
+
+l  : l
+l' : ' l
+lh : l h
+
+j  : y
+j' : ' y
+
+w  : w
+w' : ' w
+
+p  : p
+p' : p '
+b  : b
+
+t   : t
+ts  : t s
+ts' : t ' s
+tl  : t l
+tl' : t ' l
+
+d   : d
+dl  : d l
+dz  : d z
+s   : s
+
+k   : k
+k'  : k '
+kw  : k w
+kw' : k ' w
+
+q   : q
+q'  : q '
+qw  : q w
+qw' : q ' w
+
+g   : g
+gw  : g w
+gh  : g h
+ghw : g h w
+
+x   : x
+xw  : x w
+xh  : x h
+xhw : x h w
+
+h   : j
+glt : '
+
+a     : a
+e     : e h
+i     : i
+o     : o
+u     : y
+schwa : e
+
+^ glt a     : a
+^ glt e     : e h
+^ glt i     : i
+^ glt o     : o
+^ glt u     : y
+^ glt schwa : e
+

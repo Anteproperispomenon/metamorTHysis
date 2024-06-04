@@ -6,7 +6,7 @@ License     : BSD-3
 
 This module contains types that are only used
 while parsing the Phoneme specification. This
-is as opposed to `Metamorth.Interpretation.Phonemes.Types`,
+is as opposed to "Metamorth.Interpretation.Phonemes.Types",
 whose types are meant to be used to be kept
 around for when the code is converted into
 Template Haskell.

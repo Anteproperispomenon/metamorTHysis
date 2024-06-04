@@ -21,6 +21,8 @@ import Control.Monad.Trans.State.Strict
 
 -- import Data.Functor.Identity (runIdentity)
 
+import Data.List.NonEmpty qualified as F (unzip)
+
 import Data.Foldable
 import Data.Functor
 import Data.Maybe
@@ -46,9 +48,11 @@ import Metamorth.Interpretation.Phonemes.Types
 import Data.Map.Strict       qualified as M
 import Data.Map.Merge.Strict qualified as MM
 
+import Metamorth.Helpers.Applicative
+import Metamorth.Helpers.Monad
 import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
-
+import Metamorth.Helpers.Q
 
 -- | A type to make understanding the output
 --   of `producePropertyData` easier.
@@ -150,6 +154,12 @@ data PhonemeDatabase = PhonemeDatabase
   -- | The `Name` of the "Word" type, along
   --   with its two constructors.
   , pdbWordTypeNames  :: (Name, (Name, Name))
+  -- | Functions for checking membership in a group.
+  , pdbGroupMemberFuncs :: M.Map String Name
+  -- | Functions for checking whether a function has
+  --   a trait, and whether that trait is a value trait
+  --   (@True@) or a boolean trait (@False@).
+  , pdbTraitInformation :: M.Map String (Name, (Maybe (Name, M.Map String Name)))
   -- | Make an uncased expression an upper-case expression.
   , pdbMkMaj :: Exp -> Exp
   -- | Make an uncased expression a  lower-case expression.
@@ -159,12 +169,14 @@ data PhonemeDatabase = PhonemeDatabase
 instance Show PhonemeDatabase where
   show x = 
     "PhonemeDatabase {pdbPropertyData = " <> show (pdbPropertyData x)
-      <> ", pdbPhonemeInfo = "    <> show (pdbPhonemeInfo x)
-      <> ", pdbTopPhonemeType = " <> show (pdbTopPhonemeType x)
-      <> ", pdbTopPhonemeType = " <> show (pdbTopPhonemeType x)
-      <> ", pdbWordTypeNames = "  <> show (pdbWordTypeNames x)
-      <> ", pdbMkMaj = "          <> show (PP.ppr mkMajRep)
-      <> ", pdbMkMin = "          <> show (PP.ppr mkMinRep)
+      <> ", pdbPhonemeInfo = "      <> show (pdbPhonemeInfo x)
+      <> ", pdbTopPhonemeType = "   <> show (pdbTopPhonemeType x)
+      <> ", pdbTopPhonemeType = "   <> show (pdbTopPhonemeType x)
+      <> ", pdbWordTypeNames = "    <> show (pdbWordTypeNames x)
+      <> ", pdbGroupMemberFuncs = " <> show (pdbGroupMemberFuncs x)
+      <> ", pdbTraitInformation = " <> show (pdbTraitInformation x)
+      <> ", pdbMkMaj = "            <> show (PP.ppr mkMajRep)
+      <> ", pdbMkMin = "            <> show (PP.ppr mkMinRep)
       <> "}"
     where
       exprNom  = mkName "expr"
@@ -179,7 +191,7 @@ instance Show PhonemeDatabase where
 
 producePhonemeDatabase :: PhonemeParsingStructure -> Q (PhonemeDatabase, [Dec])
 producePhonemeDatabase pps = do
-  ((propData, _phoneDats, patNoms, _isFuncNames, mainTypeName), theDecs) <- produceVariousData pps
+  ((propData, _phoneDats, patNoms, _isFuncNames, mainTypeName, phoneGroups, traitFuncTree), theDecs) <- produceVariousData pps
   
   -- propData  :: PropertyData
   -- phoneDats :: M.Map String PhonemeHierarchy
@@ -236,7 +248,37 @@ producePhonemeDatabase pps = do
   -- lookupPhone (PhonemeSet   mp) phone = M.lookup phone mp
   -- lookupPhone (PhonemeGroup ps) phone = asum $ M.map (`lookupPhone` phone) ps
   
+  -- fmap phiPatternName
+  -- traitFuncTree :: Map String (Name, Type, Map String (Name -> Clause))
+  -- makeTraitFunc :: M.Map String Name -> Type -> M.Map String (Name -> Clause) -> ([Clause], Bool)
+  
+  -- traitTable   :: M.Map String (Name, Maybe (Name, M.Map String Name))
 
+  -- Getting the phoneme names...
+  let phoneNames = fmap phiPatternName phoneInfoMap
+      traitDicts = snd <$> traitTable propData
+  
+  -- Making the trait functions...
+  traitDecsNames <- forWithKey traitFuncTree $ \trtStr (funcName, retType, clsMap) -> do
+    funcType <- [t| $(pure (ConT mainTypeName)) -> $(pure retType) |]
+    let funcSign = SigD funcName funcType
+        (nowClauses, trtType) = makeTraitFunc phoneNames retType clsMap
+        funcDefn = FunD funcName nowClauses
+        trtCstr' = M.lookup trtStr traitDicts
+        trtCstrs = join trtCstr'
+    -- These errors shouldn't occur, but just in case they do,
+    -- here are the warnings.
+    when (isNothing trtCstr') $ do
+      reportWarning $ "Issue with trait \"" ++ trtStr ++ "\" when creating \"is" ++ (dataName trtStr) ++ "\" function; can't find trait in dictionary (internal error)."
+    when (trtType && (isNothing trtCstrs)) $ do
+      reportWarning $ "Issue with trait \"" ++ trtStr ++ "\": trait type doesn't match type in dictionary (internal error 1)."
+    when ((not trtType) && (isJust trtCstrs)) $ do
+      reportWarning $ "Issue with trait \"" ++ trtStr ++ "\": trait type doesn't match type in dictionary (internal error 2)."
+    return ([funcSign, funcDefn], (funcName, trtCstrs))
+
+  let traitDecs  = fst <$> traitDecsNames
+      traitNames = snd <$> traitDecsNames
+      traitDecs' = concat $ M.elems traitDecs
 
   -- Classes already of type `Type`.
   eqC   <- [t|  Eq  |]
@@ -246,29 +288,46 @@ producePhonemeDatabase pps = do
   let wordTypeDecs = sumAdtDecDeriv wordTypeName [(wordConsName1, [wordConsType1]), (wordConsName2, [wordConsType2])] [eqC, showC]
 
   let finalDB = PhonemeDatabase
-        { pdbPropertyData   = propData
-        , pdbPhonemeInfo    = phoneInfoMap
-        , pdbTopPhonemeType = mainTypeName
-        , pdbWordTypeNames  = (wordTypeName, (wordConsName1, wordConsName2))
+        { pdbPropertyData     = propData
+        , pdbPhonemeInfo      = phoneInfoMap
+        , pdbTopPhonemeType   = mainTypeName
+        , pdbWordTypeNames    = (wordTypeName, (wordConsName1, wordConsName2))
+        , pdbGroupMemberFuncs = M.mapMaybe id $ isGroupSubFuncs phoneGroups
+        , pdbTraitInformation = traitNames
         , pdbMkMaj = thisMkMaj
         , pdbMkMin = thisMkMin
         }
   
-  -- 
-  return (finalDB, wordTypeDecs : theDecs)
+  -- Return the actual stuff
+  return (finalDB, wordTypeDecs : traitDecs' ++ theDecs)
+
+makeTraitFunc :: M.Map String Name -> Type -> M.Map String (Name -> Clause) -> ([Clause], Bool)
+makeTraitFunc patMap retType theMap 
+  = ((M.elems $ M.mapMaybeWithKey (\str func -> func <$> M.lookup str patMap) theMap) ++ [emptyCase], hasVals)
+  where
+    emptyCase 
+      | hasVals   = Clause [WildP] (NormalB nothingE) []
+      | otherwise = Clause [WildP] (NormalB   falseE) []
+    hasVals = isMaybeE retType
+
+isMaybeE :: Type -> Bool
+isMaybeE (AppT (ConT x) _) = x == ''Maybe
+isMaybeE _ = False
 
 -- | Produce most of the data generated by this module.
-produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name, M.Map (String, String) Name, Name), [Dec])
+produceVariousData :: PhonemeParsingStructure -> Q ((PropertyData, M.Map String PhonemeHierarchy,M.Map String Name, M.Map (String, String) Name, Name, GroupProps, M.Map String (Name, Type, M.Map String (Name -> Clause))), [Dec])
 produceVariousData pps = do
   propData <- producePropertyData pps
+
   let propDecs = propertyDecs propData
       phoneInv = ppsPhonemeInventory pps
-  (phonDats, _phonGrps, patNoms, isFuncNames, mainTypeName, phonDecs) <- producePhonemeInventory propData phoneInv
+  (phonDats, phonGrps, patNoms, isFuncNames, mainTypeName, traitFuncTree, phonDecs) <- producePhonemeInventory propData phoneInv
   -- let phonDecs = snd phonData
   --     phonDats = fst phonData
-  return ((propData, phonDats, patNoms, isFuncNames, mainTypeName), (propDecs <> phonDecs))
+  return ((propData, phonDats, patNoms, isFuncNames, mainTypeName, phonGrps, traitFuncTree), (propDecs <> phonDecs))
 
 
+-- Map String (Name, Type, Map String (Name -> Clause))
 
 producePropertyData :: PhonemeParsingStructure -> Q PropertyData
 producePropertyData pps = do
@@ -335,7 +394,8 @@ producePropertyData' pps = do
   
   -- To make the record type for Phoneme Traits...
   -- traitFields = M.map (fst . fst) trtMap
-  traitRecTypeName <- newName "PhonemeProps"
+  traitRecTypeNameT <- newName "PhonemePropsT"
+  traitRecTypeNameD <- newName "PhonemePropsD"
   let traitRecTypes = forMap trtMap $ \((trtRecName, mTrtInfo), _) -> case mTrtInfo of
         Nothing -> (trtRecName, ConT ''Bool)
         (Just (typeNom,_)) -> (trtRecName, maybeType $ ConT typeNom)
@@ -353,12 +413,12 @@ producePropertyData' pps = do
   -- with the names of the fields.
   let trtRecOutput = if (M.null traitRecTypes)
         then Nothing
-        else Just (traitRecTypeName, propRecTypes, defRecordName)
+        else Just (traitRecTypeNameT, propRecTypes, defRecordName)
 
   -- Create the record type declaration.
   let trtRecordDec = case trtRecOutput of
         Nothing -> []
-        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeName traitRecTypeName (M.elems prs) [eqClass, showClass] ]
+        (Just (_,prs,_)) -> [recordAdtDecDeriv traitRecTypeNameT traitRecTypeNameD (M.elems prs) [eqClass, showClass] ]
   
 
   -- (The type on the next line may be out of date)
@@ -371,14 +431,14 @@ producePropertyData' pps = do
   -- defRecordName <- newName "defaultPhonemeTraits"
   let defRecordSig = case trtRecOutput of
         Nothing  -> []
-        (Just _) -> [SigD defRecordName (ConT traitRecTypeName)]
+        (Just _) -> [SigD defRecordName (ConT traitRecTypeNameT)]
   
   -- A declaration of the default record value/function.
   -- e.g.
   --  > defaultPhonemeProps = PhonemeProps False Nothing Nothing False Nothing
   let defRecordDec = case trtRecOutput of
         Nothing  -> []
-        (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeName) (map (produceDefaultRecV . snd) $ M.elems xs) ) []]
+        (Just (_,xs,_)) -> [ValD (VarP defRecordName) (NormalB $ THL.multiAppE (ConE traitRecTypeNameD) (map (produceDefaultRecV . snd) $ M.elems xs) ) []]
   
   return (aspMap1, trtMap1, trtRecOutput, aspDecs <> trtDecs <> trtRecordDec <> defRecordSig <> defRecordDec)
 
@@ -467,21 +527,105 @@ producePhonemePatterns topType mp = do
         patRslt = PatSynD patName (PrefixPatSyn patVars) ImplBidir (nestedConPat cstrList baseConstr (map VarP patVars))
     return (patName, [patSign, patRslt])
 
-producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, Name, [Dec])
+producePhonemeInventory :: PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, M.Map String Name, M.Map (String, String) Name, Name, M.Map String (Name, Type, M.Map String (Name -> Clause)), [Dec])
 producePhonemeInventory propData phi = do
   mainName <- newName "Phoneme"
-  ((phoneHi, groupProps, decs), isGroupFuncsStuff) <- runStateT (producePhonemeInventory' "Phoneme" mainName propData phi) M.empty
+  baseClauseMaps <- makeInitialClauseMap $ traitTable propData
+  ((phoneHi, groupProps, decs), isGroupFuncsStuff) <- runStateT (producePhonemeInventory' "Phoneme" mainName propData phi) (PhoneInvState M.empty baseClauseMaps)
   patMap <- producePhonemePatterns mainName (phonemeConstructors groupProps)
   let patDecs = concat $ M.elems $ M.map snd patMap
       patNoms = M.map fst patMap
 
-  return (phoneHi, groupProps, patNoms, isGroupFuncsStuff, mainName, decs <> patDecs)
+  return (phoneHi, groupProps, patNoms, pisMatrix isGroupFuncsStuff, mainName, pisClauses isGroupFuncsStuff, decs <> patDecs)
 
+data PhoneInvState = PhoneInvState
+  { pisMatrix  :: M.Map (String, String) Name
+  , pisClauses :: M.Map String (Name, Type, M.Map String (Name -> Clause))
+  }
+
+modifyMatrix :: Monad m => (M.Map (String, String) Name -> M.Map (String, String) Name) -> StateT PhoneInvState m ()
+modifyMatrix f = do
+  x <- get
+  put $! x {pisMatrix = f $! pisMatrix x }
+--  Monad m => (s -> s) -> StateT s m ()
+
+modifyClauses :: Monad m => String -> (M.Map String (Name -> Clause) -> M.Map String (Name -> Clause)) -> StateT PhoneInvState m ()
+modifyClauses trtStr f = do
+  x <- get 
+  let clsMap = pisClauses x
+      y = forAdjust trtStr clsMap $ \(funcNom, typ, thisMap) -> (funcNom, typ, f thisMap)
+  put $! x {pisClauses = y}
+  where
+    forAdjust :: Ord k => k -> M.Map k a -> (a -> a) -> M.Map k a
+    forAdjust k mp g = M.adjust g k mp
+
+-- | Modify the clauses with a monadic action.
+modifyClausesM :: Monad m => String -> (M.Map String (Name -> Clause) -> m (M.Map String (Name -> Clause))) -> StateT PhoneInvState m ()
+modifyClausesM trtStr f = do
+  st <- get 
+  let clsMap = pisClauses st
+      y = M.lookup trtStr clsMap
+  -- forAdjust trtStr clsMap $ \(funcNom, typ, thisMap) -> (funcNom, typ, f thisMap)
+  case y of
+    Nothing -> return ()
+    (Just (funcNom, typ, thisMap)) -> do
+      thatMap <- lift $ f thisMap
+      put $! st {pisClauses = M.insert trtStr (funcNom, typ, thatMap) clsMap}
+
+-- | Modify the clauses with an action in `Q`. This version
+--   reports a warning if one of the traits can't be found.
+modifyClausesQ :: String -> (M.Map String (Name -> Clause) -> Q (M.Map String (Name -> Clause))) -> StateT PhoneInvState Q ()
+modifyClausesQ trtStr f = do
+  st <- get 
+  let clsMap = pisClauses st
+      y = M.lookup trtStr clsMap
+  -- forAdjust trtStr clsMap $ \(funcNom, typ, thisMap) -> (funcNom, typ, f thisMap)
+  case y of
+    Nothing -> lift (reportWarning $ "modifyClausesQ : Couldn't find trait \"" ++ trtStr ++ "\".")
+    (Just (funcNom, typ, thisMap)) -> do
+      thatMap <- lift $ f thisMap
+      put $! st {pisClauses = M.insert trtStr (funcNom, typ, thatMap) clsMap}
+
+
+-- | Create the initial "empty" trait `Clause` map
+--   from the trait table found in `PropertyData`.
+makeInitialClauseMap :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> Q (M.Map String (Name, Type, M.Map String (Name -> Clause)))
+makeInitialClauseMap = M.traverseWithKey makeVal
+  where
+    makeVal :: String -> (Name, Maybe (Name, M.Map String Name)) -> Q (Name, Type, M.Map String (Name -> Clause))
+    makeVal trtStr (_nom, Nothing) = do
+      funcName <- newName $ "is" ++ dataName trtStr
+      return (funcName, ConT ''Bool, M.empty)
+    makeVal trtStr (_nom, Just (typNom, _conMap)) = do
+      funcName <- newName $ "is" ++ dataName trtStr
+      return (funcName, AppT (ConT ''Maybe) (ConT typNom), M.empty)
+
+
+-- M.Map String (Name, Maybe (Name, M.Map String Name))
+{-
+createTraitClauses 
+  :: M.Map String (Name -> Clause) -- accumulator
+  -> String 
+  -> Name
+  -> Maybe (Name, M.Map String Name)
+  -> String 
+  -> PhonemeProperties
+  -> Q (M.Map String (Name -> Clause))
+createTraitClauses acc trtStr trtNom (Just (trtDNom, trtCstrs)) phoneNom phoneProps = do
+
+forFoldM :: (Foldable t, Monad m) => b -> t a -> (b -> a -> m b) -> m b
+-}
 
 -- producePhonemeInventory' :: Name -> PropertyData -> PhonemeInventory -> Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
-producePhonemeInventory' :: String -> Name -> PropertyData -> PhonemeInventory -> StateT (M.Map (String, String) Name) Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
+producePhonemeInventory' :: String -> Name -> PropertyData -> PhonemeInventory -> StateT PhoneInvState Q (M.Map String PhonemeHierarchy, GroupProps, [Dec])
 producePhonemeInventory' _thisGrpStr nm propData (PhonemeSet mp) = do
   (mpX, grpProps, decs) <- lift $ producePhonemeSet propData nm mp
+  -- Handle the trait thingies.
+  -- Quite awkward, but I think it should work...
+  forWithKey_ (traitTable propData) $ \trtStr (oldNom, mCstrs) -> do
+    modifyClausesQ trtStr $ \clsMap -> forFoldM clsMap (M.assocs mp) $ \acc (phoneStr, phoneProps) -> do
+      createTraitClauses acc trtStr oldNom mCstrs phoneStr phoneProps    
+
   return (makeLeaves mpX, grpProps, decs)
 producePhonemeInventory' thisGrpStr nm propData (PhonemeGroup mp) = do
   -- rslts :: M.Map String (Name, ((M.Map String PhonemeHierarchy), [Dec]) )
@@ -533,7 +677,7 @@ producePhonemeInventory' thisGrpStr nm propData (PhonemeGroup mp) = do
           newFuncBod2 = Clause [WildP] (NormalB (ConE 'False)) []
           newFuncDefn = FunD newFuncName [newFuncBod1, newFuncBod2]
           newFuncDecl = [newFuncSign, newFuncDefn]
-      modify $ M.insert (thisGrpStr, anotherGroupStr) newFuncName
+      modifyMatrix $ M.insert (thisGrpStr, anotherGroupStr) newFuncName
       return (Just newFuncName, newFuncDecl)
     
     let newSubFuncNames = M.map fst newSubFuncs
@@ -614,15 +758,81 @@ produceSubMapClause constr         Nothing   _ = Clause [ConP constr [] [WildP]]
 produceSubMapClause constr (Just funcName) var = Clause [ConP constr [] [VarP var]] (NormalB (AppE (VarE funcName) (VarE var))) []
 
 
+{-
+data PhonemeProperties
+   = PhonemeProperties 
+       { phAspects :: [String]
+       , phTraits  :: [(String, Maybe String)]
+       } deriving (Show, Eq)
 
-producePhonemeSet :: PropertyData -> Name -> (M.Map String PhonemeProperties) -> Q (M.Map String (Name, [Type]), GroupProps, [Dec])
+, traitTable   :: M.Map String (Name, Maybe (Name, M.Map String Name))
+-}
+
+-- -> M.Map String (Name, Maybe (Name, M.Map String Name)) 
+
+makePhoneWildPat :: Name -> PhonemeProperties -> Pat
+makePhoneWildPat phoneNom phoneProps
+  = ConP phoneNom [] ((phAspects phoneProps) $> WildP)
+
+-- | Create the clauses for a function
+--   that tells whether a specific phoneme
+--   has a certain trait or not. Note that
+--   we use (Name -> Clause) as the value
+--   of the `M.Map`, since we may not know
+--   whether we have the pattern synonym
+--   name at this point in the construction.
+createTraitClauses 
+  :: M.Map String (Name -> Clause) -- accumulator
+  -> String 
+  -> Name
+  -> Maybe (Name, M.Map String Name)
+  -> String 
+  -> PhonemeProperties
+  -> Q (M.Map String (Name -> Clause))
+createTraitClauses acc trtStr trtNom Nothing phoneNom phoneProps = do
+  let srchVal = (trtStr, Nothing)
+  if (srchVal `elem` (phTraits phoneProps))
+    then return (M.insert phoneNom (\nom -> Clause [wildPat nom] (NormalB trueE) []) acc)
+    else do 
+      let mRslt = find altPred (phTraits phoneProps)
+      case mRslt of
+        Nothing -> return acc
+        (Just (_,Nothing)) -> return acc -- already handled.
+        (Just (_,Just rslt)) -> do
+          qReportError $ "Trait \"" ++ trtStr ++ "\" is a boolean trait; having phoneme \"" ++ phoneNom ++ "\" set it to value \"" ++ rslt ++ "\" will not work." 
+          return acc
+  where 
+    wildPat nom = makePhoneWildPat nom phoneProps
+    altPred (theTrait, _) = theTrait == trtStr
+
+createTraitClauses acc trtStr trtNom (Just (trtDNom, trtCstrs)) phoneNom phoneProps = do
+  let mRslt = find altPred (phTraits phoneProps)
+  case mRslt of
+    Nothing -> return acc -- This phoneme doesn't use this trait.
+    (Just (_,Nothing)) -> do -- This phoneme doesn't specify a value for this trait.
+      reportError $ "Phoneme \"" ++ phoneNom ++ "\" doesn't specify a value for trait \"" ++ trtStr ++ "\"."
+      return acc
+    (Just (_,Just thisCstr)) -> do -- This phoneme DOES specifiy a value for this trait.
+      let mMatch = M.lookup thisCstr trtCstrs
+      case mMatch of
+        Nothing -> do -- failed to find 
+          reportError $ "Phoneme \"" ++ phoneNom ++ "\": Trait \"" ++ trtStr ++ "\" does not have a value known as \"" ++ thisCstr ++ "\"."
+          return acc
+        (Just cstrNom) -> do
+          let thisClause nom = Clause [wildPat nom] (NormalB $ justE (ConE cstrNom)) []
+          return (M.insert phoneNom thisClause acc)
+  where
+    wildPat nom = makePhoneWildPat nom phoneProps
+    altPred (theTrait, _) = theTrait == trtStr
+
+producePhonemeSet :: PropertyData -> Name -> M.Map String PhonemeProperties -> Q (M.Map String (Name, [Type]), GroupProps, [Dec])
 producePhonemeSet propData subName phoneSet = do
   -- Need to have a way to supply the user-side
   -- name string to this function.
 
   -- The name to map from phonemes to traits
   -- STILL TODO.
-  -- funcName <- newName ((nameBase subName) <> "_traits")
+  -- funcName <- newName ((nameBase subName) <> "_traits") -- changed how we do this
 
 
   -- isGroupFuncName
@@ -672,7 +882,7 @@ producePhonemeSet propData subName phoneSet = do
 -- | Make a record update expression, to be used
 --   when making the `phonemeProperties` function.
 --   Note that this returns an `Exp`ression, *not* a
---   function declaration or clause.
+--   function declaration or `Clause`.
 makeRecordUpdate :: Name -> M.Map String (Name, Maybe (Name, M.Map String Name)) -> M.Map String (Name,Type) -> PhonemeProperties -> Exp
 makeRecordUpdate defPropName traitsInfo traitFields phoneProps
   = RecUpdE (VarE defPropName) phoneStuff'
