@@ -34,6 +34,7 @@ library
       Metamorth.ForOutput.Monad.Matcher.Stateful
       Metamorth.ForOutput.Monad.Matcher.Stateful.Result
       Metamorth.ForOutput.Monad.Matcher.Undo
+      Metamorth.ForOutput.Quasi.Types
       Metamorth.Helpers.Applicative
       Metamorth.Helpers.Char
       Metamorth.Helpers.Either
@@ -51,8 +52,13 @@ library
       Metamorth.Helpers.Q
       Metamorth.Helpers.QP
       Metamorth.Helpers.QS
+      Metamorth.Helpers.String
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
+      Metamorth.Interaction.Quasi
+      Metamorth.Interaction.Quasi.Parser
+      Metamorth.Interaction.Quasi.Parser.Helpers
+      Metamorth.Interaction.Quasi.Parser.Types
       Metamorth.Interaction.TH
       Metamorth.Interpretation.Output.Parsing
       Metamorth.Interpretation.Output.Parsing.Trie
@@ -83,6 +89,7 @@ library
   hs-source-dirs:
       src
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase
@@ -114,6 +121,7 @@ executable metamorTHysis-exe
   hs-source-dirs:
       app
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase
@@ -147,6 +155,7 @@ test-suite metamorTHysis-test
       Test.TH.Following
       Test.TH.Grouped
       Test.TH.InAndOut
+      Test.TH.KwakQuasi
       Test.TH.Kwakwala
       Test.TH.Mongolian
       Test.TH.TwoOrths
@@ -156,6 +165,7 @@ test-suite metamorTHysis-test
   hs-source-dirs:
       test
   default-extensions:
+      DeriveLift
       FlexibleInstances
       ImportQualifiedPost
       LambdaCase

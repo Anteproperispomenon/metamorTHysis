@@ -163,6 +163,7 @@ defExtraParserDetails str = ExtraParserDetails'
 data ExtraOutputDetails = ExtraOutputDetails 
   { eodOutputName :: String
   , eodSuffix     :: String
+  , eodExtension  :: String
   , eodOtherNames :: [String]
   } deriving (Show, Eq)
 
@@ -170,6 +171,7 @@ defExtraOutputDetails :: ExtraOutputDetails
 defExtraOutputDetails  = ExtraOutputDetails
   { eodOutputName = "mainOutput"
   , eodSuffix     = "_op1"
+  , eodExtension  = ".op"
   , eodOtherNames = []
   }
 
@@ -257,7 +259,7 @@ createParsers phonemePath parserPaths outputPaths = do
       (Left err)           -> (qReport True err) >> return Nothing
       (Right (txt,epd,fp)) -> do
         addLocalDependentFile' fp
-        Just <$> getParserData pdb txt epd
+        Just <$> getParserData fp pdb txt epd
   
   let parserResultsBoth = map fst parserResultsBoth'
       parserResults     = map fst parserResultsBoth
@@ -307,7 +309,7 @@ createParsers phonemePath parserPaths outputPaths = do
 
   -- Make the map of output names.
   outputOrthNameMap  <- [| M.fromList $(pure $ ListE outputNamers') |]
-  outputOrthNameType <- [t| M.Map String $(pure $ ConT $ fst outOrthTypeDec) |]
+  outputOrthNameType <- [t| M.Map String ($(pure $ ConT $ fst outOrthTypeDec), String) |]
   outputOrthNameName <- newName "outputOrthNameMap"
   let outputOrthNameSign = SigD outputOrthNameName outputOrthNameType
       outputOrthNameDefn = ValD (VarP outputOrthNameName) (NormalB $ outputOrthNameMap) []
@@ -353,13 +355,13 @@ readOutputFile (fp, eod) = do
       return $ Right (txt, eod)
 
 
-getParserData :: PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name)), [(Exp, Exp)])
-getParserData pdb txt epd = do
+getParserData :: FilePath -> PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name)), [(Exp, Exp)])
+getParserData fp pdb txt epd = do
   -- here
   let eParseRslt = AT.parseOnly parseOrthographyFile txt
       newNameStr = epdParserName epd
   ((dcs1, spi, funcNom), typeNom) <- case eParseRslt of
-    (Left err) -> fail $ "Couldn't parse input: " ++ err
+    (Left err) -> fail $ "Couldn't parse input file \"" ++ fp ++ "\": " ++ err
     -- (HeaderData, ParserParsingState, [String])
     (Right (hdr, pps, errStrings, warnStrings)) -> do
       case errStrings of
@@ -434,8 +436,9 @@ getTheOutput pdb txt eod = do
         "" -> newName $ "OutOrth" ++ newNameSfx
         x  -> newName $ "Out" ++ dataName x
 
-      let otherNames = map strE $ eodOtherNames eod
-          otherPairs = map (,ConE hdrOut) otherNames
+      let otherNames = map strE  $ eodOtherNames eod
+          thisExt    = stringExp $ eodExtension  eod
+          otherPairs = map (,tupleE [ConE hdrOut, thisExt]) otherNames
 
       return ((((hdrOut, userFuncName), (hdrOut, userFuncNameBS)), decs), otherPairs)
   
@@ -449,11 +452,14 @@ makeOutputOrthType :: (Quote q) => M.Map Name Name -> q (Name, Dec)
 makeOutputOrthType mps = do
   mainTypeName <- newName "OutOrth"
   let funcs = map (,[]) $ M.keys mps
-  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC])
+  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC, enumC, boundC, liftC])
   where
-    ordC  = ConT ''Ord
-    eqC   = ConT ''Eq
-    showC = ConT ''Show
+    ordC   = ConT ''Ord
+    eqC    = ConT ''Eq
+    showC  = ConT ''Show
+    enumC  = ConT ''Enum
+    boundC = ConT ''Bounded
+    liftC  = ConT ''Lift
 
 -- | Create the data type that will allow you
 --   to select the input orthography.
@@ -461,11 +467,14 @@ makeInputOrthType :: (Quote q) => M.Map Name Name -> q (Name, Dec)
 makeInputOrthType mps = do
   mainTypeName <- newName "InOrth"
   let funcs = map (,[]) $ M.keys mps
-  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC])
+  return (mainTypeName, sumAdtDecDeriv mainTypeName funcs [eqC, ordC, showC, enumC, boundC, liftC])
   where
-    ordC  = ConT ''Ord
-    eqC   = ConT ''Eq
-    showC = ConT ''Show
+    ordC   = ConT ''Ord
+    eqC    = ConT ''Eq
+    showC  = ConT ''Show
+    enumC  = ConT ''Enum
+    boundC = ConT ''Bounded
+    liftC  = ConT ''Lift
 
 
 -- | Make the full function that can easily
