@@ -1,6 +1,6 @@
 # This is a simple Latin orthography
 # for Inuktitut. 
-orthography : inuktitut_syllabics
+orthography : inuktitut_latin
 phoneme set : "../phonemes/example_inuktitut.thyt"
 
 

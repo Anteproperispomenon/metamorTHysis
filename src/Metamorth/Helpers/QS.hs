@@ -56,17 +56,17 @@ import Metamorth.Helpers.Q
 --   makeFunc :: String -> QS Dec
 --   makeFunc myName = do
 --     theName <- newName myName
---     [d| $(pure $ VarP theName) = \x -> x * x |]
+--     [d| $(pure $ VarP theName) = \\x -> x * x |]
 --   
 --   createFunc :: String -> String -> Q Dec
---   createFunc pfx myName = runQS pfx $ makeFunc myName
+--   createFunc sfx myName = runQS sfx $ makeFunc myName
 --   
 --   @
 type QS = QST Q
 -- Need to write it like this and not `type QS a = QST Q a`, since
 -- that would cause problems when using it with Monad transformers.
 
--- | @QST` is a variant of `QS` that works over any
+-- | @QST@ is a variant of `QS` that works over any
 --   instance of `Quasi` and `Quote`.
 --   Note that `runQS` and `runQS2` work on both
 --   `QS` and `QST`.
@@ -146,7 +146,7 @@ runQS2 str infPre qs
       runReaderT (getQS qs) (filter isNameChar str, filter isOpChar infPre)
 
 -- | A faster way of running `runQS` in another `QST` block.
---   This uses `local` from `Control.Monad.Trans.Reader` internally.
+--   This uses `local` from "Control.Monad.Trans.Reader" internally.
 --
 --   Note that there is one significant difference between `extendSuffix`
 --   and `runQS`: `qsPlainNewName` will act differently between the two.
@@ -178,7 +178,7 @@ extendSuffix str (QS action)
   | otherwise = QS $ local (\(x,y) -> (x ++ str,y)) action
 
 -- | A faster way of running `runQS2` in another `QST` block.
---   This uses `local` from `Control.Monad.Trans.Reader` internally.
+--   This uses `local` from "Control.Monad.Trans.Reader" internally.
 --
 --   Note that the same difference between `extendSuffix` and `runQS`
 --   applies to this function and `runQS2`, except that it applies

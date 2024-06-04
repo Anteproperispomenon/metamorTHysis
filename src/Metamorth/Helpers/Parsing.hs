@@ -4,6 +4,7 @@ module Metamorth.Helpers.Parsing
   , skipHorizontalSpace
   , skipHoriz1
   , skipHorizontalSpace1
+  , parseEndComment
 
   -- * Parsing identifiers
   , takeIdentifier
@@ -11,6 +12,12 @@ module Metamorth.Helpers.Parsing
   , isFileId
   , consProd
   
+  -- * More Combinators
+  , many_
+  , some_
+  , many'_
+  , some'_
+
   -- * Re-ordered Functions
   , forParseOnly
   
@@ -33,6 +40,9 @@ module Metamorth.Helpers.Parsing
 
 import Data.Attoparsec.Text       qualified as AT
 import Data.Attoparsec.Combinator qualified as AC
+
+import Control.Applicative
+import Control.Monad
 
 import Control.Monad.Trans.Class (lift)
 import Control.Monad.Trans.State.Strict qualified as State
@@ -101,7 +111,14 @@ parseFileName1 = do
 parseFileName2 :: AT.Parser T.Text
 parseFileName2 = AT.takeWhile $ \c -> (isAlphaNum c) || (c == '_') || (c == '-') || (c == '/') || (c == '\\') || (c == '.')
 
-
+-- | Parse the end of line, possibly preceded by a comment.
+parseEndComment :: AT.Parser ()
+parseEndComment = do
+  skipHoriz
+  AT.option () $ do
+    _ <- AT.char '#'
+    AT.skipWhile (\x -> x /= '\n' && x /= '\r')
+  AT.endOfLine
 
 
 -- | The same as `AT.parseOnly` but with a different argument order.
@@ -170,3 +187,14 @@ lookAheadTellRWS' prs = do
   RWS.tell w
   return (a,s)
 
+many_ :: Alternative f => f a -> f ()
+many_ f = many f $> ()
+
+some_ :: Alternative f => f a -> f ()
+some_ f = some f $> ()
+
+many'_ :: MonadPlus m => m a -> m ()
+many'_ f = AT.many' f $> ()
+
+some'_ :: MonadPlus m => m a -> m ()
+some'_ f = AT.many1' f $> ()

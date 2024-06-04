@@ -1,0 +1,114 @@
+orthography : umista
+phoneme set : kwakwala
+
+====
+
+# Apostrophes
+class apost : ' ` U+0313 U+0315
+
+class underline : U+02CD U+0320 U+0332 U+0331
+
+class lh : Ɫ ɫ ɬ U+A7AD
+
+class lab : W w ʷ
+
+====
+
+# Precomposed: Ḵḵ
+
+m  : m
+m' : *apost m
+n  : n
+n' : *apost n
+
+
+# ɫł
+l  : l
+l' : *apost l
+lh : ł
+lh : - ɫ
+lh : + Ɫ
+lh : - ɬ
+lh : + U+A7AD
+
+j  : y
+j' : *apost y
+j  : j
+j' : *apost j
+
+w  : w
+w' : *apost w
+
+p  : p
+p' : p *apost
+b  : b
+
+t   : t
+ts  : t s
+ts  : c
+ts' : t *apost s
+ts' : c *apost
+tl  : t l
+tl  : t *lh
+tl' : t *apost l
+tl' : t *apost *lh
+
+d   : d
+dl  : d l
+dl  : d *lh
+dz  : d z
+dz  : z
+s   : s
+
+k   : k
+k'  : k *apost
+kw  : k *lab
+kw' : k *apost *lab
+kw' : k *lab *apost
+
+q   : q
+q'  : q *apost
+q   : ḵ
+q'  : q *apost
+q'  : ḵ *apost
+q'  : k *underline *apost
+qw  : q *lab
+qw  : ḵ *lab
+qw' : q *apost w
+qw' : q *lab *apost
+qw' : ḵ *apost *lab
+qw' : ḵ *lab *apost
+qw' : k *underline *apost *lab
+qw' : k *underline *lab *apost
+
+g   : g
+gw  : g *lab
+gh  : ǥ
+gh  : g *underline
+ghw : g *underline *lab
+ghw : ǥ *lab
+
+x   : x
+xw  : x *lab
+xh  : x *underline
+xhw : x *underline *lab
+
+h   : h
+glt : *apost
+
+a     : a
+e     : e
+i     : i
+o     : o
+u     : y
+schwa : a *underline
+
+====
+
+glt a     : ^ a
+glt e     : ^ e
+glt i     : ^ i
+glt o     : ^ o
+glt u     : ^ y
+glt schwa : ^ a *underline
+

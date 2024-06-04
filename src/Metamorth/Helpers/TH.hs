@@ -10,6 +10,7 @@ module Metamorth.Helpers.TH
   , showSumProdInstance
   , showSumProdInstanceAlt
   , intersperseInfixRE
+  , intersperseInfixEDef
   , nestedConPat
   , groupCaseGuards
   , forMap
@@ -32,7 +33,9 @@ module Metamorth.Helpers.TH
   , justE
   , retE
   , returnExp
+  , tupleE
   , infixBind
+  , infixRBind
   , infixCont
   ) where
 
@@ -256,6 +259,10 @@ groupCaseGuards' (m@(Match ptrn bdy dcs):mtchs)
     guardifyBody (GuardedB grds) = grds
     guardifyBody (NormalB  expr) = [(NormalG otherwiseE,expr)]
 
+intersperseInfixEDef :: Exp -> Exp -> [Exp] -> Exp
+intersperseInfixEDef defE _ [] = defE
+intersperseInfixEDef _ infx (x:xs) = intersperseInfixE infx (x :| xs)
+
 ------------------------------------------------
 -- More basic functions
 
@@ -290,6 +297,9 @@ justE expr = AppE (ConE 'Just) expr
 infixBind :: Exp -> Exp -> Exp
 infixBind exp1 exp2 = InfixE (Just exp1) (VarE '(>>=)) (Just exp2)
 
+infixRBind :: Exp -> Exp -> Exp
+infixRBind exp1 exp2 = InfixE (Just exp1) (VarE '(=<<)) (Just exp2)
+
 -- | Create the expression
 --   @ exp1 >> exp2 @
 infixCont :: Exp -> Exp -> Exp
@@ -303,6 +313,9 @@ andE x y = InfixE (Just x) (VarE '(&&)) (Just y)
 
 retE :: Exp
 retE = VarE 'return
+
+tupleE :: [Exp] -> Exp
+tupleE lst = TupE (map Just lst)
 
 -- | A version of `return` that uses `($)` to
 --   get the "right" answer.

@@ -1,0 +1,50 @@
+
+# Example orthography for testing
+# some things out.
+
+trait rough
+
+trait nasal
+
+trait example : exam1 exam2
+
+====
+
+* vowel
+  a
+  e
+  i
+  o
+  oo
+  u
+  aw
+  schwa
+* consonant
+  ** labial
+    b : example=exam1
+    p
+    f : example=exam2
+    w
+    v
+    m : nasal
+  ** alveolar
+    n : nasal
+    d
+    t : example=exam2
+    s : example=exam1
+    l
+    r : rough
+    sh
+    ch
+    zh
+    dzh : example=exam2
+    ts
+    dz
+    th : rough
+    dh
+  ** palatal_velar
+    j
+    k : example=exam1
+    g
+    ng : nasal
+    h : rough

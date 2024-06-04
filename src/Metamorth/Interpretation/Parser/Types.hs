@@ -170,7 +170,7 @@ findStates str (CheckStateVV strX _) = str == strX
 findStates str (CheckStateVB strX _) = str == strX
 
 stateSubsetOf' :: CheckStateX -> CheckStateX -> Bool
-stateSubsetOf' (CheckStateVV str1 str2) (CheckStateVB strX blY)
+stateSubsetOf' (CheckStateVV str1 _str) (CheckStateVB strX blY)
   = (str1 == strX) && blY
 stateSubsetOf' (CheckStateVV str1 str2) (CheckStateVV strX strY)
   = (str1 == strX) && (str2 == strY)
@@ -252,9 +252,9 @@ validCharPattern [] = False
 validCharPattern ((PlainCharR _):xs) = validCharPattern' xs
 validCharPattern ((CharClassR _):xs) = validCharPattern' xs
 validCharPattern [x] | startPatR x = False -- can't just have a WordStart.
-validCharPattern (x:y:xs) | (startPatR x) && (endPatR y) = False -- covers [WordStart,WordEnd] and other cases
+validCharPattern (x:y:_xs) | (startPatR x) && (endPatR y) = False -- covers [WordStart,WordEnd] and other cases
 -- validCharPattern (NotStartR:WordEndR:xs)  = False
-validCharPattern (x:xs) | (endPatR x) = False
+validCharPattern (x:_xs) | (endPatR x) = False
 validCharPattern (WordStartR:xs) = validCharPattern' xs
 validCharPattern (NotStartR :xs) = validCharPattern' xs
 validCharPattern _ = False
@@ -264,7 +264,8 @@ validCharPattern' [] = True
 validCharPattern' ((PlainCharR _):xs) = validCharPattern' xs
 validCharPattern' ((CharClassR _):xs) = validCharPattern' xs
 validCharPattern' [x] | endPatR x = True
-validCharPattern' (x:xs) | (startPatR x || endPatR x || isStateR x) = False
+validCharPattern' (x:_s) | (startPatR x || endPatR x || isStateR x) = False
+validCharPattern' _ = False
 
 validCharPatternE :: [CharPatternRaw] -> Either String ()
 validCharPatternE [] = Left "Can't have an empty pattern."
@@ -285,7 +286,7 @@ validCharPatternE' [] = Right ()
 validCharPatternE' ((PlainCharR _):xs) = validCharPatternE' xs
 validCharPatternE' ((CharClassR _):xs) = validCharPatternE' xs
 validCharPatternE' [x] | (endPatR x) = Right ()
-validCharPatternE' (x:xs) 
+validCharPatternE' (x:_) 
   | (startPatR x) = Left "Can't have a [not-]word-start mark in the middle of a pattern."
   | (endPatR   x) = Left "Can't have a [not-]word-end mark in the middle of a pattern."
   | (isStateR  x) = Left "State-patterns should have been filtered out by this point."
@@ -308,7 +309,7 @@ validateCharPatternEX ((PlainCharR x):xs) = do
 validateCharPatternEX ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternE' xs
 validateCharPatternEX [x]    | (startPatR x) = lift $ Left "Can't have a pattern with just a [not-]start-word mark."
 validateCharPatternEX [x,y]  | (startPatR x && endPatR y) = lift $ Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
-validateCharPatternEX (x:xs) | (endPatR x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
+validateCharPatternEX (x:_)  | (endPatR x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
 validateCharPatternEX (WordStartR:xs) = (WordStart:) <$> validateCharPatternE' xs
 validateCharPatternEX (NotStartR :xs) = (NotStart :) <$> validateCharPatternE' xs
 validateCharPatternEX (x:_)  | isStateR x = lift $ Left "State-patterns should have been filtered out by this point."
@@ -322,13 +323,13 @@ validateCharPatternE' ((PlainCharR x):xs) = do
     Nothing -> do
       when (isCasable x) (put $ Just (isTupper x))
       ((PlainChar [] x):) <$> validateCharPatternE' xs
-    (Just cs) -> do
+    (Just _cs) -> do
       ((CharOptCase [] (toLower x)):) <$> validateCharPatternE' xs
   -- ((PlainChar [] x):) <$> validateCharPatternE' xs -- ???
 validateCharPatternE' ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternE' xs
 validateCharPatternE' [WordEndR] = return [WordEnd]
 validateCharPatternE' [NotEndR]  = return [NotEnd]
-validateCharPatternE' (x:xs) 
+validateCharPatternE' (x:_) 
   | (startPatR x) = lift $ Left "Can't have a [not-]word-start mark in the middle of a pattern."
   | (endPatR   x) = lift $ Left "Can't have a [not-]word-end mark in the middle of a pattern."
   | (isStateR  x) = lift $ Left "State-patterns should have been filtered out by this point."
@@ -346,10 +347,10 @@ validateCharPatternZX ((PlainCharR x):xs) = do
   when (isCasable x) (put $ Just (isTupper x))
   ((CharOptCase [] x):) <$> validateCharPatternZ' xs
 validateCharPatternZX ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternZ' xs
-validateCharPatternZX [x]    | (startPatR x) = lift $ Left "Can't have a pattern with just a [not-]start-word mark."
-validateCharPatternZX [x,y]  | (startPatR x && endPatR y) = lift $ Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
-validateCharPatternZX (x:xs) | (endPatR  x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
-                             | (isStateR x) = lift $ Left "State-patterns should have been filtered out by this point."
+validateCharPatternZX [x]   | (startPatR x) = lift $ Left "Can't have a pattern with just a [not-]start-word mark."
+validateCharPatternZX [x,y] | (startPatR x && endPatR y) = lift $ Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
+validateCharPatternZX (x:_) | (endPatR  x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
+                            | (isStateR x) = lift $ Left "State-patterns should have been filtered out by this point."
 validateCharPatternZX (WordStartR:xs) = (WordStart:) <$> validateCharPatternZ' xs
 validateCharPatternZX (NotStartR :xs) = (NotStart :) <$> validateCharPatternZ' xs
 validateCharPatternZX _ = lift $ Left "Some type of error happened in validateCharPatternZX."
@@ -362,13 +363,13 @@ validateCharPatternZ' ((PlainCharR x):xs) = do
     Nothing -> do
       when (isCasable x) (put $ Just (isTupper x))
       ((caseChar x):) <$> validateCharPatternZ' xs
-    (Just cs) -> do
+    (Just _s) -> do
       ((caseChar x):) <$> validateCharPatternZ' xs
   -- ((PlainChar x):) <$> validateCharPatternZ' xs -- ???
 validateCharPatternZ' ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternZ' xs
 validateCharPatternZ' [WordEndR] = return [WordEnd]
 validateCharPatternZ' [NotEndR]  = return [NotEnd]
-validateCharPatternZ' (x:xs) 
+validateCharPatternZ' (x:_) 
   | (startPatR x) = lift $ Left "Can't have a [not-]word-start mark in the middle of a pattern."
   | (endPatR   x) = lift $ Left "Can't have a [not-]word-end mark in the middle of a pattern."
   | (isStateR  x) = lift $ Left "State-patterns should have been filtered out by this point."

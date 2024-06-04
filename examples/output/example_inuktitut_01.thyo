@@ -1,0 +1,242 @@
+
+
+
+# orthography : inuktitut_syllabics
+# phoneme set : "../phonemes/example_inuktitut.thyt"
+
+default case : /at
+
+name : syllabic
+
+====
+
+# No classes or states.
+
+# import group vowel
+
+====
+
+# Final Consonants
+# Source : https://en.wikipedia.org/wiki/Inuktitut_syllabics
+
+p  : ᑉ
+t  : ᑦ
+k  : ᒃ
+h  : ᕻ
+# h  : ᐦ # apparently
+g  : ᒡ
+m  : ᒻ
+n  : ᓐ
+s' : ᔅ # s/h
+
+l  : ᓪ
+j  : ᔾ
+rh : ᖮ
+v  : ᕝ
+r  : ᕐ
+q  : ᖅ
+
+ng : ᖕ
+# ng : ᓐ ᒃ # alternate form
+
+lh : ᖦ
+
+glot : ᑊ
+
+
+# Special Final consonants
+
+jj  : ᑦ ᔾ
+qq  : ᖅ ᒃ
+nng : ᖖ
+# nng : ᓐ ᓐ ᒃ # alt form
+
+hx : ᕼ
+b  : ᖯ
+
+# Syllables
+
+(i short) : ᐃ
+(u short) : ᐅ
+(a short) : ᐊ
+(i long) : ᐄ
+(u long) : ᐆ
+(a long) : ᐋ
+ai : ᐁ
+
+p (i short) : ᐱ
+p (u short) : ᐳ
+p (a short) : ᐸ
+p (i long) : ᐲ
+p (u long) : ᐴ
+p (a long) : ᐹ
+p ai : ᐯ
+
+t (i short) : ᑎ
+t (u short) : ᑐ
+t (a short) : ᑕ
+t (i long) : ᑏ
+t (u long) : ᑑ
+t (a long) : ᑖ
+t ai : ᑌ
+
+k (i short) : ᑭ
+k (u short) : ᑯ
+k (a short) : ᑲ
+k (i long) : ᑮ
+k (u long) : ᑰ
+k (a long) : ᑳ
+k ai : ᑫ
+
+h (i short) : ᕵ
+h (u short) : ᕷ
+h (a short) : ᕹ
+h (i long) : ᕶ
+h (u long) : ᕸ
+h (a long) : ᕺ
+h ai : ᕴ
+
+g (i short) : ᒋ
+g (u short) : ᒍ
+g (a short) : ᒐ
+g (i long) : ᒌ
+g (u long) : ᒎ
+g (a long) : ᒑ
+g ai : ᒉ
+
+m (i short) : ᒥ
+m (u short) : ᒧ
+m (a short) : ᒪ
+m (i long) : ᒦ
+m (u long) : ᒨ
+m (a long) : ᒫ
+m ai : ᒣ
+
+n (i short) : ᓂ
+n (u short) : ᓄ
+n (a short) : ᓇ
+n (i long) : ᓃ
+n (u long) : ᓅ
+n (a long) : ᓈ
+n ai : ᓀ
+
+s' (i short) : ᓯ
+s' (u short) : ᓱ
+s' (a short) : ᓴ
+s' (i long) : ᓰ
+s' (u long) : ᓲ
+s' (a long) : ᓵ
+s' ai : ᓭ
+
+l (i short) : ᓕ
+l (u short) : ᓗ
+l (a short) : ᓚ
+l (i long) : ᓖ
+l (u long) : ᓘ
+l (a long) : ᓛ
+l ai : ᓓ
+
+j (i short) : ᔨ
+j (u short) : ᔪ
+j (a short) : ᔭ
+j (i long) : ᔩ
+j (u long) : ᔫ
+j (a long) : ᔮ
+j ai : ᔦ
+
+jj (i short) : ᑦ ᔨ
+jj (u short) : ᑦ ᔪ
+jj (a short) : ᑦ ᔭ
+jj (i long) : ᑦ ᔩ
+jj (u long) : ᑦ ᔫ
+jj (a long) : ᑦ ᔮ
+jj ai : ᑦ ᔦ
+
+rh (i short) : ᖨ
+rh (u short) : ᖪ
+rh (a short) : ᖬ
+rh (i long) : ᖩ
+rh (u long) : ᖫ
+rh (a long) : ᖭ
+
+v (i short) : ᕕ
+v (u short) : ᕗ
+v (a short) : ᕙ
+v (i long) : ᕖ
+v (u long) : ᕘ
+v (a long) : ᕚ
+v ai : ᕓ
+
+r (i short) : ᕆ
+r (u short) : ᕈ
+r (a short) : ᕋ
+r (i long) : ᕇ
+r (u long) : ᕉ
+r (a long) : ᕌ
+r ai : ᕂ
+
+q (i short) : ᕿ
+q (u short) : ᖁ
+q (a short) : ᖃ
+q (i long) : ᖀ
+q (u long) : ᖂ
+q (a long) : ᖄ
+q ai : ᙯ
+
+# THESE were the culprit!
+qq (i short) : ᖅ ᑭ
+qq (u short) : ᖅ ᑯ
+qq (a short) : ᖅ ᑲ
+qq (i long) : ᖅ ᑮ
+qq (u long) : ᖅ ᑰ
+qq (a long) : ᖅ ᑳ
+qq ai : ᖅ ᑫ
+
+ng (i short) : ᖏ
+ng (u short) : ᖑ
+ng (a short) : ᖓ
+ng (i long) : ᖐ
+ng (u long) : ᖒ
+ng (a long) : ᖔ
+ng ai : ᙰ
+
+# Hopefully these will work?
+# ng (i short) : U+158F
+# ng (u short) : U+1591
+# ng (a short) : U+1593
+# ng (i long) : U+1590
+# ng (u long) : U+1592
+# ng (a long) : U+1594
+# ng ai : U+1670
+
+# ["U+1671","U+1673","U+1675","U+1672","U+1674","U+1676"]
+nng (i short) : ᙱ
+nng (u short) : ᙳ
+nng (a short) : ᙵ
+nng (i long) : ᙲ
+nng (u long) : ᙴ
+nng (a long) : ᙶ
+nng ai : ᖖ ᒉ
+
+lh (i short) : ᖠ
+lh (u short) : ᖢ
+lh (a short) : ᖤ
+lh (i long) : ᖡ
+lh (u long) : ᖣ
+lh (a long) : ᖥ
+
+# Newly added codepoints: 
+
+h' (i short) : U+11AB0
+h' (u short) : U+11AB2
+h' (a short) : U+11AB4
+h' (i long) : U+11AB1
+h' (u long) : U+11AB3
+h' (a long) : U+11AB5
+
+shr (i short) : U+11AB6
+shr (u short) : U+11AB8
+shr (a short) : U+11ABA
+shr (i long) : U+11AB7
+shr (u long) : U+11AB9
+shr (a long) : U+11ABB

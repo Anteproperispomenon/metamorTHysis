@@ -1,0 +1,23 @@
+# orthography : inuktitut_syllabics
+# phoneme set : "../phonemes/example_inuktitut.thyt"
+
+# incomplete version for testing parser.
+
+# default case : /at
+
+
+====
+
+# No classes or states.
+
+# import group vowel
+
+====
+
+# Final Consonants
+
+
+p  : p
+
+# q  : q
+

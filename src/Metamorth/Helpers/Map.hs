@@ -1,17 +1,23 @@
 module Metamorth.Helpers.Map
   ( forWithKey
+  , forWithKey_
   , fromSelfList
   , forMapWithKey
   , forMaybeMap
   , forMaybeMapWithKey
   , forIntersectionWithKey
   , lookupE
+  , forMapFromSet
+  , forMapFromSetM
   ) where
 
+import Data.Functor (($>))
 import Data.Functor.Identity
 
 import Data.Maybe
 import Data.Map.Strict qualified as M
+
+import Data.Set qualified as S
 
 -- | Like `M.traverseWithKey`, but with the
 --   opposite argument order. Makes it easier
@@ -22,6 +28,9 @@ import Data.Map.Strict qualified as M
 forWithKey :: Applicative t => M.Map k a -> (k -> a -> t b) -> t (M.Map k b)
 forWithKey mp f = M.traverseWithKey f mp
 {-# INLINE forWithKey #-}
+
+forWithKey_ :: Applicative t => M.Map k a -> (k -> a -> t b) -> t ()
+forWithKey_ mp f = (M.traverseWithKey f mp) $> ()
 
 -- | Create a `M.Map` from a simple list,
 --   where every element is used as both
@@ -51,6 +60,17 @@ lookupE :: (Ord k, Show k) => k -> M.Map k a -> Either String a
 lookupE k mp = case (M.lookup k mp) of
   (Nothing) -> Left $ show k
   (Just  x) -> Right x
+
+-- | Convert a `S.Set` to a `M.Map` using
+--   an applicative action on each element.
+forMapFromSet :: (Applicative m) => S.Set a -> (a -> m b) -> m (M.Map a b)
+forMapFromSet st f = sequenceA $ M.fromSet f st
+
+-- | Convert a `S.Set` to a `M.Map` using
+--   a monadic action on each element.
+forMapFromSetM :: (Monad m) => S.Set a -> (a -> m b) -> m (M.Map a b)
+forMapFromSetM st f = sequence $ M.fromSet f st
+
 
 {- whoops
 mapMapMaybeWithKey :: (k -> a -> Maybe b) -> M.Map k a -> M.Map k b

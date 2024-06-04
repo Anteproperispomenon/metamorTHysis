@@ -1,0 +1,59 @@
+
+name : followA
+
+default case : /at
+
+====
+
+# no classes/states?
+
+====
+
+# vowels
+a : a
+e : e
+i : i
+o : o
+oo : ʊ
+# oo : o o
+# aw : a w
+aw : ɒ
+schwa : ə
+
+# Testing "follow" stuff
+# aw >palatal_velar  : ɑ
+# a  >alveolar       : æ
+aw >g : ɑ
+aw >h : ɑ
+# aw >j : ɑ
+a >sh : æ
+
+# labial
+b : b
+p : p
+f : f
+w : w
+v : v
+m : m
+
+# alveolar
+n : n
+d : d
+t : t
+s : s
+l : l
+r : r
+sh : ʃ
+ch : t ʃ
+zh : ʒ
+ts : c
+dz : d z
+th : θ
+dh : ð
+
+# palatal/alveolar
+j : j
+k : k
+g : g
+ng : ŋ
+h : x # to avoid conflicts

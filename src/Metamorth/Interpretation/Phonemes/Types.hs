@@ -27,8 +27,6 @@ import Data.List (find, null, partition)
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
-
-
 data PropertyOption
   = AspectOption String
   | TraitOption  String (Maybe String)

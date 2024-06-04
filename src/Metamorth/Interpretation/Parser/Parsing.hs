@@ -361,7 +361,7 @@ parseClassDecSection = do
   _ <- lift $ many parseEndComment
   _ <- AT.many' $ do
     parseClassDecS <|> parseStateDecS <|> parseUnspecifiedClassOrState
-    lift $ AT.many1 parseEndComment
+    lift $ some_ parseEndComment
   _ <- lift $ many  parseEndComment
   _ <- lift ("====" <?> "Classes: Separator1")
   _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
@@ -378,8 +378,8 @@ parseUnspecifiedClassOrState = do
   c <- lift $ AT.peekChar'
   case c of
     ':' -> do
-      lift $ AT.anyChar
-      lift $ skipHoriz
+      lift $ void AT.anyChar
+      lift skipHoriz
       (txt, bl) <- lift $ AT.match classOrStateDecider'
       let outp = case bl of
                   (Right  True) -> "  class " <> thingName <> " : " <> (T.unpack txt)
@@ -513,12 +513,12 @@ parseOrthographyChoice = do
 --   the separator.
 parseOrthographyProps :: AT.Parser HeaderData
 parseOrthographyProps = do
-  (many parseEndComment) <?> "Header: skipSpace 1"
+  (many_ parseEndComment) <?> "Header: skipSpace 1"
   -- AT.skipSpace 
   nom <- (parseOrthographyName) <?> "Header: parseOrthographyName"
-  (AT.many1 parseEndComment) <?> "Header: skipSpace 2"
+  (some_ parseEndComment) <?> "Header: skipSpace 2"
   pho <- parseOrthographyChoice <?> "Header: parseOrthographyChoice"
-  (AT.many1 parseEndComment) <?> "Header: skipSpace 3"
+  (some_ parseEndComment) <?> "Header: skipSpace 3"
   _ <- "===="  <?> "Header: Separator"
   _ <- (AT.takeWhile (== '=')) <?> "Separator"
   parseEndComment <?> "Header: skipSpace 4"
@@ -544,7 +544,6 @@ parsePhoneme1 :: AT.Parser PhoneName
 parsePhoneme1 = parsePhonemeBrack <|> parseAlt
   where 
     parseAlt = (\x -> (PhoneName (T.unpack x) [])) <$> ((takeIdentifier isAlpha isFollowId) <?> "Can't read phoneme name")
-          
 
 parsePhonemeList :: AT.Parser (NonEmpty PhoneName)
 parsePhonemeList = do
@@ -645,21 +644,21 @@ parseOrthographyFile = do
   (_rslt, stt, msgs) <- embedParserParser $ do
     -- Parse the class instances
     parseClassDecSection
-    void $ lift $ many parseEndComment
+    lift $ many_ parseEndComment
 
     -- Parse the phoneme patterns
     _ <- AT.many' $ do
       -- Skip spaces...
-      void $ lift $ many parseEndComment
+      lift $ many_ parseEndComment
       parsePhonemePatS
       -- lift skipHoriz
       lift parseEndComment
     lift AT.skipSpace
-    lift $ many parseEndComment
+    lift $ many_ parseEndComment
     _ <- AT.option () $ do
       _ <- lift ("====" <?> "Phoneme Patterns: Separator")
       _ <- AT.many' $ do
-        lift $ many parseEndComment
+        lift $ many_ parseEndComment
         parsePhonemePatMulti
         lift parseEndComment
       return ()
@@ -679,15 +678,6 @@ parseOrthographyFile = do
 getStrPN :: [PhoneName] -> String
 getStrPN [] = "<??>"
 getStrPN ((PhoneName nom _):_) = nom
-
--- | Parse the end of line, possibly preceded by a comment.
-parseEndComment :: AT.Parser ()
-parseEndComment = do
-  skipHoriz
-  AT.option () $ do
-    _ <- AT.char '#'
-    AT.skipWhile (\x -> x /= '\n' && x /= '\r')
-  AT.endOfLine
 
 
 -- :m + Metamorth.Interpretation.Parser.Parsing Metamorth.Interpretation.Parser.Types Data.Either Control.Monad
