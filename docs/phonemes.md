@@ -15,6 +15,10 @@ The main usage of groups is to separate vowels and consonants
 for syllabic orthographies that combine consonants and
 vowels into individual characters. 
 
+If you want, you can even make sub-groups of phonemes.
+However, you cannot have a group with both phonemes and
+sub-groups.
+
 e.g. In Haskell, the following groups of phonemes would 
 translate into the following types:
 
@@ -182,31 +186,15 @@ instance Show Ph_consonant where
   show Ph_consonant_d = "d"
   show Ph_consonant_g = "g"
 
-data PhonemeTraits
-   = PhonemeTraits
-     { pht_neutral      :: Bool
-     , pht_articulation :: Maybe Tr_articulation
-     } deriving (Show, Eq)
+isNeutral :: Phoneme -> Bool
+isNeutral (Ph1 Ph_vowel_i) = True
+isNeutral _ = False
 
-phonemeTraitsDef :: PhonemeTraits
-phonemeTraitsDef = PhonemeTraits False Nothing
-
-phonemeTraits_vowel :: Ph_vowel -> PhonemeTraits
-phonemeTraits_vowel Ph_vowel_i = phonemeTraitsDef {pht_neutral = True}
-phonemeTraits_vowel _ = phonemeTraitsDef
-
-phonemeTraits_consonant :: Ph_consonant -> PhonemeTraits
-phonemeTraits_consonant Ph_consonant_b = phonemeTraitsDef 
-  {pht_articulation = Just Tr_articulation_labial}
-phonemeTraits_consonant Ph_consonant_d = phonemeTraitsDef 
-  {pht_articulation = Just Tr_articulation_alveolar}
-phonemeTraits_consonant Ph_consonant_h = phonemeTraitsDef 
-  {pht_articulation = Just Tr_articulation_velar}
-
-phonemeTraits :: Phoneme -> PhonemeTraits
-phonemeTraits (Ph1 x) = phonemeTraits_vowel x
-phonemeTraits (Ph2 x) = phonemeTraits_consonant x
-
+whatArticulation :: Phoneme -> Maybe Tr_articulation
+whatArticulation (Ph2 Ph_consonant_b) = Just Tr_articulation_labial
+whatArticulation (Ph2 Ph_consonant_d) = Just Tr_articulation_alveolar
+whatArticulation (Ph2 Ph_consonant_g) = Just Tr_articulation_velar
+whatArticulation _ = Nothing
 ```
 
 

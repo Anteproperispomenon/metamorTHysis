@@ -70,6 +70,11 @@ defines the phoneme set you're working with. It can
 be a file name, or the name of the phoneme set
 specified in the phoneme file.
 
+The phoneme set isn't even required anymore, since the
+relationship between the various files is specified
+separately in one of the ".hs" files. It's more useful
+just for someone else reading the file.
+
 ### Patterns
 
 Patterns are the most important part of the parser file.
@@ -470,7 +475,7 @@ state last_last_vowel : va ve vi vo vu
 
 # As are these two
 state last_fric : v f s z th sh zh
-state last_lav  : v f w m p b
+state last_lab  : v f w m p b
 
 # This state is NOT okay
 state not_okay : not not yes
