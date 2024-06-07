@@ -56,12 +56,14 @@ to the desired output text. The format is very similar to the
 parser format, but there are some key differences. For more
 information, have a look at [the output documentation](docs/output.md).
 
+Typically, output file ue the extenion ".thyo".
+
 ## Notes
 
 ### Case/Capitalisation
 
 Note that as of 2024-06-07, case detection is *still not implemented*.
-i.e. When a phoneme is parsed, data aboutwhether the character was 
+i.e. When a phoneme is parsed, data about whether the character was 
 upper-case or lower-case is not retained. While there is already a lot 
 of code to handle cases, it's effectively useless, since there's no
 indication of which case a `Phoneme` should be.
