@@ -110,7 +110,6 @@ be either `front` or `back`. Then, you could define four vowels, `e`, `u`,
 when writing your `output` specification, you can easily choose the
 output character based on the value of `harmony`.
 
-
 ## Example
 
 As an example of the above features, the following specification
