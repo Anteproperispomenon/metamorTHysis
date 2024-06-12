@@ -82,7 +82,6 @@ Most of the actual specification files are placed in the `orth/` directory,
 which is where you should place your orthography and phoneme specificaitons
 (see below).
 
-
 ## How Does it Work?
 
 The goal of metamorTHysis is to have the user provide a "specification"
