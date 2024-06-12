@@ -9,6 +9,13 @@ files. To see an example of how to do this, look into the
 [example file](https://github.com/Anteproperispomenon/metamorTHysis-template/blob/main/src/Orthographies.hs)
 from [metamorTHysis-template](https://github.com/Anteproperispomenon/metamorTHysis-template).
 
+To actually (try and) compile your code, you just need to run
+the command:
+
+```bash
+stack build
+```
+
 ## Creating the Binaries
 
 Once you've got your library working, you'll need to create
@@ -42,6 +49,12 @@ server, not one to run on the open web (at least, not yet). Once again,
 if you've use the [metamorTHysis template](https://github.com/Anteproperispomenon/metamorTHysis-template),
 there will already be a binary for this version filled out. However, this
 program may require some more configuration. 
+
+To run the server program, just use the following command:
+
+```bash
+stack run my-converter-server
+```
 
 The server version consists of a single server, but in practice has two
 very different use cases
