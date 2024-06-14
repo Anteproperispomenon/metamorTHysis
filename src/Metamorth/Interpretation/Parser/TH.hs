@@ -314,13 +314,21 @@ makeTheParser'
   -> ParserOptions                    -- ^ Parser 
   -> QS ([Dec], StaticParserInfo, Name)
 makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = do
+  -- The name for the function that resets the auto-off states after
+  -- every phoneme. If there are no auto-off states, this function
+  -- should be a no op.
+  -- resetFuncName <- newName "resetAutoStates"
+
   let classDictX = ppsClassDictionary pps
-      stateDictX = snd <$> ppsStateDictionary pps -- TODO: You'll (probably) need to modify this in the future.
+      stateDictZ = ppsStateDictionary pps
       phonePats  = ppsPhonemePatterns pps
+      stateDictX = snd <$> stateDictZ
+      autoStateDict = M.mapMaybe (\case {(True, x) -> Just x ; _ -> Nothing}) stateDictZ
       -- mainTrie  = if (poGroupGuards pops) then (pathifyTrie phonePats) else (dontPathifyTrie phonePats)
       mainTrie   = setupTrie pops phonePats
   (stDecs, stateTypeName, stateConsName, defStateName, newStateDict) <- createStateDecs "StateType" "StateCons" stateDictX
   (clDecs, newClassDict) <- makeClassDecs classDictX
+  (autoStateDecs, resetFuncName, resetContName) <- makeAutoStateFunc stateTypeName newStateDict autoStateDict
   -- Getting the annotation map...
   let annots' = map fst $ TM.elems mainTrie
       annots  = nubSort annots'
@@ -357,7 +365,7 @@ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops =
 
   (epDecs, finalName) <- makeEntryPoint spi nm1 nm2 (poMainFuncName pops)
 
-  return (concat [epDecs, stDecs, clDecs, charPredDecs, funcDecs], spi, finalName)
+  return (concat [epDecs, stDecs, autoStateDecs, clDecs, charPredDecs, funcDecs], spi, finalName)
 
 {-
   :: StaticParserInfo
@@ -458,6 +466,53 @@ createStateDecs stateTypeString stateConsString theMap = do
 
 -- fmap (\(x,_,_,_) -> ppr x) $ join (fmap (runQ . (createStateDecs "StateType") . ppsStateDictionary) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample8.thyp")
 
+-- | Creating the function for auto-off state modifications:
+makeAutoStateFunc :: Name -> (M.Map String (Name, Maybe (Name, M.Map String Name))) -> M.Map String (Maybe (S.Set String)) -> QS ([Dec], Name, Name)
+makeAutoStateFunc recNom stateMap autoMap = do 
+  resetFuncName <- newName "resetAutoStates"
+  resetContName <- newName "resetAndContinue"
+  if (M.null autoMap)
+    then do
+      tv <- newName "a"
+      let funcSig1 = SigD resetFuncName $ arrowChainT [ConT recNom] (ConT recNom)
+          funcDef1 = ValD (VarP resetFuncName) (NormalB $ VarE 'id) []
+          funcSig2 = SigD resetContName $ arrowChainT [VarT tv] (VarT tv)
+          funcDef2 = ValD (VarP resetContName) (NormalB $ VarE 'id) []
+      return ([funcSig1, funcDef1, funcSig2, funcDef2], resetFuncName, resetContName)
+    else do
+      vv <- newName "x"
+      tv <- newName "a"
+
+      -- Hope this works when using more than once...
+      -- (i.e. hope the type variables are understood to
+      --  refer to the same type.)
+      monType <- [t| State.StateT $(pure $ ConT recNom) AT.Parser $(pure $ VarT tv) |]
+
+      let funcSig1 = SigD resetFuncName $ arrowChainT [ConT recNom] (ConT recNom)
+          funcMap1 = forMaybeMapWithKey autoMap $ \k _ -> do
+            (recFieldNom, mStateDec) <- M.lookup k stateMap
+            valExp <- case mStateDec of
+              Nothing  -> return $ ConE 'False
+              (Just _) -> return $ ConE 'Nothing
+            return (recFieldNom, valExp)
+          funcFld1 = M.elems funcMap1
+          funcDef1 = FunD resetFuncName [Clause [VarP vv] (NormalB $ RecUpdE (VarE vv) funcFld1) []]
+
+      -- Actually modifying the state
+      funcExp2 <- [| State.modify' $(pure $ VarE resetFuncName) |]
+
+      let funcSig2 = SigD resetContName $ arrowChainT [monType] monType
+          funcExp3 = funcExp2 `infixCont` (VarE vv)
+          funcDef2 = FunD resetContName [Clause [VarP vv] (NormalB funcExp3) []]
+
+      return ([funcSig1, funcDef1, funcSig2, funcDef2], resetFuncName, resetContName)
+
+-- forMaybeMapWithKey :: M.Map k a -> (k -> a -> Maybe b) -> M.Map k b
+
+-- Control.Monad.Trans.State.Strict.StateT StateType_grb_a45c Data.Attoparsec.Text.Internal.Parser (GHC.Base.NonEmpty Phoneme_a41v)
+
+-- import Control.Monad.Trans.State.Strict qualified as State
+-- import Data.Attoparsec.Text qualified as AT
 
 ----------------------------------------------------------------
 -- Top-Level Function Generator
