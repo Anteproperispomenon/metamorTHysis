@@ -103,9 +103,9 @@ following `JSON`:
 
 | Key | Value |
 |-----|-------|
-| `"text"`   | The text to be converted by the server |
-| `"input"`  | The orthography of the input text |
-| `"output"` | The desired orthography of the output text |
+| `"text"`    | The text to be converted by the server |
+| `"input"`   | The orthography of the input text |
+| `"output"`  | The desired orthography of the output text |
 
 Note that you can also send a `POST` request with the text "info" or "details" to
 `<server>/query`[^1] which will send back a `JSON` object containing the language name
@@ -179,4 +179,4 @@ my-converter-server --port 8999
 
 ## Footnotes
 
-[^1] : You can also just send a `GET` request to `<server>/info` to get the same orthography data.
+[^1]: You can also just send a `GET` request to `<server>/info` to get the same orthography data.
