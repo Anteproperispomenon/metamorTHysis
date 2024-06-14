@@ -99,7 +99,7 @@ The `JSON` server takes `POST` requests of `JSON` data and then returns an objec
 whether the text could successfully be converted or not.
 
 In general, `POST` requests are made to `<server>/convert` or `<server>/query` with the
-following **(un-stringified)** `JSON`:
+following `JSON`:
 
 | Key | Value |
 |-----|-------|

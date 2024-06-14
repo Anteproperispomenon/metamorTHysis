@@ -67,7 +67,7 @@ without (necessarily) having to use file I/O.
 
 This creates a simple server (at `localhost:8081` by default), that accepts POST
 requests at `localhost:8081/convert`, and `localhost:8081/query`. These POST requests
-use simple **(un-stringified)** JSON input of the following form:
+use simple JSON input of the following form:
 
 ```json
 { "text"   : "text to convert"

@@ -143,6 +143,12 @@ will explain how to specify your specification files.
 
 For more info, look at the [compiling documentation](docs/compiling.md).
 
+## Running Your Program
+
+After compiling your code, you'll probably want to actaully run the program(s).
+You can either run them via Stack, or copy the binary files to another location
+and run them there. For more info, see [running](docs/running.md).
+
 ## Notes
 
 ### Case/Capitalisation
