@@ -315,7 +315,7 @@ makeTheParser'
   -> QS ([Dec], StaticParserInfo, Name)
 makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = do
   let classDictX = ppsClassDictionary pps
-      stateDictX = ppsStateDictionary pps
+      stateDictX = snd <$> ppsStateDictionary pps -- TODO: You'll (probably) need to modify this in the future.
       phonePats  = ppsPhonemePatterns pps
       -- mainTrie  = if (poGroupGuards pops) then (pathifyTrie phonePats) else (dontPathifyTrie phonePats)
       mainTrie   = setupTrie pops phonePats

@@ -190,6 +190,8 @@ parseMultiNonSpaceRS = do
 mkList :: (Functor f) => f a -> f [a]
 mkList fx = (:[]) <$> fx
 
+
+
 --------------------------------
 -- "State-must-be" Parser(s)
 
@@ -218,12 +220,12 @@ parseStateValRS = do
     Nothing -> do 
       mkError $ "Couldn't find state name \"" <> st <> "\" in dictionary."
       return Nothing
-    (Just Nothing) -> case (checkBoolString val) of
+    (Just (_, Nothing)) -> case (checkBoolString val) of
       Nothing -> do 
         mkError $ "Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."
         return Nothing
       (Just bl) -> return $ Just (ValStateR st (Right bl))
-    (Just (Just valSet)) -> if (val' `S.member` valSet)
+    (Just (_, Just valSet)) -> if (val' `S.member` valSet)
       then (return $ Just $ ValStateR st (Left val'))
       else case (checkBoolString val) of
         Nothing -> do
@@ -258,6 +260,8 @@ checkOffString txt
   | otherwise = Nothing
   where txt' = T.toLower txt
 
+
+
 --------------------------------
 -- "Set-state-to" Parser(s)
 
@@ -286,12 +290,12 @@ parseStateSetRS = do
     Nothing -> do 
       mkError $ "Couldn't find state name \"" <> st <> "\" in dictionary."
       return Nothing
-    (Just Nothing) -> case (checkBoolString val) of
+    (Just (_, Nothing)) -> case (checkBoolString val) of
       Nothing -> do 
         mkError $ "Couldn't interpret \"" <> val' <> "\" as boolean value for state \"" <> st <> "\"."
         return Nothing
       (Just bl) -> return $ Just (SetStateR st (Right bl))
-    (Just (Just valSet)) -> if (val' `S.member` valSet)
+    (Just (_, Just valSet)) -> if (val' `S.member` valSet)
       then (return $ Just $ SetStateR st (Left val'))
       -- need to use `checkOffString` since you can't just
       -- set an option string to `On`; you need a value to
@@ -440,13 +444,15 @@ classOrStateDecider' = do
     (Just Nothing)  -> Left True
     (Just (Just x)) -> Right x
 
-
 ----------------------------------------------------------------
 -- State Info Parsers
 ----------------------------------------------------------------
 
-parseStateDec :: AT.Parser (String, Maybe (S.Set String))
+parseStateDec :: AT.Parser (String, Bool, Maybe (S.Set String))
 parseStateDec = do
+  isAuto <- optionalBool $ do
+    parseAutoOff
+    skipHoriz1
   _ <- "state"
   skipHoriz1
   stateName <- takeIdentifier isLower isFollowId
@@ -460,19 +466,25 @@ parseStateDec = do
   case vals of
     Nothing -> return ()
     (Just xs) -> when (not $ allUnique xs) $ fail $ "State \"" <> (T.unpack stateName) <> "\" has multiple options with the same name."
-  return (T.unpack stateName, (S.fromList . map T.unpack) <$> vals)
+  return (T.unpack stateName, isAuto, (S.fromList . map T.unpack) <$> vals)
 
 -- | Parse a state declaration and add it to
 --   the state dictionary.
 parseStateDecS :: ParserParser ()
 parseStateDecS = do
-  (stName, stSet) <- lift $ parseStateDec
+  (stName, isAuto, stSet) <- lift $ parseStateDec
   theMap <- gets ppsStateDictionary
   case (M.lookup stName theMap) of
     (Just _) -> mkError $ "Error: state \"" <> stName <> "\" has multiple definitions."
     Nothing  -> do
-        let newMap = M.insert stName stSet theMap
+        let newMap = M.insert stName (isAuto, stSet) theMap
         modify $ \x -> x {ppsStateDictionary = newMap}
+
+-- | Parse the prefix for states to indicate that they
+--   are auto-off.
+parseAutoOff :: AT.Parser ()
+parseAutoOff = void
+  ("auto-off" <|> "auto" <|> "short" <|> "off")
 
 ----------------------------------------------------------------
 -- Orthography Properties Parsers
@@ -594,7 +606,7 @@ parsePhonemePatS = do
       (lift skipHoriz1)
     -- hmm...
     sdict <- gets ppsStateDictionary
-    let ePhonePats = processRawPhonePattern sdict (RawPhonemePattern specs thePats)
+    let ePhonePats = processRawPhonePattern (snd <$> sdict) (RawPhonemePattern specs thePats)
     case ePhonePats of
       (Left  errs) -> mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemePattern pn rslt
@@ -629,7 +641,7 @@ parsePhonemePatMulti = do
       (lift skipHoriz1)
     -- hmm...
     sdict <- gets ppsStateDictionary
-    let ePhonePats = processRawPhonePattern sdict (RawPhonemePattern specs thePats)
+    let ePhonePats = processRawPhonePattern (snd <$> sdict) (RawPhonemePattern specs thePats)
     case ePhonePats of
       (Left  errs) -> mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemesPattern phones rslt
