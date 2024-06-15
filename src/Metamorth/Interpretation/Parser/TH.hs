@@ -1277,7 +1277,7 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
     subTries = map (second (first fromJust)) $ getSubTries theTrie
 
     -- This is using the `Either` monad.
-    mkRslts = \(chrP,((ann, mPhone), thisSubTrie)) -> do
+    mkRslts (chrP,((ann, mPhone), thisSubTrie)) = do
       -- (phnNom, phnArgs) <- eitherMaybe' mPhone ("Couldn't fi")
       -- cstr <- eitherMaybe' (M.lookup )
       case (ann, mPhone) of
@@ -1287,10 +1287,11 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
           -- modifyStateExps :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> [ModifyStateX] -> Either [String] (Exp -> Exp)
           let pnom = prPhonemes  prslt
               pmod = prStateMods prslt
+              applyReset = AppE (VarE resetStateFunc)
           cstrExps   <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc notEndWordFunc chrP charVarName
           resultModifier <- modifyStateExps sdict pmod
-          return (( guardThing , resultModifier $ consumerRet' mkMaj mkMin chrP cs mbl cstrExps), Nothing)
+          return (( guardThing , applyReset $ resultModifier $ consumerRet' mkMaj mkMin chrP cs mbl cstrExps), Nothing)
         -- (Trie)
         -- [((TrieAnnotation, Maybe (PhoneName, Caseness)), Bool, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)))]
         elm@(tnn@(TrieAnn _), mph) -> do
@@ -1308,9 +1309,10 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
       (Just (prslt, cs)) -> do
         let pnom = prPhonemes  prslt
             pmod = prStateMods prslt
+            applyReset = AppE (VarE resetStateFunc)
         cstrExp        <- phoneNamePatterns patMap aspMaps pnom
         resultModifier <- modifyStateExps sdict pmod
-        return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
+        return $ applyReset $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
 makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
@@ -1319,17 +1321,18 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
     -- Since TrieAnnotation should always be present, it should
     -- be safe to use `fromJust`.
     subTries = map (second (first fromJust)) $ getSubTries theTrie
-    mkRslts = \(chrP, ((ann, mPhone), thisSubTrie)) -> do
+    mkRslts (chrP, ((ann, mPhone), thisSubTrie)) = do
       case (ann, mPhone) of
         (TrieLeaf, mph) -> do
           (prslt, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
           let pnom = prPhonemes  prslt
               pmod = prStateMods prslt
+              applyReset = AppE (VarE resetStateFunc)
           cstrExp    <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc notEndWordFunc chrP charVarName
           resultModifier <- modifyStateExps sdict pmod
           let xRslt = consumerRetX mkMaj mkMin chrP cs charVarName cstrExp
-          return ((guardThing,resultModifier xRslt), Nothing)
+          return ((guardThing,applyReset $ resultModifier xRslt), Nothing)
         elm@(tnn@(TrieAnn _), mph) -> do
           nextFunc <- eitherMaybe' (M.lookup tnn funcMap) ["Couldn't find function for pattern: \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
           (guardThing, isCased) <- Bi.first (:[]) $ charPatternGuard' classMap endWordFunc notEndWordFunc chrP charVarName
@@ -1349,9 +1352,10 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
         -- TODO : Addd in the state stuff
         let pnom = prPhonemes  prslt
             pmod = prStateMods prslt
+            applyReset = AppE (VarE resetStateFunc)
         cstrExp <- phoneNamePatterns patMap aspMaps pnom
         resultModifier <- modifyStateExps sdict pmod
-        return $ resultModifier $ phonemeRetZ mkMaj mkMin cs charVarName cstrExp
+        return $ applyReset $ resultModifier $ phonemeRetZ mkMaj mkMin cs charVarName cstrExp
 {-
 
 consumerRetX mkMaj mkMin (PlainChar   c) cs peekName rslt
