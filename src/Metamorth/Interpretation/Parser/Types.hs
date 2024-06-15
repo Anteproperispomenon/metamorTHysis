@@ -17,6 +17,7 @@ module Metamorth.Interpretation.Parser.Types
   , CheckStateX(..)
   , ModifyStateX(..)
   , stateSubsetOf
+  , mergeStatesInto
   
   , RawPhonemePattern(..)
   , CharPatternRaw(..)
@@ -25,7 +26,7 @@ module Metamorth.Interpretation.Parser.Types
 import Data.Bifunctor
 
 import Data.Ord (Down(..))
-import Data.List (partition)
+import Data.List (partition, find)
 
 import Data.Map.Strict qualified as M
 
@@ -210,6 +211,29 @@ data ModifyStateX
   -- | Set a value-state to `Nothing`.
   | ModifyStateVX String
   deriving (Show, Eq, Ord)
+
+hasModX :: String -> [ModifyStateX] -> Bool
+hasModX str sts = isJust $ find (isState {- str -}) sts
+  where
+    isState :: {- String -> -} ModifyStateX -> Bool
+    isState {-str-} (ModifyStateBB str2 _) = str == str2
+    isState {-str-} (ModifyStateVV str2 _) = str == str2
+    isState {-str-} (ModifyStateVX str2  ) = str == str2
+
+-- | Merge two sets of `ModifyStateX`s. Values on the 
+--   right take priority
+mergeStatesInto :: [ModifyStateX] -> [ModifyStateX] -> [ModifyStateX]
+mergeStatesInto mods [] = mods
+mergeStatesInto [] mods = mods
+mergeStatesInto (modr@(ModifyStateBB str _):rst) mods
+  | hasModX str mods = mergeStatesInto rst mods
+  | otherwise        = modr : mergeStatesInto rst mods
+mergeStatesInto (modr@(ModifyStateVV str _):rst) mods
+  | hasModX str mods = mergeStatesInto rst mods
+  | otherwise        = modr : mergeStatesInto rst mods
+mergeStatesInto (modr@(ModifyStateVX str  ):rst) mods
+  | hasModX str mods = mergeStatesInto rst mods
+  | otherwise        = modr : mergeStatesInto rst mods
 
 -- | Separate a `StateMod` into a `CheckState` or a `ModifyState`.
 --   Such values will still need to be validated by `validateCheckState`
