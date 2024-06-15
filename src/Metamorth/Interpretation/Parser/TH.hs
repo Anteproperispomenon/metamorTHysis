@@ -352,6 +352,7 @@ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops =
               , spiStateTypeName   = stateTypeName
               , spiStateConsName   = stateConsName
               , spiDefStateName    = defStateName
+              , spiResetContFunc   = resetContName
               , spiStateDictionary = newStateDict
               , spiWordTypeNames   = wordDataNames
               }
@@ -573,6 +574,7 @@ makeWordEndFunctions theTrie classDec = do
       notStChars = map charE $ nubSort $ concatMap getOptions $ getFirstSteps notStTrie
       rstOfChars = map charE $ nubSort $ concatMap getOptions $ getFirstSteps rstOfTrie
 
+  -- Functions to check whether a character is in the specific category or not.
   punctExp <- [| \x -> $(pure $ allNeqE (startChars ++ rstOfChars) (VarE 'x)) |]
   isEndExp <- [| \x -> $(pure $ allNeqE (notStChars ++ rstOfChars) (VarE 'x)) |]
   noEndExp <- [| \x -> $(pure $ anyEqE  (notStChars ++ rstOfChars) (VarE 'x)) |]
@@ -616,7 +618,7 @@ makeEntryPoint spi startWordFunc restWordFunc finalFuncStr = do
 
 
   -- Building these up one at a time...
-  funcExp1 <- [| (liftA2 (:)) $startWordFuncQE (AT.many' $restWordFuncQE) |] -- collect a lisst of phones...
+  funcExp1 <- [| (liftA2 (:)) $startWordFuncQE (AT.many' $restWordFuncQE) |] -- collect a list of phones...
   funcExp2 <- [| concatMap NE.toList <$> $(pure funcExp1) |] -- concat the results...
   funcExp3 <- [| State.evalStateT $(pure funcExp2) $(pure defStateVal) |] -- run them with the state...
   funcExp4 <- [| $wordCstrQE <$>  $(pure funcExp3) |] -- store in the proper type.
@@ -921,6 +923,10 @@ data StaticParserInfo = StaticParserInfo
   --   constructor is for sequences of phonemes,
   --   the second is for punctuation etc...
   , spiWordTypeNames   :: (Name, (Name, Name))
+  -- | The name of the function/action that resets
+  --   the auto-states to off and then runs the
+  --   next procedure
+  , spiResetContFunc   :: Name
   }
 
 instance Eq StaticParserInfo where
@@ -940,6 +946,7 @@ instance Eq StaticParserInfo where
       && ((spiDefStateName x) == (spiDefStateName y))
       && ((spiStateDictionary x) == (spiStateDictionary y))
       && ((spiWordTypeNames x) == (spiWordTypeNames y))
+      && ((spiResetContFunc x) == (spiResetContFunc y))
     where
       spiMkMaj' z = (spiMkMaj z) (ConE (mkName "Example"))
       spiMkMin' z = (spiMkMin z) (ConE (mkName "Example"))
@@ -961,6 +968,7 @@ instance Show StaticParserInfo where
       <> ", spiDefStateName = "    <> show (spiDefStateName x)
       <> ", spiStateDictionary = " <> show (spiStateDictionary x)
       <> ", spiWordTypeNames = "   <> show (spiWordTypeNames x)
+      <> ", spiResetContFunc = "   <> show (spiResetContFunc x)
       <> "}"
     where
       exprNom  = mkName "expr"
@@ -1237,6 +1245,7 @@ constructGuards mbl charVarName trieAnn mTrieVal theTrie spi = makeGuards
       (spiClassMap spi)
       (spiEndWordFunc spi)
       (spiNotEndWordFunc spi)
+      (spiResetContFunc spi)
       (spiStateDictionary spi)
 
 makeGuards
@@ -1253,10 +1262,11 @@ makeGuards
   -> (M.Map String (Name, [Char])) -- ^ Map for class function names.
   -> Name                          -- ^ Name of the "end of word" function.
   -> Name                          -- ^ Name of the "not end of word" function.
+  -> Name                          -- ^ Name of the "reset auto-state" function
   -> M.Map String (Name, Maybe (Name, M.Map String Name)) -- ^ The state dictionary
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
   -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneResult, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)))])
-makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc sdict precPatrn = do
+makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1301,7 +1311,7 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
         cstrExp        <- phoneNamePatterns patMap aspMaps pnom
         resultModifier <- modifyStateExps sdict pmod
         return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
-makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc sdict precPatrn = do
+makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1811,11 +1821,16 @@ allE xs = case (NE.nonEmpty xs) of
   Nothing   -> trueE -- since True is the identity of "and".
   (Just ys) -> intersperseInfixRE (VarE '(&&)) ys
 
+-- | @allInfixE infx exprs val@ : 
+--   Checks that (expr `infx` val) is True
+--   for all expr in exprs.
 allInfixE :: Exp -> [Exp] -> Exp -> Exp
 allInfixE ifxE xs expr = allE $ map (eqE expr) xs
   where
     eqE e1 e2 = InfixE (Just e1) ifxE (Just e2)
 
+-- | Checks that none of the values in a list
+--   are equal to one value that is supplied.
 allNeqE :: [Exp] -> Exp -> Exp
 allNeqE = allInfixE (VarE '(/=))
 
@@ -1902,6 +1917,7 @@ exampleInfo
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
+      (mkName "resetStateCont")
 
 exampleInfo2 :: StaticParserInfo
 exampleInfo2
@@ -1922,6 +1938,7 @@ exampleInfo2
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")])))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
+      (mkName "resetStateCont")
   where
     consMap1 = (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["gh","ts","ch","sh","sep"]) $ \c -> (c, []))
     subMap1  = [M.fromList $ [("front",mkName "Front"), ("back", mkName "Back")]]
@@ -1948,6 +1965,7 @@ exampleInfo3
       M.empty -- filled in by `makeTheParser`
       -- (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
+      (mkName "resetStateCont")
 
 
 exampleOrth3 :: [String]
