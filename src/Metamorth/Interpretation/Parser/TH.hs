@@ -1570,6 +1570,7 @@ phonemeRet
 phonemeRet mkMaj mkMin c cs (Just blName) rslts
   | (cs == CMaj) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
   | (cs == CMin) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | (cs == CNul) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
   | otherwise    = condCase blName mkMaj mkMin rslts
   where
     ret  = VarE 'return
@@ -1592,6 +1593,7 @@ phonemeRet'
 phonemeRet' mkMaj mkMin cs (Just blName) rslts
   | (cs == CMaj) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
   | (cs == CMin) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | (cs == CNul) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
   | otherwise    = condCase blName mkMaj mkMin rslts
   where
     ret  = VarE 'return

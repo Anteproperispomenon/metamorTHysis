@@ -101,6 +101,9 @@ parseEscaped = do
     '+' -> consProd '+'
     '-' -> consProd '-'
     '%' -> consProd '%'
+    '~' -> consProd '~'
+    '!' -> consProd '!'
+    '@' -> consProd '@'
     y   -> consProd y
 
   {- -- older version
@@ -320,7 +323,7 @@ parseStateSetRS' = do
 -- Special Char Parsers
 
 parseSpecials :: AT.Parser [Char] 
-parseSpecials = AT.sepBy (AT.satisfy (\x -> x == '+' || x == '-')) skipHoriz
+parseSpecials = AT.sepBy (AT.satisfy (\x -> x == '+' || x == '-' || x == '~')) skipHoriz
 
 parseSpecialsS :: ParserParser [Char]
 parseSpecialsS = lift parseSpecials

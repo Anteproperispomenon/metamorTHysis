@@ -399,6 +399,43 @@ validateCharPatternZ' (x:_)
   | (isStateR  x) = lift $ Left "State-patterns should have been filtered out by this point."
   | otherwise     = lift $ Left "Some type of error happened when validating a CharPatternRaw."
 
+-- | Validate a pattern that has null-case. That is,
+--   it SHOULD ONLY use the listed character, not the
+--   lower-case or upper-case equivalent of it.
+validateCharPatternN :: [ModifyStateX] -> [CheckStateX] -> [CharPatternRaw] -> Either String PhonemePattern
+validateCharPatternN stms chks cpr = do
+  rslt <- validateCharPatternNX cpr
+  return $ PhonemePattern CNul (addStateToPat chks rslt) stms
+
+validateCharPatternNX :: [CharPatternRaw] -> Either String [CharPattern]
+validateCharPatternNX [] = Left "Can't have an empty pattern."
+validateCharPatternNX ((PlainCharR x):xs) = do
+  ((PlainChar [] x):) <$> validateCharPatternN' xs
+validateCharPatternNX ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternN' xs
+validateCharPatternNX [x]    | (startPatR x) = Left "Can't have a pattern with just a [not-]start-word mark."
+validateCharPatternNX [x,y]  | (startPatR x && endPatR y) = Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
+validateCharPatternNX (x:_)  | (endPatR x) = Left "Can't start a pattern with a [not-]word-end mark."
+validateCharPatternNX (WordStartR:xs) = (WordStart:) <$> validateCharPatternN' xs
+validateCharPatternNX (NotStartR :xs) = (NotStart :) <$> validateCharPatternN' xs
+validateCharPatternNX (x:_)  | isStateR x = Left "State-patterns should have been filtered out by this point."
+validateCharPatternNX _ = Left "Some type of error happened in validateCharPatternEX."
+
+validateCharPatternN' :: [CharPatternRaw] -> Either String [CharPattern]
+validateCharPatternN' [] = return []
+validateCharPatternN' ((PlainCharR x):xs) = 
+  ((PlainChar [] x):) <$> validateCharPatternN' xs
+  -- ((PlainChar [] x):) <$> validateCharPatternE' xs -- ???
+validateCharPatternN' ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternN' xs
+validateCharPatternN' [WordEndR] = return [WordEnd]
+validateCharPatternN' [NotEndR]  = return [NotEnd]
+validateCharPatternN' (x:_) 
+  | (startPatR x) = Left "Can't have a [not-]word-start mark in the middle of a pattern."
+  | (endPatR   x) = Left "Can't have a [not-]word-end mark in the middle of a pattern."
+  | (isStateR  x) = Left "State-patterns should have been filtered out by this point."
+  | otherwise     = Left "Some type of error happened in validateCharPatternE'."
+
+
+
 caseChar :: Char -> CharPattern
 caseChar c
   | isCasable c = CharOptCase [] (toLower c) -- Maybe ?
@@ -409,6 +446,7 @@ data Caseness
   = CMaj -- ^ Upper-Case, or "Majuscule"
   | CMin -- ^ Lower-Case, or "Minuscule"
   | CDep -- ^ Dependent on other factors.
+  | CNul -- ^ Null-caseness
   deriving (Show, Eq, Ord)
 
 data StateMod 
@@ -448,6 +486,9 @@ makeLower x = x { isUpperPP = CMin }
 makeUpper :: PhonemePattern -> PhonemePattern
 makeUpper x = x { isUpperPP = CMaj }
 
+makeNullCase :: PhonemePattern -> PhonemePattern
+makeNullCase x = x { isUpperPP = CNul }
+
 -- | The Raw Parsed type of a phoneme pattern.
 --   Needs to be converted to a list of possible
 --   `PhonemePattern`s.
@@ -461,8 +502,9 @@ data RawPhonemePattern = RawPhonemePattern
 --   more work.
 processRawPhonePattern :: M.Map String (Maybe (S.Set String)) -> RawPhonemePattern -> Either [String] PhonemePattern
 processRawPhonePattern sdict pat
-  | (hasUpper || hasLower) = bimap (:collectedErrors) makeCase $ validateCharPatternE mstates' vstates' cpats
-  | otherwise              = bimap (:collectedErrors) makeCase $ validateCharPatternZ mstates' vstates' cpats
+  | hasUpper || hasLower = bimap (:collectedErrors) makeCase $ validateCharPatternE mstates' vstates' cpats
+  | hasNull              = bimap (:collectedErrors) makeCase $ validateCharPatternN mstates' vstates' cpats -- for now
+  | otherwise            = bimap (:collectedErrors) makeCase $ validateCharPatternZ mstates' vstates' cpats
   -- | otherwise = Left ["incomplete function"]
   
   where 
@@ -478,14 +520,19 @@ processRawPhonePattern sdict pat
     mods = modCharRP pat
     hasUpper = '+' `elem` mods
     hasLower = '-' `elem` mods
+    hasNull  = '~' `elem` mods
     makeCase = if | hasUpper  -> makeUpper
                   | hasLower  -> makeLower
+                  | hasNull   -> makeNullCase
                   | otherwise -> id
 
-    collectedErrors = concat [bothCaseError, verrs, merrs]
+    collectedErrors = concat [bothCaseError, multiNullError, verrs, merrs]
     -- Errors
     bothCaseError = if (hasUpper && hasLower) 
       then ["Cannot declare a pattern to be both upper and lower case."] 
+      else []
+    multiNullError = if (hasNull && (hasUpper || hasLower))
+      then ["Cannot declare a pattern to be both direct and upper/lower case."] 
       else []
 
 -- Some of these need better error messages.
