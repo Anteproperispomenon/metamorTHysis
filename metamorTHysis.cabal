@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.35.1.
+-- This file has been generated from package.yaml by hpack version 0.34.4.
 --
 -- see: https://github.com/sol/hpack
 
@@ -84,8 +84,6 @@ library
       Metamorth.Interpretation.Phonemes.Types
   other-modules:
       Paths_metamorTHysis
-  autogen-modules:
-      Paths_metamorTHysis
   hs-source-dirs:
       src
   default-extensions:
@@ -115,8 +113,6 @@ library
 executable metamorTHysis-exe
   main-is: Main.hs
   other-modules:
-      Paths_metamorTHysis
-  autogen-modules:
       Paths_metamorTHysis
   hs-source-dirs:
       app
@@ -159,8 +155,6 @@ test-suite metamorTHysis-test
       Test.TH.Kwakwala
       Test.TH.Mongolian
       Test.TH.TwoOrths
-      Paths_metamorTHysis
-  autogen-modules:
       Paths_metamorTHysis
   hs-source-dirs:
       test

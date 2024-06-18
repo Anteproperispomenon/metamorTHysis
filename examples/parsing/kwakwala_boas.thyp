@@ -1,0 +1,246 @@
+orthography : boas
+phoneme set : kwakwala
+
+====
+
+auto state lastVow
+
+# mid-point dot
+class dot : U+00B7 U+2027
+class upU : ᵘ U+0367
+
+
+====
+
+# Vowels
+
+# !lastVow=on
+
+schwa : ă        !lastVow=on
+schwa : a U+0306 !lastVow=on
+schwa : U+1D07   !lastVow=on # smallcaps E
+schwa : î        !lastVow=on
+schwa : i U+0302 !lastVow=on
+
+a : a !lastVow=on
+a : ā !lastVow=on
+a : a U+0304 !lastVow=on
+
+e : ê        !lastVow=on
+e : e U+0302 !lastVow=on
+e : ë        !lastVow=on
+e : e U+0308 !lastVow=on
+
+o : ô        !lastVow=on
+o : o U+0302 !lastVow=on
+o : â        !lastVow=on
+o : a U+0302 !lastVow=on
+
+i : ī        !lastVow=on
+i : i U+0304 !lastVow=on
+i : ē        !lastVow=on
+i : e U+0304 !lastVow=on
+i : ä        !lastVow=on
+i : a U+0308 !lastVow=on
+i : i        !lastVow=on
+i : e        !lastVow=on
+
+u : o !lastVow=on
+u : u !lastVow=on
+u : ō !lastVow=on
+u : ū !lastVow=on
+u : o U+0304 !lastVow=on
+u : u U+0304 !lastVow=on
+
+# Cononants
+
+m  : m
+m' : ᵋ m
+
+n  : n
+n' : ᵋ n
+
+w  : w
+w' : ᵋ w
+
+j  : y
+j' : ᵋ y
+
+l  : l
+l' : ᵋ l
+
+h  : h
+b  : b
+p  : p
+p' : p \!
+
+ts  : t s
+ts' : t s \!
+dz  : d z
+
+lh : ~ ł
+lh : ~ ɫ
+lh : ~ ɬ
+lh : ~ ƚ
+
+tl  : ~ Ł
+tl  : ~ Ƚ 
+tl' : ~ Ł \!
+tl' : ~ Ƚ \! 
+dl  : ~ Ł U+0323 
+dl  : ~ Ƚ U+0323
+dl  : ~ Ḷ
+
+t  : t
+t' : t \!
+d  : d
+s  : s
+
+# Velars and Uvulars
+g   : g
+g   : g *dot
+gw  : g *dot w
+gw  : g ᵘ
+gw  : g U+0367 # combining above
+gh  : ġ
+gh  : g U+0323
+ghw : ġ ᵘ
+ghw : ġ U+0367 # ?
+ghw : g U+0323 ᵘ
+ghw : g U+0323 U+0367
+ghw : g U+0367 U+0323
+
+k : k
+k : k *dot
+k' : k \!
+k' : k *dot \!
+kw : k w
+kw : k ᵘ
+kw : k U+0367
+kw : k *dot w
+kw : k *dot ᵘ
+kw : k U+0367 *dot
+
+kw' : k w \!
+kw' : k ᵘ \!
+kw' : k U+0367 \!
+kw' : k *dot w \!
+kw' : k *dot \! w
+kw' : k \! w
+kw' : k w \!
+kw' : k *dot ᵘ \!
+kw' : k U+0367 *dot \!
+
+q   : q
+q'  : q \!
+qw' : q \! w
+qw' : q *upU \!
+
+x   : x *dot
+x   : ẋ
+xw  : x *dot w
+xw  : x *dot *upU
+xw  : ẋ w
+xw  : ẋ *upU
+xh  : x
+xhw : x *upU
+xhw : x w
+
+
+glt : ᵋ
+
+====
+
+# post-vowel
+
+glt schwa : @lastVow=on ă        !lastVow=on
+glt schwa : @lastVow=on a U+0306 !lastVow=on
+glt schwa : @lastVow=on U+1D07   !lastVow=on # smallcaps E
+glt schwa : @lastVow=on î        !lastVow=on
+glt schwa : @lastVow=on i U+0302 !lastVow=on
+
+glt a : @lastVow=on a !lastVow=on
+glt a : @lastVow=on ā !lastVow=on
+glt a : @lastVow=on a U+0304 !lastVow=on
+
+glt e : @lastVow=on ê        !lastVow=on
+glt e : @lastVow=on e U+0302 !lastVow=on
+glt e : @lastVow=on ë        !lastVow=on
+
+glt o : @lastVow=on ô        !lastVow=on
+glt o : @lastVow=on o U+0302 !lastVow=on
+glt o : @lastVow=on â        !lastVow=on
+glt o : @lastVow=on a U+0302 !lastVow=on
+
+glt i : @lastVow=on ī        !lastVow=on
+glt i : @lastVow=on i U+0304 !lastVow=on
+glt i : @lastVow=on ē        !lastVow=on
+glt i : @lastVow=on e U+0304 !lastVow=on
+glt i : @lastVow=on ä        !lastVow=on
+glt i : @lastVow=on a U+0308 !lastVow=on
+glt i : @lastVow=on i        !lastVow=on
+glt i : @lastVow=on e        !lastVow=on
+
+glt u : @lastVow=on o !lastVow=on
+glt u : @lastVow=on u !lastVow=on
+glt u : @lastVow=on ō !lastVow=on
+glt u : @lastVow=on ū !lastVow=on
+glt u : @lastVow=on o U+0304 !lastVow=on
+glt u : @lastVow=on u U+0304 !lastVow=on
+
+# At start
+
+glt schwa : ^ ă        !lastVow=on
+glt schwa : ^ a U+0306 !lastVow=on
+glt schwa : ^ U+1D07   !lastVow=on # smallcaps E
+glt schwa : ^ î        !lastVow=on
+glt schwa : ^ i U+0302 !lastVow=on
+
+glt a : ^ a !lastVow=on
+glt a : ^ ā !lastVow=on
+glt a : ^ a U+0304 !lastVow=on
+
+glt e : ^ ê        !lastVow=on
+glt e : ^ e U+0302 !lastVow=on
+glt e : ^ ë        !lastVow=on
+
+glt o : ^ ô        !lastVow=on
+glt o : ^ o U+0302 !lastVow=on
+glt o : ^ â        !lastVow=on
+glt o : ^ a U+0302 !lastVow=on
+
+glt i : ^ ī        !lastVow=on
+glt i : ^ i U+0304 !lastVow=on
+glt i : ^ ē        !lastVow=on
+glt i : ^ e U+0304 !lastVow=on
+glt i : ^ ä        !lastVow=on
+glt i : ^ a U+0308 !lastVow=on
+glt i : ^ i        !lastVow=on
+glt i : ^ e        !lastVow=on
+
+glt u : ^ o !lastVow=on
+glt u : ^ u !lastVow=on
+glt u : ^ ō !lastVow=on
+glt u : ^ ū !lastVow=on
+glt u : ^ o U+0304 !lastVow=on
+glt u : ^ u U+0304 !lastVow=on
+
+
+# *ŭ
+
+kw  schwa : k ŭ !lastVow=on
+gw  schwa : g ŭ !lastVow=on
+qw  schwa : q ŭ !lastVow=on
+xhw schwa : x ŭ !lastVow=on
+xw  schwa : ẋ ŭ !lastVow=on
+xw  schwa : x U+0323 ŭ !lastVow=on
+xw  schwa : x U+0307 ŭ !lastVow=on
+kw' schwa : k \! ŭ !lastVow=on
+qw' schwa : q \! ŭ !lastVow=on
+ghw schwa : g U+0323 ŭ !lastVow=on
+ghw schwa : g U+0307 ŭ !lastVow=on
+
+
+
+
+
