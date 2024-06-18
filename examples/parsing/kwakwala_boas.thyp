@@ -30,6 +30,8 @@ e : ê        !lastVow=on
 e : e U+0302 !lastVow=on
 e : ë        !lastVow=on
 e : e U+0308 !lastVow=on
+e : ä        !lastVow=on
+e : a U+0308 !lastVow=on
 
 o : ô        !lastVow=on
 o : o U+0302 !lastVow=on
@@ -40,8 +42,6 @@ i : ī        !lastVow=on
 i : i U+0304 !lastVow=on
 i : ē        !lastVow=on
 i : e U+0304 !lastVow=on
-i : ä        !lastVow=on
-i : a U+0308 !lastVow=on
 i : i        !lastVow=on
 i : e        !lastVow=on
 
@@ -166,6 +166,8 @@ glt a : @lastVow=on a U+0304 !lastVow=on
 glt e : @lastVow=on ê        !lastVow=on
 glt e : @lastVow=on e U+0302 !lastVow=on
 glt e : @lastVow=on ë        !lastVow=on
+glt e : @lastVow=on ä        !lastVow=on
+glt e : @lastVow=on a U+0308 !lastVow=on
 
 glt o : @lastVow=on ô        !lastVow=on
 glt o : @lastVow=on o U+0302 !lastVow=on
@@ -176,8 +178,6 @@ glt i : @lastVow=on ī        !lastVow=on
 glt i : @lastVow=on i U+0304 !lastVow=on
 glt i : @lastVow=on ē        !lastVow=on
 glt i : @lastVow=on e U+0304 !lastVow=on
-glt i : @lastVow=on ä        !lastVow=on
-glt i : @lastVow=on a U+0308 !lastVow=on
 glt i : @lastVow=on i        !lastVow=on
 glt i : @lastVow=on e        !lastVow=on
 
@@ -203,6 +203,8 @@ glt a : ^ a U+0304 !lastVow=on
 glt e : ^ ê        !lastVow=on
 glt e : ^ e U+0302 !lastVow=on
 glt e : ^ ë        !lastVow=on
+glt e : ^ ä        !lastVow=on
+glt e : ^ a U+0308 !lastVow=on
 
 glt o : ^ ô        !lastVow=on
 glt o : ^ o U+0302 !lastVow=on
@@ -213,8 +215,6 @@ glt i : ^ ī        !lastVow=on
 glt i : ^ i U+0304 !lastVow=on
 glt i : ^ ē        !lastVow=on
 glt i : ^ e U+0304 !lastVow=on
-glt i : ^ ä        !lastVow=on
-glt i : ^ a U+0308 !lastVow=on
 glt i : ^ i        !lastVow=on
 glt i : ^ e        !lastVow=on
 
