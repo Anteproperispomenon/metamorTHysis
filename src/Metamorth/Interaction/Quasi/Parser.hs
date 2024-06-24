@@ -8,7 +8,7 @@ module Metamorth.Interaction.Quasi.Parser
   ) where
 
 import Data.List (intercalate)
-
+import Data.Maybe
 import Control.Applicative
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -168,11 +168,11 @@ parseIndentedOptions = do
 
 parseOption :: ParserQQ1 ()
 parseOption = AT.choice
-  [ parseInputFile
+  [ parseInputName  -- must come before "parseInputFile"
+  , parseInputFile
+  , parseOutputName -- must come before "parseOutputFile"
   , parseOutputFile
   , parseCLINames
-  , parseInputName
-  , parseOutputName
   , parseInSuffix
   , parseOutSuffix
   , parseSuffix
@@ -188,30 +188,30 @@ parseOption = AT.choice
 parseInputFile :: ParserQQ1 ()
 parseInputFile = do
   _ <- "input"
-  _ <- optional "-file"
-  liftQQ1 parseKeySep
+  z <- isJust <$> optional "-file"
+  parseKeySep' (if z then "input-file" else "input")
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInputFile str
 
 parseOutputFile :: ParserQQ1 ()
 parseOutputFile = do
   _ <- "output"
-  _ <- optional "-file"
-  liftQQ1 parseKeySep
+  z <- isJust <$> optional "-file"
+  parseKeySep' (if z then "output-file" else "output")
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setOutputFile str -- oh wow that was it?
 
 parseCLINames :: ParserQQ1 ()
 parseCLINames = do
   _ <- "cli-names"
-  liftQQ1 parseKeySep
+  parseKeySep' "cli-names"
   strs <- liftQQ1 (AT.sepBy1' (parseQuoteString <|> parseUnquoteString) parseListSep)
   addCLINames strs
 
 parseSuffix :: ParserQQ1 ()
 parseSuffix = do
   _ <- "suffix"
-  liftQQ1 parseKeySep
+  parseKeySep' "suffix"
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInSuffix str
   setOutSuffix (str ++ "_out")
@@ -219,28 +219,28 @@ parseSuffix = do
 parseInSuffix :: ParserQQ1 ()
 parseInSuffix = do
   _ <- "suffix-in" <|> "in-suffix"
-  liftQQ1 parseKeySep
+  parseKeySep' "in-suffix"
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInSuffix str
 
 parseOutSuffix :: ParserQQ1 ()
 parseOutSuffix = do
   _ <- "suffix-out" <|> "out-suffix"
-  liftQQ1 parseKeySep
+  parseKeySep' "out-suffix"
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInSuffix str
 
 parseInputName :: ParserQQ1 ()
 parseInputName = do
   _ <- "parser-name" <|> "input-name"
-  liftQQ1 parseKeySep
+  parseKeySep' "input-name"
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInputName str
 
 parseOutputName :: ParserQQ1 ()
 parseOutputName = do
   _ <- "output-name"
-  liftQQ1 parseKeySep
+  parseKeySep' "output-name"
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setOutputName str
 
@@ -248,21 +248,21 @@ parseExtension :: ParserQQ1 ()
 parseExtension = do
   _ <- "ext"
   _ <- optional "ension"
-  liftQQ1 parseKeySep
+  parseKeySep' "extension"
   ext <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setExtension ext
 
 parseDescription :: ParserQQ1 ()
 parseDescription = do
   _ <- "dsc" <|> "description"
-  liftQQ1 parseKeySep
+  parseKeySep' "description"
   dsc <- liftQQ1 (parseQuoteLineString <|> parseUnquoteLineString)
   setDescription dsc
 
 parseFailedOption :: ParserQQ1 ()
 parseFailedOption = do
   optName <- liftQQ1 $ AT.takeWhile (\c -> isAlpha c || c == '-' || c == '_')
-  liftQQ1 parseKeySep
+  parseKeySep' "<failed_option>"
   strs <- liftQQ1 (AT.sepBy' (parseQuoteString <|> parseUnquoteString) parseListSep)
   case strs of
     []    -> lift $ tellError $ "Couldn't parse option \"" ++ T.unpack optName ++ "\" with empty value list."
@@ -283,21 +283,21 @@ parseFailedOption = do
 parseUnifyBranches :: ParserQQ1 ()
 parseUnifyBranches = do
   _ <- "unify-branches"
-  liftQQ1 parseKeySep
+  parseKeySep' "unify-branches"
   bl <- liftQQ1 parseBool
   setUnifyBranches bl
 
 parseGroupGuards :: ParserQQ1 ()
 parseGroupGuards = do
   _ <- "group-guards"
-  liftQQ1 parseKeySep
+  parseKeySep' "group-guards"
   bl <- liftQQ1 parseBool
   setGroupGuards bl
 
 parseCheckStates :: ParserQQ1 ()
 parseCheckStates = do
   _ <- "check-states"
-  liftQQ1 parseKeySep
+  parseKeySep' "check-states"
   bl <- liftQQ1 parseBool
   setCheckStates bl
 
