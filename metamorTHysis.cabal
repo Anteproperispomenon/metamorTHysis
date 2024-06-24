@@ -84,6 +84,8 @@ library
       Metamorth.Interpretation.Phonemes.Types
   other-modules:
       Paths_metamorTHysis
+  autogen-modules:
+      Paths_metamorTHysis
   hs-source-dirs:
       src
   default-extensions:
@@ -113,6 +115,8 @@ library
 executable metamorTHysis-exe
   main-is: Main.hs
   other-modules:
+      Paths_metamorTHysis
+  autogen-modules:
       Paths_metamorTHysis
   hs-source-dirs:
       app
@@ -155,6 +159,8 @@ test-suite metamorTHysis-test
       Test.TH.Kwakwala
       Test.TH.Mongolian
       Test.TH.TwoOrths
+      Paths_metamorTHysis
+  autogen-modules:
       Paths_metamorTHysis
   hs-source-dirs:
       test

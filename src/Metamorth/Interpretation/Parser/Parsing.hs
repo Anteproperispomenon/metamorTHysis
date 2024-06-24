@@ -381,8 +381,8 @@ parseUnspecifiedClassOrState :: ParserParser ()
 parseUnspecifiedClassOrState = do
   lift skipHoriz
   thingName <- T.unpack <$> lift (takeIdentifier isLower isFollowId)
-  lift $ skipHoriz
-  c <- lift $ AT.peekChar'
+  lift skipHoriz
+  c <- lift AT.peekChar'
   case c of
     ':' -> do
       lift $ void AT.anyChar

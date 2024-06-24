@@ -123,7 +123,7 @@ generaliseStateTrie tm = forBranches tm $ \cpat mval subTrie ->
     generaliseStateTrieX tm [cpat] mval subTrie
 
 -- | Run until the first stateful pattern is found.
-generaliseStateTrieX :: TM.TMap CharPattern a -> [CharPattern] -> (Maybe a) -> TM.TMap CharPattern a -> TM.TMap CharPattern a
+generaliseStateTrieX :: TM.TMap CharPattern a -> [CharPattern] -> Maybe a -> TM.TMap CharPattern a -> TM.TMap CharPattern a
 -- Note that the patterns are built up in reverse here. This is
 -- to make it easier to inspect the latest value.
 generaliseStateTrieX topTrie ws@[WordStart] _thisVal thisTrie
