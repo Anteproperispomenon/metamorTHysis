@@ -17,6 +17,7 @@ module Metamorth.Helpers.Parsing
   , some_
   , many'_
   , some'_
+  , optionalBool
 
   -- * Re-ordered Functions
   , forParseOnly
@@ -51,6 +52,7 @@ import Control.Monad.Trans.RWS.CPS      qualified as RWS
 import Data.Functor
 import Data.Text qualified as T
 import Data.Char (isAlphaNum)
+import Data.Maybe (isJust)
 
 -- | Skip horizontal spaces until a non-space
 --   or non-horizontal space is encountered.
@@ -198,3 +200,9 @@ many'_ f = AT.many' f $> ()
 
 some'_ :: MonadPlus m => m a -> m ()
 some'_ f = AT.many1' f $> ()
+
+-- | Like `optional`, but for parsers that return ().
+--   Instead of returning a value of type @Maybe ()@,
+--   it returns 
+optionalBool :: Alternative f => f () -> f Bool
+optionalBool f = isJust <$> optional f

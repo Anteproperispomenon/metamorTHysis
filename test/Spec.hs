@@ -131,6 +131,12 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing auto-states..."
+  let boas1 = TLE.decodeUtf8 <$> KwakQ.convertOrthographyBS KwakQ.InBoas KwakQ.OutGrubb boasText1
+  case boas1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
@@ -153,6 +159,9 @@ followText1 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft"
 
 followText2 :: T.Text
 followText2 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft iŋaninis init etes beedʒ ekiŋ"
+
+boasText1 :: T.Text
+boasText1 = "ăăë gŭ"
 
 -- hmm... ...
 

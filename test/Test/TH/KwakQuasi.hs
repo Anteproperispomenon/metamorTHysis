@@ -44,6 +44,14 @@ Grubb
   output-name : "grubbOutput"
   extension : ".grb"
 
+Boas
+  input  : "examples/parsing/kwakwala_boas.thyp"
+  suffix : "_boas"
+  parser-name : "boasParser"
+  extension : ".boas"
+  unify-branches : off
+  description : "Collection of Boas's orthographies."
+
 |]
 
 {-
