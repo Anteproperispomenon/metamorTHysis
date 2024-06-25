@@ -16,6 +16,7 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   -- * Parsing Lists Themselves
   , parseKeySep
   , parseKeySep'
+  , parseKeySepX
   , parseListSep
   -- * Parsing Indents
   , findIndent
@@ -258,6 +259,36 @@ parseKeySep' fieldNom = do
   where
     earlyEndErr :: String -> String
     earlyEndErr str = "Error in Orthography \"" ++ str ++ "\": Field \"" ++ fieldNom ++ "\" ended before being assigned."
+
+
+-- | Like `parseKeySep'`, but for the parsers that
+--   aren't tied to a specific orthography.
+parseKeySepX :: String -> ParserQQ ()
+parseKeySepX fieldNom = do
+  x <- lift AT.peekChar 
+  case x of
+    (Just y) 
+      | AT.isHorizontalSpace y -> do
+        lift skipHoriz
+        sepr <- lift $ optional $ AT.satisfy (\z -> z == ':' || z == '=')
+        lift skipHoriz
+        case sepr of
+          (Just _) -> return ()
+          Nothing -> do
+            tellWarning $ "Field \"" ++ fieldNom ++ "\" is missing a ':'/'='."
+      | (y == ':') || (y == '=') -> do
+        lift skipHoriz
+        return ()
+      | (y == '\n') -> do
+        tellError earlyEndErr
+      | otherwise -> do
+        tellError $ "Error: Unexpected charcter '" ++ y : "' after field \"" ++ fieldNom ++ "\"."
+
+    Nothing -> do
+      tellError earlyEndErr
+  where
+    earlyEndErr :: String
+    earlyEndErr = "Field \"" ++ fieldNom ++ "\" ended before being assigned."
 
 
 -- | Parse a separator between two items in a list.

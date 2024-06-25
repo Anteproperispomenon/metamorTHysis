@@ -123,15 +123,15 @@ parseOrthographyBlock = do
 
 parsePhoneFileName :: ParserQQ String
 parsePhoneFileName = do
-  _ <- "phonemes" <|> "phoneme set" <|> "phoneme-set" <|> "phones"
-  lift parseKeySep
+  fld <- "phonemes" <|> "phoneme set" <|> "phoneme-set" <|> "phones"
+  parseKeySepX $ T.unpack fld
   lift (parseQuoteString <|> parseUnquoteString)
 
 parseLanguageName :: ParserQQ String
 parseLanguageName = do
   _ <- "lang"
-  _ <- optional "uage"
-  lift parseKeySep
+  z <- isJust <$> optional "uage"
+  parseKeySepX $ if z then "language" else "lang"
   lift (parseQuoteString <|> parseUnquoteString)
 
 parseHeader :: ParserQQ (String, Maybe String)
@@ -147,7 +147,7 @@ parseHeader = do
         return lng
       return (fp, lang)
     (Left lang) -> do
-      fp <- parsePhoneFileName
+      fp <- parsePhoneFileName <|> fail "Missing Phoneme File Location"
       lift $ many'_ consumeEndComment
       return (fp, Just lang)
 
