@@ -455,16 +455,16 @@ parseStateDec :: AT.Parser (String, Bool, Maybe (S.Set String))
 parseStateDec = do
   isAuto <- optionalBool $ do
     parseAutoOff
-    skipHoriz1
+    void "-" <|> skipHoriz1 -- to allow 
   _ <- "state"
   skipHoriz1
   stateName <- takeIdentifier isLower isFollowId
   skipHoriz
   vals <- optional $ do
-    _ <- AT.char ':' <?> "State declaration has no ':'."
+    _ <- AT.char ':' <?> ("State declaration for \"" ++ T.unpack stateName ++ "\" has no ':'.")
     skipHoriz
     let thisPrs = takeIdentifier isAlpha isFollowId
-    (AT.sepBy1' thisPrs skipHoriz1) <?> "State declaration has ':' but no options."
+    (AT.sepBy1' thisPrs skipHoriz1) <?> ("State declaration for \"" ++ T.unpack stateName ++ "\" has ':' but no options.")
   -- parseEndComment
   case vals of
     Nothing -> return ()
@@ -475,7 +475,7 @@ parseStateDec = do
 --   the state dictionary.
 parseStateDecS :: ParserParser ()
 parseStateDecS = do
-  (stName, isAuto, stSet) <- lift $ parseStateDec
+  (stName, isAuto, stSet) <- lift parseStateDec
   theMap <- gets ppsStateDictionary
   case (M.lookup stName theMap) of
     (Just _) -> mkError $ "Error: state \"" <> stName <> "\" has multiple definitions."
@@ -574,6 +574,8 @@ parsePhonemeList = do
 -- Phoneme Pattern Parsers
 ----------------------------------------------------------------
 
+-- | Parsing a phoneme pattern from the
+--   single-phoneme section.
 parsePhonemePatS :: ParserParser ()
 parsePhonemePatS = do
   lift skipHoriz
@@ -614,6 +616,8 @@ parsePhonemePatS = do
       (Left  errs) -> mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) errs
       (Right rslt) -> addPhonemePattern pn rslt
 
+-- | Parsing a phoneme pattern from the
+--   multi-phoneme section.
 parsePhonemePatMulti :: ParserParser ()
 parsePhonemePatMulti = do
   phones <- lift parsePhonemeList
