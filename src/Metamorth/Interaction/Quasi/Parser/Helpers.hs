@@ -3,6 +3,7 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   ( countHoriz
   , consumeEndComment
   , parseBool
+  , (<|?>)
   -- * Parsing Items in Lists
   , parseQuoteString
   , parseQuoteText
@@ -555,6 +556,14 @@ quotedList' []  = "[]"
 quotedList' [x] = '\"' : x ++ "\""
 quotedList' [x,y] = '\"' : x ++ "\", and \"" ++ y ++ "\""
 quotedList' (x:xs) = '\"' : x ++ "\", " ++ (quotedList' xs)
+
+-- | A simple way to determine which of two 
+--   options was chosen, where you don't care
+--   about the value of the two options.
+(<|?>) :: Alternative f => f a -> f b -> f Bool
+op1 <|?>  op2 = (op1 $> True) <|> (op2 $> False)
+
+infixl 3 <|?>
 
 --------------------------------
 -- Multi-Sets

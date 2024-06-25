@@ -218,22 +218,22 @@ parseSuffix = do
 
 parseInSuffix :: ParserQQ1 ()
 parseInSuffix = do
-  _ <- "suffix-in" <|> "in-suffix"
-  parseKeySep' "in-suffix"
+  fld <- "suffix-in" <|> "in-suffix"
+  parseKeySep' $ T.unpack fld
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInSuffix str
 
 parseOutSuffix :: ParserQQ1 ()
 parseOutSuffix = do
-  _ <- "suffix-out" <|> "out-suffix"
-  parseKeySep' "out-suffix"
+  fld <- "suffix-out" <|> "out-suffix"
+  parseKeySep' $ T.unpack fld
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInSuffix str
 
 parseInputName :: ParserQQ1 ()
 parseInputName = do
-  _ <- "parser-name" <|> "input-name"
-  parseKeySep' "input-name"
+  fld <- "parser-name" <|> "input-name"
+  parseKeySep' $ T.unpack fld
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInputName str
 
@@ -247,22 +247,22 @@ parseOutputName = do
 parseExtension :: ParserQQ1 ()
 parseExtension = do
   _ <- "ext"
-  _ <- optional "ension"
-  parseKeySep' "extension"
+  z <- isJust <$> optional "ension"
+  parseKeySep' (if z then "extension" else "ext")
   ext <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setExtension ext
 
 parseDescription :: ParserQQ1 ()
 parseDescription = do
-  _ <- "dsc" <|> "description"
-  parseKeySep' "description"
+  fld <- "dsc" <|> "description"
+  parseKeySep' $ T.unpack fld
   dsc <- liftQQ1 (parseQuoteLineString <|> parseUnquoteLineString)
   setDescription dsc
 
 parseFailedOption :: ParserQQ1 ()
 parseFailedOption = do
   optName <- liftQQ1 $ AT.takeWhile (\c -> isAlpha c || c == '-' || c == '_')
-  parseKeySep' "<failed_option>"
+  parseKeySep' $ T.unpack optName
   strs <- liftQQ1 (AT.sepBy' (parseQuoteString <|> parseUnquoteString) parseListSep)
   case strs of
     []    -> lift $ tellError $ "Couldn't parse option \"" ++ T.unpack optName ++ "\" with empty value list."
@@ -270,6 +270,7 @@ parseFailedOption = do
     _     -> lift $ tellError $ "Couldn't parse option \"" ++ T.unpack optName ++ "\" with values " ++ (intercalate ", " (map quotify strs)) ++ "."
   where
     quotify str = '\"' : (str ++ "\"")
+
 
 {-
   -- | Whether to unify branches for parser.
