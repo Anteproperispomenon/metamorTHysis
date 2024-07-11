@@ -94,7 +94,8 @@ parseOutputFile grps trts asps phones = do
         , opoAspectDictionary = opsAspectDictionary ops
         , opoOutputTrie = opsOutputTrie ops
         }
-  return (opo, hdr, msgs)
+  -- Process the auto-states for the opo.
+  return (implementAutoStates opo, hdr, msgs)
 
 getAutoStates :: M.Map String (Bool, Maybe a) -> M.Map String Bool
 getAutoStates = (M.map (isJust . snd)) . (M.filter fst)

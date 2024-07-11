@@ -100,7 +100,7 @@ a     : a
 e     : e
 i     : i
 o     : o
-u     : y
+u     : u
 schwa : a *underline
 
 ====
@@ -109,6 +109,6 @@ glt a     : ^ a
 glt e     : ^ e
 glt i     : ^ i
 glt o     : ^ o
-glt u     : ^ y
+glt u     : ^ u
 glt schwa : ^ a *underline
 

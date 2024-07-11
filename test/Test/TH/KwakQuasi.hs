@@ -35,6 +35,16 @@ Umista
   extension : .umi
   description : "Orthography developed by the U'mista Cultural Centre."
 
+Umista2  
+  # input  : "examples/parsing/kwakwala_umista.thyp"
+  output : "examples/output/kwakwala_umista_alt.thyo"
+  suffix : "_ums2"
+  # parser-name : "umistaParser2"
+  output-name : "umistaOutput2"
+  # unify-branches : off
+  extension : .umi2
+  description : "Alternate version of U'mista for testing."
+
 
 Grubb
   input  : "examples/parsing/kwakwala_grubb.thyp"
@@ -65,4 +75,3 @@ Umista
   unify-paths : off
 
 -}
-

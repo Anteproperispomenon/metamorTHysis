@@ -1,0 +1,107 @@
+name : umista2
+
+default case : /at
+
+====
+
+# Apostrophes
+# class apost : ' ` U+0313 U+0315
+
+# class underline : U+02CD U+0320 U+0332 U+0331
+
+# class lh : Ɫ ɫ ɬ U+A7AD
+
+# clas lab : W w ʷ
+
+auto state lastVow
+
+====
+
+m  : m
+m' : ' m
+n  : n
+n' : ' n
+
+# ɫł
+l  : l
+l' : ' l
+lh : ł
+
+j  : y
+j' : ' y
+
+w  : w
+w' : ' w
+
+p  : p
+p' : p U+0313
+b  : b
+
+# U+02CD
+t   : t
+ts  : t s
+ts' : t U+0315 s
+tl  : t ɫ
+tl' : t U+0315 ɫ
+
+d   : d
+dl  : d ɫ
+dz  : d z
+s   : s
+
+k   : k
+k'  : k U+0313
+kw  : k w
+kw' : k U+0315 w
+
+q   : k U+0331
+q'  : k U+0331 U+0313
+qw  : k U+0331 w
+qw' : k U+0331 U+0315 w
+
+g   : g
+gw  : g w
+gh  : g U+0331
+ghw : g U+0331 w
+
+x   : x
+xw  : x w
+xh  : x U+0331
+xhw : x U+0331 w
+
+h   : h
+glt : '
+
+a     : a !lastVow=on
+e     : e !lastVow=on
+i     : i !lastVow=on
+o     : o !lastVow=on
+u     : u !lastVow=on
+schwa : a U+0331 !lastVow=on
+
+^ glt a     : a !lastVow=on
+^ glt e     : e !lastVow=on
+^ glt i     : i !lastVow=on
+^ glt o     : o !lastVow=on
+^ glt u     : u !lastVow=on
+^ glt schwa : a U+0331 !lastVow=on
+
+glt a     @lastVow=on : a !lastVow=on
+glt e     @lastVow=on : e !lastVow=on
+glt i     @lastVow=on : i !lastVow=on
+glt o     @lastVow=on : o !lastVow=on
+glt u     @lastVow=on : u !lastVow=on
+glt schwa @lastVow=on : a U+0331 !lastVow=on
+
+# Note: something like "gwa'um'i" will fail
+# at "'i" because there's no plain pattern
+# for "glt i". Thus, we have to add the following
+# patterns
+
+glt a     : ' a !lastVow=on
+glt e     : ' e !lastVow=on
+glt i     : ' i !lastVow=on
+glt o     : ' o !lastVow=on
+glt u     : ' u !lastVow=on
+glt schwa : ' a U+0331 !lastVow=on
+
