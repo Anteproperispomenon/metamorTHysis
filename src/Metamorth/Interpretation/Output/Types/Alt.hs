@@ -221,9 +221,9 @@ data OutputParserOutput = OutputParserOutput
   --   the parser parses the state declarations.
   { opoStateDictionary :: M.Map String (Maybe (S.Set String))
   -- | The set of States that are "auto-off". 
-  --   This can be found by just filtering the
-  --   opsStateDictionary on the first argument.
-  , opoAutoStates      :: S.Set String
+  --   The `Bool` indicates whether the state is
+  --   a value-state (True) or a bool-state (False).
+  , opoAutoStates      :: M.Map String Bool
   -- | The Group "Dictionary". This is supplied by
   --   the phoneme parser when the output files
   --   are run.

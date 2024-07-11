@@ -96,8 +96,8 @@ parseOutputFile grps trts asps phones = do
         }
   return (opo, hdr, msgs)
 
-getAutoStates :: M.Map String (Bool, Maybe a) -> S.Set String
-getAutoStates = M.keysSet . (M.filter fst)
+getAutoStates :: M.Map String (Bool, Maybe a) -> M.Map String Bool
+getAutoStates = (M.map (isJust . snd)) . (M.filter fst)
 
 ----------------------------------------------------------------
 -- Section Parsers
