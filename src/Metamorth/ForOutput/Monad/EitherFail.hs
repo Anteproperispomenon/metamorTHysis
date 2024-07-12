@@ -116,3 +116,99 @@ instance Semigroup (EitherFail a) where
 instance Monoid (EitherFail a) where
   mempty = EmptyF
 
+------------------------------------------------
+-- Alternative Laws:
+
+-- empty is a neutral element
+-- (1) empty <|> u  =  u
+-- (2) u <|> empty  =  u
+
+-- Proof : (From definition of (<|>))
+-- empty === EmptyF
+-- EmptyF <|> x = x (1)
+-- x <|> EmptyF = x (2)
+
+-- (<|>) is associative
+-- u <|> (v <|> w)  =  (u <|> v) <|> w (3)
+
+-- Case 1: u == EmptyF:
+-- EmptyF <|> (v <|> w) 
+-- == v <|> w
+-- By (1), we know that (EmptyF <|> v) = v
+-- Therefore, we can substitute v ==> (EmptyF <|> v)
+-- == (EmptyV <|> v) <|> w (3.1)
+
+-- Case 2: w == EmptyF:
+-- Similar to above; we know (v <|> EmptyF) == v, so...
+-- u <|> (v <|> w)
+-- == u <|> (v <|> EmptyF)
+-- == u <|> v
+-- == (u <|> v)
+-- == (u <|> v) <|> EmptyF by (2)
+-- (3.2)
+
+-- Case 3: v == EmptyF
+-- (Not going to write this one out; similar to 3.1 and 3.2)
+
+-- Case 4: All values are LeftF
+-- u <|> (v <|> w)  =?=  (u <|> v) <|> w
+-- (LeftF u) <|> ((LeftF v) <|> (LeftF w)) =?= ((LeftF u) <|> (LeftF v)) <|> (LeftF w)
+-- LeftF (u ++ "\n" ++ (v ++ "\n" ++ w)) =?= LeftF ((u ++ "\n" ++ v) ++ "\n" ++ w)
+-- LeftF (u ++ "\n" ++ v ++ "\n" ++ w) == LeftF (u ++ "\n" ++ v ++ "\n" ++ w)
+-- (By associativity of (++)/(<>))
+-- Therefore, (3.4) holds
+
+-- Case 5: u == RightF x
+-- From the definition of (<|>) for EitherFail, 
+-- (RightF x <|> _) == RightF x
+-- Thus, (RightF x) <|> (v <|> w) == RightF x (a)
+--       (RightF x) <|>  v        == RightF x (b)
+--       (RightF x) <|>  w        == RightF x (c)
+
+-- u <|> (v <|> w)  =  (u <|> v) <|> w (3)
+-- (RightF x) <|> (v <|> w) =?=  ((RightF x) <|> v) <|> w
+-- (RightF x) =?= ((RightF x) <|> v) <|> w   by (a)
+-- (RightF x) =?= (RightF x) <|> w           by (b)
+-- (RightF x) === (RightF x)                 by (c)
+--
+-- Therefore, (3.5) holds.
+
+-- Case 6: v == RightF x, and u == EmptyF or (LeftF e)
+
+-- Therefore...
+-- EmptyF    <|> (RightF x) == RightF x
+-- (LeftF e) <|> (RightF x) == RightF x
+-- Therefore, u <|> (RightF x) == RightF x (d)
+
+-- u <|> (v <|> w)  =?=  (u <|> v) <|> w
+-- u <|> ((RightF x) <|> w) =?= (u <|> (RightF x)) <|> w
+-- u <|> ((RightF x)) =?= (u <|> (RightF x)) <|> w   by (3.5c)
+-- (RightF x) =?= (u <|> (RightF x)) <|> w           by (d)
+-- (RightF x) =?= (RightF x) <|> w                   by (d)
+-- RightF x == RightF x                              by (3.5c)
+
+-- Therefore, (3.6 holds)
+
+-- Case 7: w == RightF x, and u/v == EmptyF or LeftF e/f
+
+-- EmptyF    <|> (RightF x) == RightF x
+-- (LeftF e) <|> (RightF x) == RightF x
+-- Therefore, v <|> (RightF x) == RightF x (e)
+
+-- EmptyF <|> EmptyF == EmptyF
+-- EmptyF <|> (LeftF f) == LeftF f
+-- (LeftF e) <|> EmptyF == LeftF e
+-- (LeftF e) <|> (LeftF f) == LeftF (e ++ "\n" ++ f)
+-- Therefore, (u <|> v) == EmptyF or LeftF g, for some g (f).
+
+-- u <|> (v <|> w)  =?=  (u <|> v) <|> w
+-- u <|> (v <|> (RightF x))  =?=  (u <|> v) <|> (RightF x)
+-- u <|> (RightF x)  =?=  (u <|> v) <|> (RightF x)   by (e)
+-- u <|> (RightF x)  =?=  (LeftF g) <|> (RightF x)   by (f)
+-- u <|> (RightF x)  =?=  (RightF x)                 by definition of (<|>)
+-- (RightF x) == (RightF x)                          by (3.6d)
+
+-- Therefore, since all cases hold, condition (3) holds.
+
+-- Thus, `EitherFail` satisfies the `Alternative` laws.
+

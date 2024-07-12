@@ -491,4 +491,62 @@ matchesSimpleDef defVal action = do
     Nothing     -> return defVal
     (Just rslt) -> matchesSimpleDef (defVal <> rslt) action
 
+----------------------------------------------------------------
+-- Checking the laws for Alternative
+
+-- instance (MonadPlus m) => Alternative (MatcherT i v s m) where
+--   empty = MatcherT $ \_ _ _ _ -> mzero
+--   (MatcherT mt1) <|> (MatcherT mt2) 
+--     = MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
+
+-- empty is a neutral element
+-- (1) empty <|> u  =  u
+-- (2) u <|> empty  =  u
+
+-- (<|>) is associative
+-- (3) u <|> (v <|> w)  =  (u <|> v) <|> w
+
+-- Note: Assuming that the laws for Alternative/MonadPlus
+-- hold for the underlying monad.
+
+-- (1) : empty <|> u = u
+-- (MatcherT mt1) <|> (MatcherT mt2) 
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> mzero `mplus` (mt2 ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> mt2 ifnc inp vs st  -- by MonadPlus laws
+--   == MatcherT mt2
+--   == u
+--   Therefore, (1) holds.
+
+-- (2) : u <|> empty = u
+-- (MatcherT mt1) <|> (MatcherT mt2) 
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` mempty
+--   == MatcherT $ \ifnc inp vs st -> mt1 ifnc inp vs st  -- by MonadPlus laws
+--   == MatcherT mt1
+--   == u
+--   Therefore, (2) holds.
+
+-- (3) u <|> (v <|> w)  =  (u <|> v) <|> w
+-- (MatcherT mt1) <|> ((MatcherT mt2)  <|> (MatcherT mt3))
+--   == (MatcherT mt1)
+--         <|> (MatcherT $ \ifnc' inp' vs' st' -> (mt2 ifnc' inp' vs' st') `mplus` (mt3 ifnc' inp' vs' st'))
+--
+-- Let mtVW = \ifnc' inp' vs' st' -> (mt2 ifnc' inp' vs' st') `mplus` (mt3 ifnc' inp' vs' st')
+--
+--   == (MatcherT mt1) <|> (MatcherT mtVW)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mtVW ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus`
+--         ((\ifnc' inp' vs' st' -> (mt2 ifnc' inp' vs' st') `mplus` (mt3 ifnc' inp' vs' st')) ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus`
+--         ((mt2 ifnc inp vs st) `mplus` (mt3 ifnc inp vs st))
+--
+--   == MatcherT $ \ifnc inp vs st ((mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)) `mplus`
+--         (mt3 ifnc inp vs st)    by associativity of `mplus` on the base monad.
+
+-- ... which can be shown to be equivalent to "(u <|> v) <|> w", as required for (3).
+
+-- Therefore, (`MatcherT` i v s m) satisfies the Alternative/MonadPlus laws
+-- so long as `m` also satisfies those laws.
+
 
