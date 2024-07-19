@@ -16,7 +16,7 @@ import Data.String (IsString(..))
 
 import Data.Char
 
-import Data.List (partition)
+import Data.List (partition, any)
 
 import Data.Text qualified as T
 
@@ -151,10 +151,11 @@ makeReturnFunction' ond strName (ReturnClauses prs [] [] []) = do
   varName1 <- newName "v"
   typVar1  <- newName "str"
   monVar   <- newName "mon"
-  let rets = map ($ varName1) prs
-  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> $(pure $ VarT monVar) $(pure $ VarT typVar1) |]
+  let rets  = map ($ varName1) prs
+      rets' = addOtherwiseFail rets
+  sign <- [t| (IsString $(pure $ VarT typVar1), MonadFail $(pure $ VarT monVar)) => [CharCase] -> $(pure $ VarT monVar) $(pure $ VarT typVar1) |]
   let signDec = SigD funcName sign
-      bodyDec = FunD funcName [Clause [VarP varName1] (GuardedB rets) []]
+      bodyDec = FunD funcName [Clause [VarP varName1] (GuardedB rets') []]
   return (funcName, [signDec, bodyDec])
 makeReturnFunction' ond strName (ReturnClauses [] srs [] []) = do
   funcName <- newName strName
@@ -162,11 +163,12 @@ makeReturnFunction' ond strName (ReturnClauses [] srs [] []) = do
   varName2 <- newName "s"
   typVar1  <- newName "str"
   monVar   <- newName "mon"
-  let rets = map (($ varName2) . ($ varName1)) srs
+  let rets  = map (($ varName2) . ($ varName1)) srs
+      rets' = addOtherwiseFail rets
       stateType = pure $ ConT (ondStateType ond)
-  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> $stateType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1) , $stateType) |]
+  sign <- [t| (IsString $(pure $ VarT typVar1), MonadFail $(pure $ VarT monVar)) => [CharCase] -> $stateType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1) , $stateType) |]
   let signDec = SigD funcName sign
-      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets) []]
+      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets') []]
   return (funcName, [signDec, bodyDec])
 makeReturnFunction' ond strName (ReturnClauses [] [] nrs []) = do
   funcName <- newName strName
@@ -174,11 +176,12 @@ makeReturnFunction' ond strName (ReturnClauses [] [] nrs []) = do
   varName2 <- newName "n"
   typVar1  <- newName "str"
   monVar   <- newName "mon"
-  let rets = map (($ varName2) . ($ varName1)) nrs
+  let rets  = map (($ varName2) . ($ varName1)) nrs
+      rets' = addOtherwiseFail rets
       nextType = pure $ ConT (ondPhoneType ond)
-  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> Maybe $nextType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1)) |]
+  sign <- [t| (IsString $(pure $ VarT typVar1), MonadFail $(pure $ VarT monVar)) => [CharCase] -> Maybe $nextType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1)) |]
   let signDec = SigD funcName sign
-      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets) []]
+      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2] (GuardedB rets') []]
   return (funcName, [signDec, bodyDec])
 makeReturnFunction' ond strName (ReturnClauses [] [] [] xrs) = do
   funcName <- newName strName
@@ -187,12 +190,13 @@ makeReturnFunction' ond strName (ReturnClauses [] [] [] xrs) = do
   varName3 <- newName "s"
   typVar1  <- newName "str"
   monVar   <- newName "mon"
-  let rets = map (($ varName3) . ($ varName2) . ($ varName1)) xrs
+  let rets  = map (($ varName3) . ($ varName2) . ($ varName1)) xrs
+      rets' = addOtherwiseFail rets
       stateType = pure $ ConT (ondStateType ond)
       nextType  = pure $ ConT (ondPhoneType ond)
-  sign <- [t| (IsString $(pure $ VarT typVar1), Monad $(pure $ VarT monVar)) => [CharCase] -> Maybe $nextType -> $stateType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1) , $stateType) |]
+  sign <- [t| (IsString $(pure $ VarT typVar1), MonadFail $(pure $ VarT monVar)) => [CharCase] -> Maybe $nextType -> $stateType -> $(pure $ VarT monVar) ($(pure $ VarT typVar1) , $stateType) |]
   let signDec = SigD funcName sign
-      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2, VarP varName3] (GuardedB rets) []]
+      bodyDec = FunD funcName [Clause [VarP varName1, VarP varName2, VarP varName3] (GuardedB rets') []]
   return (funcName, [signDec, bodyDec])
 makeReturnFunction' _ond strName (ReturnClauses {}) = do
   funcName <- newName strName
@@ -586,7 +590,41 @@ makeCheck1 ond (CheckStateVV str val) = do
   (_n, valDict) <- mpr
   conNom <- M.lookup val valDict
   return $ \x -> InfixE (Just (AppE (VarE recNom) (VarE x))) (VarE '(==)) (Just (AppE (ConE 'Just) (ConE conNom)))
-  
+
+------------------------------------------------
+-- Adding auto-fail clauses.
+
+-- Need to do this in order to allow backtracking to occur.
+-- Otherwise, the function will just have a partial set of
+-- guards.
+
+-- This might be the wrong spot to do this...
+
+addOtherwiseFail :: [(Guard,Exp)] -> [(Guard, Exp)]
+addOtherwiseFail grds 
+  | any isOthw grds = grds
+  | otherwise 
+  = grds ++ [newClause]
+  where 
+    isOthw :: (Guard, Exp) -> Bool
+    isOthw (NormalG (VarE vnom),_)
+      = vnom == 'otherwise
+    isOthw (NormalG (ConE cnom),_)
+      = cnom == 'True
+    isOthw _ = False
+    newClause = (NormalG (VarE 'otherwise), AppE (VarE 'fail) (LitE (StringL "Failed a Pattern Match.")))
+
+-- rslt = \v -> (NormalG othw, AppE expr (VarE v))
+
+{-
+data ReturnClauses = ReturnClauses
+  { plainRet :: [Name -> (Guard, Exp)]
+  , stateRet :: [Name -> Name -> (Guard, Exp)]
+  , condPlainRet :: [Name -> Name -> (Guard, Exp)]
+  , condStateRet :: [Name -> Name -> Name -> (Guard, Exp)]
+  } -- deriving (Show ,Eq)
+
+-}
 
 
 -- ondStates  :: M.Map String (Name, Maybe (Name, M.Map String Name))

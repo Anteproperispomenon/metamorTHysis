@@ -96,12 +96,19 @@ glt schwa @lastVow=on : a U+0331 !lastVow=on
 # Note: something like "gwa'um'i" will fail
 # at "'i" because there's no plain pattern
 # for "glt i". Thus, we have to add the following
-# patterns
+# patterns.
+# Update: These are no longer necessary; fixed
+# the issue; previously, there would be cases
+# where there was a partial set of guards, thus
+# causing the entire program to error. Now, instead,
+# those guard-sets have an addition an additional
+# "otherwise" guard that runs "fail", which triggers
+# backtracking.
 
-glt a     : ' a !lastVow=on
-glt e     : ' e !lastVow=on
-glt i     : ' i !lastVow=on
-glt o     : ' o !lastVow=on
-glt u     : ' u !lastVow=on
-glt schwa : ' a U+0331 !lastVow=on
+# glt a     : ' a !lastVow=on
+# glt e     : ' e !lastVow=on
+# glt i     : ' i !lastVow=on
+# glt o     : ' o !lastVow=on
+# glt u     : ' u !lastVow=on
+# glt schwa : ' a U+0331 !lastVow=on
 
