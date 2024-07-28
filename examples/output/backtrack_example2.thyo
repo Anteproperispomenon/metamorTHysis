@@ -1,0 +1,41 @@
+
+name : backtrack2
+default case : /at
+
+# Alternate version to show
+# whether the text is passing
+# through or being interpreted properly.
+
+====
+
+# no classes/states?
+
+====
+
+# Vowels
+e : ε
+o : ο
+u : υ
+i : ι
+a : α
+ough : α ω 
+aw : ω
+
+# consonants
+t  : τ
+d  : δ
+k  : κ
+g  : γ
+m  : μ
+n  : ν
+ng : γ γ
+s  : σ 
+s  : ς $
+l  : λ
+r  : ρ
+w  : ϋ
+p  : π
+b  : β
+f  : φ
+v  : ζ # there's probably a better choice for this...
+h  : χ
