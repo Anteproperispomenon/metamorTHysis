@@ -65,13 +65,13 @@ a     : a
 e     : e h
 i     : i
 o     : o
-u     : y
+u     : u
 schwa : e
 
 ^ glt a     : a
 ^ glt e     : e h
 ^ glt i     : i
 ^ glt o     : o
-^ glt u     : y
+^ glt u     : u
 ^ glt schwa : e
 

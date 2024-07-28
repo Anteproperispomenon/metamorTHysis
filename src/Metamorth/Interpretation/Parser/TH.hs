@@ -314,13 +314,25 @@ makeTheParser'
   -> ParserOptions                    -- ^ Parser 
   -> QS ([Dec], StaticParserInfo, Name)
 makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops = do
+  -- The name for the function that resets the auto-off states after
+  -- every phoneme. If there are no auto-off states, this function
+  -- should be a no op.
+  -- resetFuncName <- newName "resetAutoStates"
+
   let classDictX = ppsClassDictionary pps
-      stateDictX = ppsStateDictionary pps
+      stateDictZ = ppsStateDictionary pps
       phonePats  = ppsPhonemePatterns pps
+      stateDictX = snd <$> stateDictZ
+      autoStateDict = M.mapMaybe (\case {(True, x) -> Just x ; _ -> Nothing}) stateDictZ
+      autoStateMods = forMap (M.assocs autoStateDict) $ \(stName, stType) ->
+        case stType of
+          Nothing  -> ModifyStateBB stName False
+          (Just _) -> ModifyStateVX stName
       -- mainTrie  = if (poGroupGuards pops) then (pathifyTrie phonePats) else (dontPathifyTrie phonePats)
       mainTrie   = setupTrie pops phonePats
   (stDecs, stateTypeName, stateConsName, defStateName, newStateDict) <- createStateDecs "StateType" "StateCons" stateDictX
   (clDecs, newClassDict) <- makeClassDecs classDictX
+  (autoStateDecs, resetFuncName, resetContName) <- makeAutoStateFunc stateTypeName newStateDict autoStateDict
   -- Getting the annotation map...
   let annots' = map fst $ TM.elems mainTrie
       annots  = nubSort annots'
@@ -344,8 +356,10 @@ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops =
               , spiStateTypeName   = stateTypeName
               , spiStateConsName   = stateConsName
               , spiDefStateName    = defStateName
+              , spiResetContFunc   = resetContName
               , spiStateDictionary = newStateDict
               , spiWordTypeNames   = wordDataNames
+              , spiResetStates     = autoStateMods
               }
 
   eFuncRslt <- constructFunctionsBothX spi (poGroupGuards pops) mainTrie
@@ -357,7 +371,7 @@ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames pps pops =
 
   (epDecs, finalName) <- makeEntryPoint spi nm1 nm2 (poMainFuncName pops)
 
-  return (concat [epDecs, stDecs, clDecs, charPredDecs, funcDecs], spi, finalName)
+  return (concat [epDecs, stDecs, autoStateDecs, clDecs, charPredDecs, funcDecs], spi, finalName)
 
 {-
   :: StaticParserInfo
@@ -458,6 +472,53 @@ createStateDecs stateTypeString stateConsString theMap = do
 
 -- fmap (\(x,_,_,_) -> ppr x) $ join (fmap (runQ . (createStateDecs "StateType") . ppsStateDictionary) $ (tempTester (\(_,x,_) -> x)) =<< AT.parseOnly parseOrthographyFile <$> TIO.readFile "local/parseExample8.thyp")
 
+-- | Creating the function for auto-off state modifications:
+makeAutoStateFunc :: Name -> (M.Map String (Name, Maybe (Name, M.Map String Name))) -> M.Map String (Maybe (S.Set String)) -> QS ([Dec], Name, Name)
+makeAutoStateFunc recNom stateMap autoMap = do 
+  resetFuncName <- newName "resetAutoStates"
+  resetContName <- newName "resetAndContinue"
+  if (M.null autoMap)
+    then do
+      tv <- newName "a"
+      let funcSig1 = SigD resetFuncName $ arrowChainT [ConT recNom] (ConT recNom)
+          funcDef1 = ValD (VarP resetFuncName) (NormalB $ VarE 'id) []
+          funcSig2 = SigD resetContName $ arrowChainT [VarT tv] (VarT tv)
+          funcDef2 = ValD (VarP resetContName) (NormalB $ VarE 'id) []
+      return ([funcSig1, funcDef1, funcSig2, funcDef2], resetFuncName, resetContName)
+    else do
+      vv <- newName "x"
+      tv <- newName "a"
+
+      -- Hope this works when using more than once...
+      -- (i.e. hope the type variables are understood to
+      --  refer to the same type.)
+      monType <- [t| State.StateT $(pure $ ConT recNom) AT.Parser $(pure $ VarT tv) |]
+
+      let funcSig1 = SigD resetFuncName $ arrowChainT [ConT recNom] (ConT recNom)
+          funcMap1 = forMaybeMapWithKey autoMap $ \k _ -> do
+            (recFieldNom, mStateDec) <- M.lookup k stateMap
+            valExp <- case mStateDec of
+              Nothing  -> return $ ConE 'False
+              (Just _) -> return $ ConE 'Nothing
+            return (recFieldNom, valExp)
+          funcFld1 = M.elems funcMap1
+          funcDef1 = FunD resetFuncName [Clause [VarP vv] (NormalB $ RecUpdE (VarE vv) funcFld1) []]
+
+      -- Actually modifying the state
+      funcExp2 <- [| State.modify' $(pure $ VarE resetFuncName) |]
+
+      let funcSig2 = SigD resetContName $ arrowChainT [monType] monType
+          funcExp3 = funcExp2 `infixCont` (VarE vv)
+          funcDef2 = FunD resetContName [Clause [VarP vv] (NormalB funcExp3) []]
+
+      return ([funcSig1, funcDef1, funcSig2, funcDef2], resetFuncName, resetContName)
+
+-- forMaybeMapWithKey :: M.Map k a -> (k -> a -> Maybe b) -> M.Map k b
+
+-- Control.Monad.Trans.State.Strict.StateT StateType_grb_a45c Data.Attoparsec.Text.Internal.Parser (GHC.Base.NonEmpty Phoneme_a41v)
+
+-- import Control.Monad.Trans.State.Strict qualified as State
+-- import Data.Attoparsec.Text qualified as AT
 
 ----------------------------------------------------------------
 -- Top-Level Function Generator
@@ -518,6 +579,7 @@ makeWordEndFunctions theTrie classDec = do
       notStChars = map charE $ nubSort $ concatMap getOptions $ getFirstSteps notStTrie
       rstOfChars = map charE $ nubSort $ concatMap getOptions $ getFirstSteps rstOfTrie
 
+  -- Functions to check whether a character is in the specific category or not.
   punctExp <- [| \x -> $(pure $ allNeqE (startChars ++ rstOfChars) (VarE 'x)) |]
   isEndExp <- [| \x -> $(pure $ allNeqE (notStChars ++ rstOfChars) (VarE 'x)) |]
   noEndExp <- [| \x -> $(pure $ anyEqE  (notStChars ++ rstOfChars) (VarE 'x)) |]
@@ -561,7 +623,7 @@ makeEntryPoint spi startWordFunc restWordFunc finalFuncStr = do
 
 
   -- Building these up one at a time...
-  funcExp1 <- [| (liftA2 (:)) $startWordFuncQE (AT.many' $restWordFuncQE) |] -- collect a lisst of phones...
+  funcExp1 <- [| (liftA2 (:)) $startWordFuncQE (AT.many' $restWordFuncQE) |] -- collect a list of phones...
   funcExp2 <- [| concatMap NE.toList <$> $(pure funcExp1) |] -- concat the results...
   funcExp3 <- [| State.evalStateT $(pure funcExp2) $(pure defStateVal) |] -- run them with the state...
   funcExp4 <- [| $wordCstrQE <$>  $(pure funcExp3) |] -- store in the proper type.
@@ -866,6 +928,14 @@ data StaticParserInfo = StaticParserInfo
   --   constructor is for sequences of phonemes,
   --   the second is for punctuation etc...
   , spiWordTypeNames   :: (Name, (Name, Name))
+  -- | The name of the function/action that resets
+  --   the auto-states to off and then runs the
+  --   next procedure
+  , spiResetContFunc   :: Name
+  -- | The "auto-off" state operations that are
+  --   performed at the end of every phoneme, unless
+  --   set to be turned (back) on.
+  , spiResetStates     :: [ModifyStateX]
   }
 
 instance Eq StaticParserInfo where
@@ -885,6 +955,7 @@ instance Eq StaticParserInfo where
       && ((spiDefStateName x) == (spiDefStateName y))
       && ((spiStateDictionary x) == (spiStateDictionary y))
       && ((spiWordTypeNames x) == (spiWordTypeNames y))
+      && ((spiResetContFunc x) == (spiResetContFunc y))
     where
       spiMkMaj' z = (spiMkMaj z) (ConE (mkName "Example"))
       spiMkMin' z = (spiMkMin z) (ConE (mkName "Example"))
@@ -906,6 +977,7 @@ instance Show StaticParserInfo where
       <> ", spiDefStateName = "    <> show (spiDefStateName x)
       <> ", spiStateDictionary = " <> show (spiStateDictionary x)
       <> ", spiWordTypeNames = "   <> show (spiWordTypeNames x)
+      <> ", spiResetContFunc = "   <> show (spiResetContFunc x)
       <> "}"
     where
       exprNom  = mkName "expr"
@@ -1182,6 +1254,8 @@ constructGuards mbl charVarName trieAnn mTrieVal theTrie spi = makeGuards
       (spiClassMap spi)
       (spiEndWordFunc spi)
       (spiNotEndWordFunc spi)
+      (spiResetContFunc spi)
+      (spiResetStates spi)
       (spiStateDictionary spi)
 
 makeGuards
@@ -1198,10 +1272,12 @@ makeGuards
   -> (M.Map String (Name, [Char])) -- ^ Map for class function names.
   -> Name                          -- ^ Name of the "end of word" function.
   -> Name                          -- ^ Name of the "not end of word" function.
+  -> Name                          -- ^ Name of the "reset auto-state" function
+  -> [ModifyStateX]                -- ^ Auto-off State changes
   -> M.Map String (Name, Maybe (Name, M.Map String Name)) -- ^ The state dictionary
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
   -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneResult, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)))])
-makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc sdict precPatrn = do
+makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1212,7 +1288,7 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
     subTries = map (second (first fromJust)) $ getSubTries theTrie
 
     -- This is using the `Either` monad.
-    mkRslts = \(chrP,((ann, mPhone), thisSubTrie)) -> do
+    mkRslts (chrP,((ann, mPhone), thisSubTrie)) = do
       -- (phnNom, phnArgs) <- eitherMaybe' mPhone ("Couldn't fi")
       -- cstr <- eitherMaybe' (M.lookup )
       case (ann, mPhone) of
@@ -1222,9 +1298,11 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
           -- modifyStateExps :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> [ModifyStateX] -> Either [String] (Exp -> Exp)
           let pnom = prPhonemes  prslt
               pmod = prStateMods prslt
+              -- applyReset = AppE (VarE resetStateFunc)
+              pmod' = mergeStatesInto resetStateMods pmod
           cstrExps   <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc notEndWordFunc chrP charVarName
-          resultModifier <- modifyStateExps sdict pmod
+          resultModifier <- modifyStateExps sdict pmod'
           return (( guardThing , resultModifier $ consumerRet' mkMaj mkMin chrP cs mbl cstrExps), Nothing)
         -- (Trie)
         -- [((TrieAnnotation, Maybe (PhoneName, Caseness)), Bool, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneName, Caseness)))]
@@ -1243,10 +1321,12 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
       (Just (prslt, cs)) -> do
         let pnom = prPhonemes  prslt
             pmod = prStateMods prslt
+            -- applyReset = AppE (VarE resetStateFunc)
+            pmod' = mergeStatesInto resetStateMods pmod
         cstrExp        <- phoneNamePatterns patMap aspMaps pnom
-        resultModifier <- modifyStateExps sdict pmod
+        resultModifier <- modifyStateExps sdict pmod'
         return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
-makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc sdict precPatrn = do
+makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1254,17 +1334,19 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
     -- Since TrieAnnotation should always be present, it should
     -- be safe to use `fromJust`.
     subTries = map (second (first fromJust)) $ getSubTries theTrie
-    mkRslts = \(chrP, ((ann, mPhone), thisSubTrie)) -> do
+    mkRslts (chrP, ((ann, mPhone), thisSubTrie)) = do
       case (ann, mPhone) of
         (TrieLeaf, mph) -> do
           (prslt, cs) <- eitherMaybe' mph ["Found a leaf that doesn't have a return value; pattern is \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
           let pnom = prPhonemes  prslt
               pmod = prStateMods prslt
+              -- applyReset = AppE (VarE resetStateFunc)
+              pmod' = mergeStatesInto resetStateMods pmod
           cstrExp    <- phoneNamePatterns patMap aspMaps pnom
           guardThing <- Bi.first (:[]) $ charPatternGuard classMap endWordFunc notEndWordFunc chrP charVarName
-          resultModifier <- modifyStateExps sdict pmod
+          resultModifier <- modifyStateExps sdict pmod'
           let xRslt = consumerRetX mkMaj mkMin chrP cs charVarName cstrExp
-          return ((guardThing,resultModifier xRslt), Nothing)
+          return ((guardThing, resultModifier xRslt), Nothing)
         elm@(tnn@(TrieAnn _), mph) -> do
           nextFunc <- eitherMaybe' (M.lookup tnn funcMap) ["Couldn't find function for pattern: \"" <> (ppCharPats $ precPatrn ++ [chrP]) <> "\"."]
           (guardThing, isCased) <- Bi.first (:[]) $ charPatternGuard' classMap endWordFunc notEndWordFunc chrP charVarName
@@ -1284,8 +1366,10 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
         -- TODO : Addd in the state stuff
         let pnom = prPhonemes  prslt
             pmod = prStateMods prslt
+            -- applyReset = AppE (VarE resetStateFunc)
+            pmod' = mergeStatesInto resetStateMods pmod
         cstrExp <- phoneNamePatterns patMap aspMaps pnom
-        resultModifier <- modifyStateExps sdict pmod
+        resultModifier <- modifyStateExps sdict pmod'
         return $ resultModifier $ phonemeRetZ mkMaj mkMin cs charVarName cstrExp
 {-
 
@@ -1486,6 +1570,7 @@ phonemeRet
 phonemeRet mkMaj mkMin c cs (Just blName) rslts
   | (cs == CMaj) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
   | (cs == CMin) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | (cs == CNul) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
   | otherwise    = condCase blName mkMaj mkMin rslts
   where
     ret  = VarE 'return
@@ -1508,6 +1593,7 @@ phonemeRet'
 phonemeRet' mkMaj mkMin cs (Just blName) rslts
   | (cs == CMaj) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
   | (cs == CMin) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
+  | (cs == CNul) = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
   | otherwise    = condCase blName mkMaj mkMin rslts
   where
     ret  = VarE 'return
@@ -1756,11 +1842,16 @@ allE xs = case (NE.nonEmpty xs) of
   Nothing   -> trueE -- since True is the identity of "and".
   (Just ys) -> intersperseInfixRE (VarE '(&&)) ys
 
+-- | @allInfixE infx exprs val@ : 
+--   Checks that (expr `infx` val) is True
+--   for all expr in exprs.
 allInfixE :: Exp -> [Exp] -> Exp -> Exp
 allInfixE ifxE xs expr = allE $ map (eqE expr) xs
   where
     eqE e1 e2 = InfixE (Just e1) ifxE (Just e2)
 
+-- | Checks that none of the values in a list
+--   are equal to one value that is supplied.
 allNeqE :: [Exp] -> Exp -> Exp
 allNeqE = allInfixE (VarE '(/=))
 
@@ -1847,6 +1938,8 @@ exampleInfo
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
+      (mkName "resetStateCont")
+      []
 
 exampleInfo2 :: StaticParserInfo
 exampleInfo2
@@ -1867,6 +1960,8 @@ exampleInfo2
       (mkName "defStateVal")
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")])))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
+      (mkName "resetStateCont")
+      []
   where
     consMap1 = (M.fromList $ forMap ((map (:[]) ['a'..'z']) ++ ["gh","ts","ch","sh","sep"]) $ \c -> (c, []))
     subMap1  = [M.fromList $ [("front",mkName "Front"), ("back", mkName "Back")]]
@@ -1893,6 +1988,8 @@ exampleInfo3
       M.empty -- filled in by `makeTheParser`
       -- (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
+      (mkName "resetStateCont")
+      []
 
 
 exampleOrth3 :: [String]

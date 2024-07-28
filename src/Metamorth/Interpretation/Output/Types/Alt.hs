@@ -25,6 +25,8 @@ module Metamorth.Interpretation.Output.Types.Alt
   , partAtEnds
   , partNotEnds
   , partCheckNexts
+  , addAutoStates
+  , implementAutoStates
   ) where
 
 -- Alternate forms of types.
@@ -220,6 +222,10 @@ data OutputParserOutput = OutputParserOutput
   -- | The state dictionary. This is updated as
   --   the parser parses the state declarations.
   { opoStateDictionary :: M.Map String (Maybe (S.Set String))
+  -- | The set of States that are "auto-off". 
+  --   The `Bool` indicates whether the state is
+  --   a value-state (True) or a bool-state (False).
+  , opoAutoStates      :: M.Map String Bool
   -- | The Group "Dictionary". This is supplied by
   --   the phoneme parser when the output files
   --   are run.
@@ -239,4 +245,55 @@ data OutputParserOutput = OutputParserOutput
   , opoOutputTrie       :: TM.TMap PhonePatternAlt (S.Set PhoneResult)
   -- , opoOutputTrie       :: TM.TMap PhonePattern (M.Map OutputCase OutputPattern)
   } deriving (Show, Eq)
+
+------------------------------------------------
+-- Code for handling auto-off states
+
+isModState :: String -> ModifyStateX -> Bool
+isModState str (ModifyStateBB str' _) = str == str'
+isModState str (ModifyStateVV str' _) = str == str'
+isModState str (ModifyStateVX str'  ) = str == str'
+
+isModState' :: String -> PhoneResultActionX -> Bool
+isModState' str (PRModifyState ms) = isModState str ms
+isModState' _ _ = False
+
+hasModState :: String -> [PhoneResultActionX] -> Bool
+hasModState str = any (isModState' str)
+
+-- | Add a single auto-state to the list of actions.
+addAutoState :: [PhoneResultActionX] -> String -> Bool -> [PhoneResultActionX]
+addAutoState prs str typ
+  -- Already modifies this state: do nothing
+  | (hasModState str prs) = prs
+  -- Otherwise, add "turn off state" to list of actions.
+  | otherwise = newAction : prs
+  where 
+    newAction
+      | typ       = PRModifyState $ ModifyStateVX str
+      | otherwise = PRModifyState $ ModifyStateBB str False
+
+addAutoState' :: [PhoneResultActionX] -> (String, Bool) -> [PhoneResultActionX]
+addAutoState' prs = uncurry $ addAutoState prs
+
+addAutoStates' :: M.Map String Bool -> [PhoneResultActionX] -> [PhoneResultActionX]
+addAutoStates' stMap prs = foldl addAutoState' prs (M.assocs stMap)
+
+-- | Add the auto-off states to the `PhoneResult`.
+addAutoStates :: M.Map String Bool -> PhoneResult -> PhoneResult
+addAutoStates stMap prOrig = prOrig { prPhoneConditions = prActsNew }
+  where prActsNew = addAutoStates' stMap (prPhoneConditions prOrig)
+
+-- | Use the data from `OutputParserOutput` to add auto-state
+--   information to its branches.
+implementAutoStates :: OutputParserOutput -> OutputParserOutput
+implementAutoStates opo
+  -- If there are no auto-states, do nothing
+  | M.null autoSt = opo
+  | otherwise = opo {opoOutputTrie = newTrie}
+  where 
+    autoSt = opoAutoStates opo
+    newTrie = fmap (S.map $ addAutoStates autoSt) $ opoOutputTrie opo
+
+
 

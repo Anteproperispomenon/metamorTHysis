@@ -86,7 +86,7 @@ addPhonemesPattern phones pat = do
 
 data ParserParsingState = ParserParsingState
   { ppsClassDictionary :: M.Map String (S.Set Char)
-  , ppsStateDictionary :: M.Map String (Maybe (S.Set String))
+  , ppsStateDictionary :: M.Map String (Bool, Maybe (S.Set String))
   , ppsPhonemePatterns :: M.Map PhoneResult [PhonemePattern]
   } deriving (Show, Eq)
 

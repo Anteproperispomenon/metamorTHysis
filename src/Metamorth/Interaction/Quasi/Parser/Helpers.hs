@@ -3,6 +3,7 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   ( countHoriz
   , consumeEndComment
   , parseBool
+  , (<|?>)
   -- * Parsing Items in Lists
   , parseQuoteString
   , parseQuoteText
@@ -14,6 +15,8 @@ module Metamorth.Interaction.Quasi.Parser.Helpers
   , parseUnquoteLineString
   -- * Parsing Lists Themselves
   , parseKeySep
+  , parseKeySep'
+  , parseKeySepX
   , parseListSep
   -- * Parsing Indents
   , findIndent
@@ -128,11 +131,14 @@ parseQuoteLineText' = do
       case w of
         Nothing -> return (txt `T.snoc` '\\')
         (Just 'n') -> do
-          c <- AT.anyChar
-          ((txt `T.snoc` c) <>) <$> parseQuoteLineText'
+          _ <- AT.anyChar
+          ((txt `T.snoc` '\n') <>) <$> parseQuoteLineText'
         (Just '\\') -> do
-          c <- AT.anyChar
-          ((txt `T.snoc` c) <>) <$> parseQuoteLineText'
+          _ <- AT.anyChar
+          ((txt `T.snoc` '\\') <>) <$> parseQuoteLineText'
+        (Just '\"') -> do
+          _ <- AT.anyChar
+          ((txt `T.snoc` '\"') <>) <$> parseQuoteLineText'
         (Just '#') -> do
           c <- AT.anyChar
           ((txt `T.snoc` c) <>) <$> parseQuoteLineText'
@@ -218,6 +224,72 @@ parseKeySep = do
   _ <- AT.satisfy (\x -> x == ':' || x == '=')
   skipHoriz
   return ()
+
+-- | Parse the separator between a key and its value.
+--   Can be either @':'@ or @'='@. If just a space,
+--   raise a warning. Also needs a `String` to tell it
+--   what it's parsing.
+parseKeySep' :: String -> ParserQQ1 ()
+parseKeySep' fieldNom = do
+  x <- lift $ lift AT.peekChar 
+  case x of
+    (Just y) 
+      | AT.isHorizontalSpace y -> do
+        lift $ lift skipHoriz
+        sepr <- lift $ lift $ optional $ AT.satisfy (\z -> z == ':' || z == '=')
+        lift $ lift skipHoriz
+        case sepr of
+          (Just _) -> return ()
+          Nothing -> do
+            orthName <- getOrthName
+            lift $ tellWarning $ "Orthography \"" ++ orthName ++ "\" has field \"" ++ fieldNom ++ "\" without a ':' or an '='."
+      | (y == ':') || (y == '=') -> do
+        lift $ lift skipHoriz
+        return ()
+      | (y == '\n') -> do
+        orthName <- getOrthName
+        lift $ tellError $ earlyEndErr orthName
+      | otherwise -> do
+        orthName <- getOrthName
+        lift $ tellError $ "Error in Orthography \"" ++ orthName ++ "\": Unexpected charcter '" ++ y : "' after field \"" ++ fieldNom ++ "\"."
+
+    Nothing -> do
+      orthName <- getOrthName
+      lift $ tellError $ earlyEndErr orthName
+  where
+    earlyEndErr :: String -> String
+    earlyEndErr str = "Error in Orthography \"" ++ str ++ "\": Field \"" ++ fieldNom ++ "\" ended before being assigned."
+
+
+-- | Like `parseKeySep'`, but for the parsers that
+--   aren't tied to a specific orthography.
+parseKeySepX :: String -> ParserQQ ()
+parseKeySepX fieldNom = do
+  x <- lift AT.peekChar 
+  case x of
+    (Just y) 
+      | AT.isHorizontalSpace y -> do
+        lift skipHoriz
+        sepr <- lift $ optional $ AT.satisfy (\z -> z == ':' || z == '=')
+        lift skipHoriz
+        case sepr of
+          (Just _) -> return ()
+          Nothing -> do
+            tellWarning $ "Field \"" ++ fieldNom ++ "\" is missing a ':'/'='."
+      | (y == ':') || (y == '=') -> do
+        lift skipHoriz
+        return ()
+      | (y == '\n') -> do
+        tellError earlyEndErr
+      | otherwise -> do
+        tellError $ "Error: Unexpected charcter '" ++ y : "' after field \"" ++ fieldNom ++ "\"."
+
+    Nothing -> do
+      tellError earlyEndErr
+  where
+    earlyEndErr :: String
+    earlyEndErr = "Field \"" ++ fieldNom ++ "\" ended before being assigned."
+
 
 -- | Parse a separator between two items in a list.
 --   It can be one of @','@, @';'@, @'|'@, or just @' '@.
@@ -516,6 +588,14 @@ quotedList' [x] = '\"' : x ++ "\""
 quotedList' [x,y] = '\"' : x ++ "\", and \"" ++ y ++ "\""
 quotedList' (x:xs) = '\"' : x ++ "\", " ++ (quotedList' xs)
 
+-- | A simple way to determine which of two 
+--   options was chosen, where you don't care
+--   about the value of the two options.
+(<|?>) :: Alternative f => f a -> f b -> f Bool
+op1 <|?>  op2 = (op1 $> True) <|> (op2 $> False)
+
+infixl 3 <|?>
+
 --------------------------------
 -- Multi-Sets
 
@@ -536,7 +616,7 @@ minsert x ms = M.insertWith (+) x 1 ms
 -- | Insert without increasing the count.
 --   Note that since `M.insertWith` runs
 --   @op new_value old_value@, we have to
---   flip it to keep the old value.
+--   flip `const` to keep the old value.
 ninsert :: (Ord a) => a -> MultiSet a -> MultiSet a
 ninsert x ms = M.insertWith (flip const) x 1 ms
 

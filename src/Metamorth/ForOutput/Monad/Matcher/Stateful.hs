@@ -227,19 +227,30 @@ pullValues = MatcherT $ \_ifnc inp vs st -> pure (vs, inp, mempty, st)
 get :: (Applicative m) => MatcherT i v s m s
 get = MatcherT $ \_ifnc inp vs st -> pure (st,inp,vs,st)
 
--- | Retrieve the current state.
+-- | Retrieve the current state, using a view function on it.
 gets :: (Applicative m) => (s -> s') -> MatcherT i v s m s'
 gets f = MatcherT $ \_ifnc inp vs st -> pure (f st, inp, vs, st)
 
+-- | Modify the current state of the `MatcherT`.
 modify :: (Applicative m) => (s -> s) -> MatcherT i v s m ()
 modify f = MatcherT $ \_ifnc inp vs st -> pure ((), inp, vs, f st)
 
+-- | Strictly modify the current state of the `MatcherT`. Based
+--   on `Control.Monad.Trans.State.Strict.modify'` from 
+--   "Control.Monad.Trans.State.Strict".
 modify' :: (Applicative m) => (s -> s) -> MatcherT i v s m ()
 modify' f = MatcherT $ \_ifnc inp vs st -> pure ((), inp, vs, f $! st)
 
+-- | Set the current state of the `MatcherT` to a specific value.
 put :: (Applicative m) => s -> MatcherT i v s m ()
 put st = MatcherT $ \_ifnc inp vs _ -> pure ((), inp, vs, st)
 
+-- | Match on the input stream by applying a `MatchResult` action
+--   to the next value in the stream, and then either:
+--
+--     - Returning, if the the action returns a `MatchReturn`.
+--     - Throwing an error, if the action returns a `MatchFail`.
+--     - Running `match` on the next value in the stream, if the action returns a `MatchContinue` or `MatchOptions`.
 match :: (MonadPlus m, Monoid v) => (String -> m r) -> (i -> MatchResult m i v s r) -> MatcherT i v s m r
 match err f = do
   mybX <- proceed
@@ -490,5 +501,81 @@ matchesSimpleDef defVal action = do
   case x of
     Nothing     -> return defVal
     (Just rslt) -> matchesSimpleDef (defVal <> rslt) action
+
+----------------------------------------------------------------
+-- Checking the laws for Alternative
+
+-- instance (MonadPlus m) => Alternative (MatcherT i v s m) where
+--   empty = MatcherT $ \_ _ _ _ -> mzero
+--   (MatcherT mt1) <|> (MatcherT mt2) 
+--     = MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
+
+-- empty is a neutral element
+-- (1) empty <|> u  =  u
+-- (2) u <|> empty  =  u
+
+-- (<|>) is associative
+-- (3) u <|> (v <|> w)  =  (u <|> v) <|> w
+
+-- Note: Assuming that the laws for Alternative/MonadPlus
+-- hold for the underlying monad.
+
+-- (1) : empty <|> u = u
+-- (MatcherT mt1) <|> (MatcherT mt2) 
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> mzero `mplus` (mt2 ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> mt2 ifnc inp vs st  -- by MonadPlus laws
+--   == MatcherT mt2
+--   == u
+--   Therefore, (1) holds.
+
+-- (2) : u <|> empty = u
+-- (MatcherT mt1) <|> (MatcherT mt2) 
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` mempty
+--   == MatcherT $ \ifnc inp vs st -> mt1 ifnc inp vs st  -- by MonadPlus laws
+--   == MatcherT mt1
+--   == u
+--   Therefore, (2) holds.
+
+-- (3) u <|> (v <|> w)  =  (u <|> v) <|> w
+-- (MatcherT mt1) <|> ((MatcherT mt2)  <|> (MatcherT mt3))
+--   == (MatcherT mt1)
+--         <|> (MatcherT $ \ifnc' inp' vs' st' -> (mt2 ifnc' inp' vs' st') `mplus` (mt3 ifnc' inp' vs' st'))
+--
+-- Let mtVW = \ifnc' inp' vs' st' -> (mt2 ifnc' inp' vs' st') `mplus` (mt3 ifnc' inp' vs' st')
+--
+--   == (MatcherT mt1) <|> (MatcherT mtVW)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mtVW ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus`
+--         ((\ifnc' inp' vs' st' -> (mt2 ifnc' inp' vs' st') `mplus` (mt3 ifnc' inp' vs' st')) ifnc inp vs st)
+--   == MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus`
+--         ((mt2 ifnc inp vs st) `mplus` (mt3 ifnc inp vs st))
+--
+--   == MatcherT $ \ifnc inp vs st ((mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)) `mplus`
+--         (mt3 ifnc inp vs st)    by associativity of `mplus` on the base monad. (3.1)
+
+-- ... which can be shown to be equivalent to "(u <|> v) <|> w":
+
+-- (u <|> v) <|> w
+--   == ((MatcherT mt1) <|> (MatcherT mt2)) <|> (MatcherT mt3)
+--   == (MatcherT $ \ifnc inp vs st -> (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)) <|> (MatcherT mt3)
+--
+-- Let mtUV = \ifnc' inp' vs' st' -> (mt1 ifnc' inp' vs' st') `mplus` (mt2 ifnc' inp' vs' st')
+--
+--   == (MatcherT mtUV) <|> (MatcherT mt3)
+--   == MatcherT $ \ifnc inp vs st -> (mtUV ifnc inp vs st) `mplus` (mt3 ifnc inp vs st)
+--  
+--        (mtUV ifnc inp vs st)
+--     == (\ifnc' inp' vs' st' -> (mt1 ifnc' inp' vs' st') `mplus` (mt2 ifnc' inp' vs' st')) ifnc inp vs st
+--     == (mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)
+--
+--   == MatcherT $ \ifnc inp vs st -> ((mt1 ifnc inp vs st) `mplus` (mt2 ifnc inp vs st)) `mplus` 
+--         (mt3 ifnc inp vs st)
+
+-- ... which is the same as equation (3.1).
+
+-- Therefore, (`MatcherT` i v s m) satisfies the Alternative/MonadPlus laws
+-- so long as `m` also satisfies those laws.
 
 

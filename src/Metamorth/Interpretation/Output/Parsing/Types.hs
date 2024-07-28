@@ -78,7 +78,7 @@ embedOutputParser grps trts asps phons prs
 data OutputParsingState = OutputParsingState
   -- | The state dictionary. This is updated as
   --   the parser parses the state declarations.
-  { opsStateDictionary :: M.Map String (Maybe (S.Set String))
+  { opsStateDictionary :: M.Map String (Bool, Maybe (S.Set String))
   -- | The Group "Dictionary". This is supplied by
   --   the phoneme parser when the output files
   --   are run.

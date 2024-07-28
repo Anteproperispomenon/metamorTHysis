@@ -10,6 +10,8 @@ import Test.TH.Kwakwala  as Kwak
 import Test.TH.Mongolian as Mongolian
 import Test.TH.Following qualified as Fol
 
+import Test.TH.Backtrack qualified as Back
+
 import Test.TH.KwakQuasi qualified as KwakQ
 
 import System.IO
@@ -131,6 +133,25 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing auto-states..."
+  let boas1 = TLE.decodeUtf8 <$> KwakQ.convertOrthographyBS KwakQ.InBoas KwakQ.OutGrubb boasText1
+  case boas1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+  putStrLn "Testing auto-states for output..."
+  let auto2 = TLE.decodeUtf8 <$> KwakQ.convertOrthographyBS KwakQ.InGrubb KwakQ.OutUmista2 autoTest2
+  case auto2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+  
+  putStrLn "Testing input backtracking..."
+  let back1 = TLE.decodeUtf8 <$> Back.convertOrthographyBS Back.InBacktrack Back.OutBacktrack2 backTest1
+  case back1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
@@ -153,6 +174,15 @@ followText1 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft"
 
 followText2 :: T.Text
 followText2 = "ɑgjuliʊ gæʃtɒlis θrəŋ aft iŋaninis init etes beedʒ ekiŋ"
+
+boasText1 :: T.Text
+boasText1 = "ăăë gŭ"
+
+autoTest2 :: T.Text
+autoTest2 = "eh'eh'a gwa'um'i" -- 
+
+backTest1 :: T.Text
+backTest1 = "tough tougra" -- 
 
 -- hmm... ...
 

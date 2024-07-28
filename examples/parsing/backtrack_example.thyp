@@ -1,0 +1,37 @@
+
+orthography : backtrack
+phoneme set : backtrack
+
+====
+
+# no classes/states?
+
+====
+
+# Vowels
+e : e
+o : o
+u : u
+i : i
+a : a
+ough : o u g h
+aw : a w
+
+# consonants
+t  : t
+d  : d
+k  : k
+g  : g
+m  : m
+n  : n
+ng : n g
+s  : s
+l  : l
+r  : r
+w  : w
+p  : p
+b  : b
+f  : f
+v  : v
+h  : h
+
