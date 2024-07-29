@@ -357,8 +357,17 @@ readOutputFile (fp, eod) = do
 
 getParserData :: FilePath -> PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name)), [(Exp, Exp)])
 getParserData fp pdb txt epd = do
-  -- here
-  let eParseRslt = AT.parseOnly parseOrthographyFile txt
+  -- New information needed
+  let pni = makePhonemeInformation pdb
+      aspectSet = M.map (M.keysSet . snd . snd) (pniAspects pni)
+      phoneSet  = M.keysSet $ pniPhones pni
+      
+      traitDict = pdbTraitInformation pdb 
+      -- From Map String (Name, Maybe (Name, Map String Name))
+      -- To   Map String (Maybe (Set String))\
+      traitMaps = fmap (\(_, mb) -> fmap (\(_,mp) -> M.keysSet mp) mb) traitDict
+      
+      eParseRslt = AT.parseOnly (parseOrthographyFileNew (M.keysSet (pdbGroupMemberFuncs pdb)) traitMaps aspectSet phoneSet) txt
       newNameStr = epdParserName epd
   ((dcs1, spi, funcNom), typeNom) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input file \"" ++ fp ++ "\": " ++ err
