@@ -1,9 +1,10 @@
 module Metamorth.Interpretation.Parser.Parsing
   ( parseOrthographyFile
-
+  , parseOrthographyFileNew
   ) where
 
 import Control.Applicative
+import Control.Arrow ((&&&))
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -31,6 +32,8 @@ import Metamorth.Interpretation.Parser.Types
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
+
+import Metamorth.Interpretation.Shared.Types
 
 -- Special Characters:
 
@@ -374,6 +377,21 @@ parseClassDecSection = do
   _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
   lift parseEndComment
 
+-- | Parse the class declaration section.
+--   This also includes states and imports.
+parseClassDecSectionNew :: ParserParser ()
+parseClassDecSectionNew = do
+  -- lift AT.skipSpace
+  _ <- lift $ many parseEndComment
+  _ <- AT.many' $ do
+    parseClassDecS <|> parseStateDecS <|> getImportS_ <|> parseUnspecifiedClassOrState
+    lift $ some_ parseEndComment
+  _ <- lift $ many  parseEndComment
+  _ <- lift ("====" <?> "Classes: Separator1")
+  _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
+  lift parseEndComment
+
+
 -- | Parse a class/state that's missing the
 --   "class"/"state" keyword at the beginning.
 --   This is to improve error messages.
@@ -488,6 +506,73 @@ parseStateDecS = do
 parseAutoOff :: AT.Parser ()
 parseAutoOff = void
   ("auto-off" <|> "auto" <|> "short" <|> "off")
+
+-- | Get an import declaration and check
+--   that it is a valid import.
+getImportS :: ParserParser ImportProperty
+getImportS = do
+  imp <- lift getImport
+  case imp of
+    (ImportGroup grpName) -> do
+      (thisDict, fullDict) <- gets (ppsGroupDictionary &&& ppsGroupDictionary')
+      if (grpName `elem` thisDict)
+        then warn ("Importing group \"" ++ grpName ++ "\" more than once.")
+        else if (grpName `elem` fullDict)
+          then do
+            let newDict = S.insert grpName thisDict
+            modify $ \x -> x {ppsGroupDictionary = newDict}
+          else tellError ("Can't find group \"" ++ grpName ++ "\" in phoneme definitions.")
+    (ImportAspect aspName) -> do
+      (thisDict, fullDict) <- gets (ppsAspectDictionary &&& ppsAspectDictionary')
+      case (M.lookup aspName thisDict) of
+        (Just _) -> warn ("Importing aspect \"" ++ aspName ++ "\" more than once.")
+        Nothing  -> case (M.lookup aspName fullDict) of
+          Nothing  -> tellError ("Can't find aspect \"" ++ aspName ++ "\" in phoneme definitions.")
+          (Just v) -> do
+            let newDict = M.insert aspName v thisDict
+            modify $ \x -> x {ppsAspectDictionary = newDict}
+    (ImportTrait trtName) -> do
+      (thisDict, fullDict) <- gets (ppsTraitDictionary &&& ppsTraitDictionary')
+      case (M.lookup trtName thisDict) of
+        (Just _) -> warn ("Importing trait \"" ++ trtName ++ "\" more than once.")
+        Nothing  -> case (M.lookup trtName fullDict) of
+          Nothing  -> tellError ("Can't find trait \"" ++ trtName ++ "\" in phoneme definitions.")
+          (Just v) -> do
+            let newDict = M.insert trtName v thisDict
+            modify $ \x -> x {ppsTraitDictionary = newDict}
+  return imp
+
+getImportS_ :: ParserParser ()
+getImportS_ = void getImportS
+
+-- | A variant of `getImportS` that defers
+--   the actual lookup of imported properties.
+getImportDeferredS :: ParserParser ImportProperty
+getImportDeferredS = do
+  imp <- lift getImport
+  case imp of
+    (ImportGroup grpName) -> do
+      thisDict <- gets ppsGroupDictionary
+      if (grpName `elem` thisDict)
+        then warn ("Importing group \"" ++ grpName ++ "\" more than once.")
+        else do
+            let newDict = S.insert grpName thisDict
+            modify $ \x -> x {ppsGroupDictionary = newDict}
+    (ImportAspect aspName) -> do
+      thisDict <- gets ppsAspectDictionary
+      case (M.lookup aspName thisDict) of
+        (Just _) -> warn ("Importing aspect \"" ++ aspName ++ "\" more than once.")
+        Nothing  -> do
+            let newDict = M.insert aspName S.empty thisDict
+            modify $ \x -> x {ppsAspectDictionary = newDict}
+    (ImportTrait trtName) -> do
+      thisDict <- gets ppsTraitDictionary
+      case (M.lookup trtName thisDict) of
+        (Just _) -> warn ("Importing trait \"" ++ trtName ++ "\" more than once.")
+        Nothing  -> do
+            let newDict = M.insert trtName Nothing thisDict
+            modify $ \x -> x {ppsTraitDictionary = newDict}
+  return imp
 
 ----------------------------------------------------------------
 -- Orthography Properties Parsers
@@ -662,6 +747,57 @@ parseOrthographyFile = do
   hdr <- parseOrthographyProps
   (_rslt, stt, msgs) <- embedParserParser $ do
     -- Parse the class instances
+    parseClassDecSectionNew
+    lift $ many_ parseEndComment
+
+    -- Parse the phoneme patterns
+    _ <- AT.many' $ do
+      -- Skip spaces...
+      lift $ many_ parseEndComment
+      parsePhonemePatS
+      -- lift skipHoriz
+      lift parseEndComment
+    lift AT.skipSpace
+    lift $ many_ parseEndComment
+    _ <- AT.option () $ do
+      _ <- lift ("====" <?> "Phoneme Patterns: Separator")
+      _ <- AT.many' $ do
+        lift $ many_ parseEndComment
+        parsePhonemePatMulti
+        lift parseEndComment
+      return ()
+    return ()
+    -- hmm...
+
+  
+  let (errs, wrns, notes) = partitionMessages msgs
+      phonePatsM  = ppsPhonemePatterns stt
+      phoneNames  = M.keys phonePatsM
+      phoneNames' = concatMap (NE.toList . prPhonemes) phoneNames
+      phoneGroups = groupBy eqOnPN phoneNames'
+      wrongPhones = filter (not . sameArgsPN) phoneGroups
+      phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
+  return (hdr,stt,errs ++ phoneErrs, wrns)
+
+-- | Newer version that relies on input from the
+--   phoneme file.
+parseOrthographyFileNew 
+  -- | The `S.Set` of group names.
+  :: S.Set String 
+  -- | A `M.Map` from trait names to the values
+  --   the trait can take (if applicable).
+  -> M.Map String (Maybe (S.Set String)) 
+  -- | A `M.Map` from aspect names to the values
+  --   the aspect can take.
+  -> M.Map String (S.Set String)
+  -- | A `S.Set` of the phonemes used for this
+  --   output.
+  -> S.Set String
+  -> AT.Parser (HeaderData, ParserParsingState, [String], [String])
+parseOrthographyFileNew grps trts asps phones = do
+  hdr <- parseOrthographyProps
+  (_rslt, stt, msgs) <- embedParserParserNew grps trts asps phones $ do
+    -- Parse the class instances
     parseClassDecSection
     lift $ many_ parseEndComment
 
@@ -693,6 +829,8 @@ parseOrthographyFile = do
       wrongPhones = filter (not . sameArgsPN) phoneGroups
       phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
   return (hdr,stt,errs ++ phoneErrs, wrns)
+
+
 
 getStrPN :: [PhoneName] -> String
 getStrPN [] = "<??>"

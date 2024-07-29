@@ -43,6 +43,8 @@ import Metamorth.Helpers.Char
 import Metamorth.Interpretation.Output.Types
 import Metamorth.Interpretation.Output.Types.Alt
 
+import Metamorth.Interpretation.Shared.Types (ImportProperty(..))
+
 --------------------------------
 -- Types for Parsing
 
@@ -123,11 +125,12 @@ runOnPhoneme str = local (const str)
 
 -- | Data type for declarations of the form
 --   `import (aspect | group | trait) prop_name`.
-data ImportProperty
-  = ImportAspect String
-  | ImportGroup  String
-  | ImportTrait  String
-  deriving (Show, Eq, Ord)
+-- Moved to "Metamorth.Interpretation.Shared.Types"
+-- data ImportProperty
+--   = ImportAspect String
+--   | ImportGroup  String
+--   | ImportTrait  String
+--   deriving (Show, Eq, Ord)
 
 -- | The parsed values on the left-hand side
 --   of a phoneme pattern.
