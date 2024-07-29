@@ -82,6 +82,7 @@ library
       Metamorth.Interpretation.Phonemes.TH
       Metamorth.Interpretation.Phonemes.TH.Types
       Metamorth.Interpretation.Phonemes.Types
+      Metamorth.Interpretation.Shared.Types
   other-modules:
       Paths_metamorTHysis
   autogen-modules:

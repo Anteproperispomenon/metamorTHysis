@@ -19,6 +19,7 @@ import Data.Bifunctor
 import Data.Char (ord, chr, isSpace, isLower, isAlpha)
 import Data.Text qualified as T
 import Data.Text (Text)
+import Data.Maybe (isNothing, isJust)
 
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty (NonEmpty(..))
@@ -107,6 +108,7 @@ parseEscaped = do
     '~' -> consProd '~'
     '!' -> consProd '!'
     '@' -> consProd '@'
+    '>' -> consProd '>'
     y   -> consProd y
 
   {- -- older version
@@ -547,6 +549,7 @@ getImportS_ = void getImportS
 
 -- | A variant of `getImportS` that defers
 --   the actual lookup of imported properties.
+--   (Unused)
 getImportDeferredS :: ParserParser ImportProperty
 getImportDeferredS = do
   imp <- lift getImport
@@ -653,6 +656,118 @@ parsePhonemeList = do
     skipHoriz1
     parsePhoneme1
   return (fstPhone :| rstPhones)
+
+----------------------------------------------------------------
+-- Lookahead Pattern Parsers
+----------------------------------------------------------------
+
+-- (Taken from the output parser).
+-- At the moment, doesn't work with specific
+-- phonemes... but maybe it should? Okay
+-- now it (maybe) does.
+parseNextCheck :: AT.Parser (String, Maybe String)
+parseNextCheck = do
+  _ <- AT.char '>'
+  skipHoriz
+  strProp <- takeIdentifier isAlpha isFollowId
+  strVal <- optional $ do
+    _ <- AT.char '='
+    takeIdentifier isAlpha isFollowId
+  return (T.unpack strProp, T.unpack <$> strVal)
+
+-- | Parse the next-phoneme string, checking
+--   that it matches one of the given groups,
+--   traits, aspects, or phonemes.
+parseNextCheckS :: ParserParser (Maybe FollowPattern)
+parseNextCheckS = do
+  (prop, mval) <- lift parseNextCheck
+  dicts <- get
+  -- NOTE: May want to change the order of the
+  -- error messages, in case the user is explicitly
+  -- NOT importing a group/aspect/trait that overlaps
+  -- with another value. Unlikely, but possible.
+  case mval of
+    -- If nothing, then following chances,
+    -- from most likely to least likely:
+    -- Group, Trait, Phoneme, Aspect.
+    Nothing -> if (prop `elem` (ppsGroupDictionary dicts))
+      then return $ Just $ FollowGroup prop
+      else if (prop `elem` (ppsGroupDictionary' dicts))
+        then do 
+          tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
+          return Nothing
+        else case (M.lookup prop (ppsTraitDictionary dicts)) of
+          -- Works with either type of trait.
+          (Just _) -> return $ Just $ FollowTrait prop
+          Nothing -> case (M.lookup prop (ppsTraitDictionary' dicts)) of
+            (Just _) -> do
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
+            Nothing -> if (prop `elem` (ppsPhoneDictionary dicts))
+              then return $ Just $ FollowPhone prop
+              else case (M.lookup prop (ppsAspectDictionary dicts)) of
+                (Just _) -> return $ Just $ FollowAspect prop
+                Nothing  -> case (M.lookup prop (ppsAspectDictionary' dicts)) of
+                  (Just _) -> do
+                    tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+                    return Nothing
+                  Nothing -> do
+                    phoneName <- ask
+                    tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
+                    return Nothing
+    -- There IS a second value here in this case.
+    -- Therefore it should only be a property
+    -- that can take on a second value, e.g. a
+    -- trait or an aspect.
+    (Just val) -> case (M.lookup prop (ppsTraitDictionary' dicts)) of
+      (Just (Just vs)) -> if (val `elem` vs)
+        then if (isJust ((M.lookup prop (ppsTraitDictionary dicts)))) 
+          then return $ Just $ FollowTraitAt prop val
+          else do
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v1);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
+        else do
+          phoneName <- ask
+          when (isNothing $ M.lookup prop (ppsTraitDictionary dicts)) $ 
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v2);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
+          return Nothing
+      (Just _) -> do
+          phoneName <- ask
+          when (isNothing $ M.lookup prop (ppsTraitDictionary dicts)) $ 
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v3);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
+          return Nothing
+      Nothing -> case (M.lookup prop (ppsAspectDictionary' dicts)) of
+        (Just vs) -> if (val `elem` vs)
+          then if (isJust ((M.lookup prop (ppsAspectDictionary dicts))))
+            then return $ Just $ FollowAspectAt prop val
+            else do
+              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
+          else do
+            phoneName <- ask
+            when (prop `notElem` (M.keysSet $ ppsAspectDictionary dicts)) $
+              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for aspect \"" ++ prop ++ "\"."
+            return Nothing
+        Nothing -> if (prop `elem` (ppsGroupDictionary' dicts))
+          then do
+            phoneName <- ask
+            when (prop `notElem` (ppsGroupDictionary dicts)) $
+              tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a group: \">" ++ prop ++ "=" ++ val ++ "\"."
+            return Nothing
+          else if (prop `elem` (ppsPhoneDictionary dicts))
+            then do
+              phoneName <- ask
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a phoneme: \">" ++ prop ++ "=" ++ val ++ "\"."
+              return Nothing
+            else do
+              phoneName <- ask
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match \"next-phoneme\" string : \">" ++ prop ++ "=" ++ val ++ "\"."
+              return Nothing
+
 
 
 ----------------------------------------------------------------
