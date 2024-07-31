@@ -1767,6 +1767,15 @@ modifyStateExps  sdict mods = do
       lamb = LamE [VarP xvar] (RecUpdE (VarE xvar) fieldExps)
   return $ \expr -> infixCont (AppE (VarE 'State.modify') lamb) expr
 
+-- | For use when modifying the state before a
+--   lookahead. This creates a simple Lambda
+--   expression.
+makeModifyStatesLA :: M.Map String (Name, Maybe (Name, M.Map String Name)) -> [ModifyStateX] -> Either [String] Exp
+makeModifyStatesLA _sdict [] = Right (VarE 'id)
+makeModifyStatesLA  sdict mods = do
+  fieldExps <- liftEitherList (map (modifyStateExp sdict) mods)
+  let xvar = mkName "x"
+  return $ LamE [VarP xvar] (RecUpdE (VarE xvar) fieldExps)
 
 ----------------------------------------------------------------
 -- Pre-Constructed Expressions
