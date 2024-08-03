@@ -22,6 +22,8 @@ module Metamorth.Interpretation.Parser.Types
   , RawPhonemePattern(..)
   , CharPatternRaw(..)
   , FollowPattern(..)
+  , isFollowPat
+  , getFollowPat
   ) where
 
 import Data.Bifunctor
@@ -110,6 +112,14 @@ data CharPatternF b
   | NotEnd                  -- ^ NOT the end of a word.
   | FollowPat FollowPattern -- ^ A `FollowPattern`
   deriving (Show, Eq)
+
+isFollowPat :: CharPattern -> Bool
+isFollowPat (FollowPat _) = True
+isFollowPat _ = False
+
+getFollowPat :: CharPattern -> Maybe FollowPattern
+getFollowPat (FollowPat x) = Just x
+getFollowPat _ = Nothing
 
 -- Make (CharPatternF (Down b)) an instance of `Ord` so that
 -- (CharPatternF b) has something to derive via. Also make this

@@ -159,6 +159,7 @@ import Metamorth.Interpretation.Parser.Parsing (parseOrthographyFile)
 import Metamorth.Interpretation.Parser.Types
 import Metamorth.Interpretation.Parser.Parsing.Types
 import Metamorth.Interpretation.Parser.Parsing.Trie (generaliseStateTrie)
+import Metamorth.Interpretation.Parser.TH.Lookahead
 import Metamorth.Helpers.TH
 
 
@@ -1283,9 +1284,19 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
 
   where
+    -- Whether there are any lookahead patterns... ahead.
+    hasLookaheads = anyTrieKey isFollowPat theTrie
+    
+    -- Separating out the lookahead parts.
+    (restPats, mainPats)
+      | hasLookaheads = first Just $ partitionTrieK isFollowPat theTrie
+      | otherwise     = (Nothing, theTrie)
+
     -- Since TrieAnnotation should always be present, it should
     -- be safe to use `fromJust`.
-    subTries = map (second (first fromJust)) $ getSubTries theTrie
+    -- Using "mainPats" since the "restPats" will be grouped
+    -- with the "otherwise" block.
+    subTries = map (second (first fromJust)) $ getSubTries mainPats
 
     -- This is using the `Either` monad.
     mkRslts (chrP,((ann, mPhone), thisSubTrie)) = do
@@ -1314,18 +1325,32 @@ makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj 
           -- The True is since the next function expects a 
           return ((guardThing, expVal),Just (elm, True, chrP, thisSubTrie))
 
+{-
+data PhoneResult = PhoneResult
+  { prPhonemes  :: NonEmpty PhoneName
+  , prStateMods :: [ModifyStateX]
+  } deriving (Show, Eq, Ord)
+-}
+
+
     -- This guard matches @peekedChar == `Nothing`@, or when
     -- none of the possible matches are correct.
-    finalRslt = otherwiseG <$> case mTrieVal of
-      Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
-      (Just (prslt, cs)) -> do
-        let pnom = prPhonemes  prslt
-            pmod = prStateMods prslt
-            -- applyReset = AppE (VarE resetStateFunc)
-            pmod' = mergeStatesInto resetStateMods pmod
-        cstrExp        <- phoneNamePatterns patMap aspMaps pnom
-        resultModifier <- modifyStateExps sdict pmod'
-        return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
+    finalRslt = case restPats of
+      (Just lookAheadTrie) -> otherwiseG <$> do
+        let newMap = groupMods $ unmapLookaheadTrie lookAheadTrie
+        Left [] -- TEMP
+
+      Nothing -> 
+        otherwiseG <$> case mTrieVal of
+        Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
+        (Just (prslt, cs)) -> do
+          let pnom = prPhonemes  prslt
+              pmod = prStateMods prslt
+              -- applyReset = AppE (VarE resetStateFunc)
+              pmod' = mergeStatesInto resetStateMods pmod
+          cstrExp        <- phoneNamePatterns patMap aspMaps pnom
+          resultModifier <- modifyStateExps sdict pmod'
+          return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
 makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt

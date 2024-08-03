@@ -32,6 +32,8 @@ module Metamorth.Helpers.Trie
   , forBranches
   , insertIfEmpty
   , insertMaybeIfEmpty
+  , partitionTrieK
+  , anyTrieKey
   -- , annotateTrie
   -- , annotifyTrie
   -- , setifyTrie
@@ -229,3 +231,21 @@ mapBranches f (TMI.TMap (TMI.Node _ e))
       in  (TMI.TMap (TMI.Node mx' submap'))
       ) e
 -}
+
+-- | Partition this node of a `TM.TMap` based on
+--   the keys of the next nodes. Note that the
+--   value at the head of this `TM.TMap`s. is also at
+--   the head of *both* output `TM.TMap`s.
+partitionTrieK :: (c -> Bool) -> TM.TMap c a -> (TM.TMap c a, TM.TMap c a)
+partitionTrieK fltr (TMI.TMap (TMI.Node mv mp))
+  | (mp1, mp2) <- M.partitionWithKey (\k _ -> fltr k) mp
+  = ( TMI.TMap (TMI.Node mv mp1)
+    , TMI.TMap (TMI.Node mv mp2)
+    )
+
+-- | See if any of the next nodes meet a condition
+anyTrieKey :: (c -> Bool) -> TM.TMap c a -> Bool
+anyTrieKey fltr (TMI.TMap (TMI.Node _mv mp))
+  = any fltr (M.keys mp)
+
+

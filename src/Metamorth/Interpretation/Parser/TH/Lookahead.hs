@@ -4,6 +4,8 @@ module Metamorth.Interpretation.Parser.TH.Lookahead
   ( createLookahead
   , createMultiLookahead
   , createMultiLookahead2
+  , unmapLookaheadTrie
+  , groupMods
   ) where
 
 import Control.Applicative
@@ -11,11 +13,17 @@ import Control.Monad
 
 import Data.Attoparsec.Text qualified as AT
 
+import Data.Map.Strict qualified as M
+
+import Data.List (groupBy, sort)
+
 import Language.Haskell.TH
 import Language.Haskell.TH.Syntax
 
+import Metamorth.Helpers.Map
 import Metamorth.Helpers.Parsing
 
+import Metamorth.Interpretation.Parser.Parsing.Types
 import Metamorth.Interpretation.Parser.Types
 
 import Data.List.NonEmpty qualified as NE
@@ -24,6 +32,12 @@ import Data.List.NonEmpty (NonEmpty(..))
 import Metamorth.Helpers.TH
 
 import Control.Monad.Trans.State.Strict qualified as St
+
+import Data.Trie.Map          qualified as TM
+import Data.Trie.Map.Internal qualified as TMI
+
+import Metamorth.Helpers.Trie
+
 
 createLookahead :: (Quote q) => {-[ModifyStateX]-} Exp -> Name -> (Exp -> Exp) -> Exp -> q Exp
 createLookahead stModLamb funcName rsltCheck rslt = do
@@ -110,4 +124,51 @@ lookAheadSX f prs = do
 -}
 
 -- intersperseInfixRE (VarE '(<|>))
+
+
+----------------------------------------------------------------
+-- Trie Map
+
+-- | Turn the "lookahead" trie into a simple `M.Map`,
+--   since lookeaheads must be the final modifier.
+unmapLookaheadTrie :: (Ord c) => TM.TMap c (ann, Maybe a) -> M.Map c a
+unmapLookaheadTrie (TMI.TMap (TMI.Node _ mp))
+  = M.mapMaybe (snd <=< TM.lookup []) mp
+
+
+groupMods 
+  :: M.Map CharPattern     (PhoneResult  , Caseness) 
+  -> M.Map [ModifyStateX] [(FollowPattern, (NonEmpty PhoneName, Caseness))]
+groupMods mpIn = M.fromList finAssocs
+  where
+    mpIn' :: M.Map FollowPattern (PhoneResult, Caseness) 
+    mpIn' = mapKeysMaybe getFollowPat mpIn
+    mpAssocs :: [(FollowPattern, (PhoneResult, Caseness))]
+    mpAssocs = M.assocs mpIn'
+
+    mpAssocs' :: [([ModifyStateX], (FollowPattern, (NonEmpty PhoneName, Caseness)))]
+    mpAssocs' = forMap mpAssocs $ \(folPat, (phoneRes, csn)) ->
+      (sort (prStateMods phoneRes), (folPat, (prPhonemes phoneRes, csn)))
+    
+    finAssocs :: [([ModifyStateX], [(FollowPattern, (NonEmpty PhoneName, Caseness))])]
+    finAssocs = firstUngroup $ groupBy (\(mdsts1,_) (mdsts2,_) -> mdsts1 == mdsts2) $ sort mpAssocs'
+
+
+firstUngroup :: [[(a,b)]] -> [(a,[b])]
+firstUngroup [] = []
+firstUngroup ([]:xss) = firstUngroup xss
+firstUngroup (xs@((x1,_):_):xss) = (x1, (map snd xs)) : (firstUngroup xss)
+
+firstMaybe :: (a -> Maybe a') -> (a, b) -> Maybe (a', b) 
+firstMaybe f (x, y) = case f x of
+  Nothing   -> Nothing
+  (Just x') -> Just (x', y)
+
+{-
+data PhoneResult = PhoneResult
+  { prPhonemes  :: NonEmpty PhoneName
+  , prStateMods :: [ModifyStateX]
+  } deriving (Show, Eq, Ord)
+-}
+
 
