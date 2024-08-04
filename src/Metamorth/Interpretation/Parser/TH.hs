@@ -1338,19 +1338,38 @@ data PhoneResult = PhoneResult
     finalRslt = case restPats of
       (Just lookAheadTrie) -> otherwiseG <$> do
         let newMap = groupMods $ unmapLookaheadTrie lookAheadTrie
-        Left [] -- TEMP
+        case (M.size newMap) of
+          0 -> case mTrieVal of
+            Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
+            -- Copied from below
+            (Just (prslt, cs)) -> mkFinalOption prslt cs
+          1 -> do
+            Left [] -- TEMP
+          _ -> do
+            Left [] -- TEMP
 
       Nothing -> 
         otherwiseG <$> case mTrieVal of
         Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
-        (Just (prslt, cs)) -> do
-          let pnom = prPhonemes  prslt
-              pmod = prStateMods prslt
-              -- applyReset = AppE (VarE resetStateFunc)
-              pmod' = mergeStatesInto resetStateMods pmod
-          cstrExp        <- phoneNamePatterns patMap aspMaps pnom
-          resultModifier <- modifyStateExps sdict pmod'
-          return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
+        (Just (prslt, cs)) -> mkFinalOption prslt cs
+        --   let pnom = prPhonemes  prslt
+        --       pmod = prStateMods prslt
+        --       -- applyReset = AppE (VarE resetStateFunc)
+        --       pmod' = mergeStatesInto resetStateMods pmod
+        --   cstrExp        <- phoneNamePatterns patMap aspMaps pnom
+        --   resultModifier <- modifyStateExps sdict pmod'
+        --   return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
+    
+    -- Originally only used once, separating this into its own
+    -- thing so I can use it multiple times.
+    mkFinalOption :: PhoneResult -> Caseness -> Either [String] Exp
+    mkFinalOption prslt cs = do
+      let pnom  = prPhonemes  prslt
+          pmod  = prStateMods prslt
+          pmod' = mergeStatesInto resetStateMods pmod
+      cstrExp        <- phoneNamePatterns patMap aspMaps pnom
+      resultModifier <- modifyStateExps sdict pmod'
+      return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
 makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
