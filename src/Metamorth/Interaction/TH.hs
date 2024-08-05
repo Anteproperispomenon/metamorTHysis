@@ -366,7 +366,8 @@ getParserData fp pdb txt epd = do
       -- From Map String (Name, Maybe (Name, Map String Name))
       -- To   Map String (Maybe (Set String))\
       traitMaps = fmap (\(_, mb) -> fmap (\(_,mp) -> M.keysSet mp) mb) traitDict
-      
+
+      -- (HeaderData, ParserParsingState, [String], [String])
       eParseRslt = AT.parseOnly (parseOrthographyFileNew (M.keysSet (pdbGroupMemberFuncs pdb)) traitMaps aspectSet phoneSet) txt
       newNameStr = epdParserName epd
   ((dcs1, spi, funcNom), typeNom) <- case eParseRslt of
@@ -390,6 +391,9 @@ getParserData fp pdb txt epd = do
             (pdbMkMaj pdb)
             (pdbMkMin pdb)
             (pdbWordTypeNames pdb)
+            (pniAspects pni)
+            (pdbTraitInformation pdb)
+            (pdbGroupMemberFuncs pdb)
             (pps)
             (epdParserOptions epd)
       return (prs, hdOrthName hdr)

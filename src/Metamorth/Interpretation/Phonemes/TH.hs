@@ -156,10 +156,10 @@ data PhonemeDatabase = PhonemeDatabase
   , pdbWordTypeNames  :: (Name, (Name, Name))
   -- | Functions for checking membership in a group.
   , pdbGroupMemberFuncs :: M.Map String Name
-  -- | Functions for checking whether a function has
+  -- | Functions for checking whether a `String` is
   --   a trait, and whether that trait is a value trait
-  --   (@True@) or a boolean trait (@False@).
-  , pdbTraitInformation :: M.Map String (Name, (Maybe (Name, M.Map String Name)))
+  --   (@Just ...@) or a boolean trait (@Nothing@).
+  , pdbTraitInformation :: M.Map String (Name, Maybe (Name, M.Map String Name))
   -- | Make an uncased expression an upper-case expression.
   , pdbMkMaj :: Exp -> Exp
   -- | Make an uncased expression a  lower-case expression.

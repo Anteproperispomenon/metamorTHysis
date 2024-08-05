@@ -1,11 +1,18 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module Metamorth.Interpretation.Parser.TH.Lookahead
+  -- * Lookahead Creating
   ( createLookahead
   , createMultiLookahead
   , createMultiLookahead2
+  -- ** Pure Versions
+  , createLookaheadPure
+  , createMultiLookaheadPure
+  , createMultiLookaheadPure2
+  -- * Other Functions
   , unmapLookaheadTrie
   , groupMods
+  , constructFollowPats
   -- * Phone Checks
   , makePhoneCheckSimple
   , makePhoneCheckAlt
@@ -42,7 +49,6 @@ import Data.Trie.Map.Internal qualified as TMI
 
 import Metamorth.Helpers.Trie
 
-
 createLookahead :: (Quote q) => {-[ModifyStateX]-} Exp -> Name -> (Exp -> Exp) -> Exp -> q Exp
 createLookahead stModLamb funcName rsltCheck rslt = do
   -- let x = 0
@@ -58,6 +64,23 @@ createLookahead stModLamb funcName rsltCheck rslt = do
          }
     |]
   return okay
+
+-- [| do { newRslt <- lookAheadSX $(pure expZ) $ do { $(pure $ VarP zNom) <- NE.head <$> $(pure $ VarE funcName); return $ $(pure $ rsltCheck (VarE zNom)) } ; if newRslt then (return $(pure $ rslt)) else (fail "Failed a lookahead") } |]
+
+-- do { newRslt <- lookAheadSX $(pure expZ) $ do { $(pure $ VarP zNom) <- NE.head <$> $(pure $ VarE funcName); return $ $(pure $ rsltCheck (VarE zNom)) } ; if newRslt then (return $(pure $ rslt)) else (fail "Failed a lookahead") }
+
+createLookaheadPure :: Name -> Name -> Exp -> Name -> (Exp -> Exp) -> Exp -> Exp
+createLookaheadPure zNom newRslt stModLamb funcName rsltCheck rslt
+  = DoE Nothing 
+    [ BindS (VarP newRslt) 
+      (InfixE (Just (AppE (VarE 'lookAheadSX) stModLamb)) (VarE '($)) 
+        (Just 
+          (DoE Nothing 
+            [ BindS (VarP zNom) (InfixE (Just (VarE 'NE.head)) (VarE '(<$>)) (Just (VarE funcName)))
+            , NoBindS (InfixE (Just (VarE 'return)) (VarE '($)) (Just (rsltCheck (VarE zNom))   ))
+            ])))
+    , NoBindS (CondE (VarE newRslt) (AppE (VarE 'return) rslt) (AppE (VarE 'fail) (LitE (StringL "Failed a lookahead"))))
+    ]
 
 createMultiLookahead :: (Quote q) => {-[ModifyStateX]-} Exp -> Name -> [(Exp -> Exp, Exp)] -> Maybe Exp -> q Exp
 createMultiLookahead stModLamb funcName rsltChecks otherRslt = do
@@ -92,7 +115,32 @@ createMultiLookahead stModLamb funcName rsltChecks otherRslt = do
       )
     ifBlocks :: Name -> [(Guard, Exp)]
     ifBlocks nom = ifBlocks' nom ++ [(NormalG $ VarE 'otherwise, otherRslt')]
-    
+
+createMultiLookaheadPure :: Name -> Exp -> Name -> [(Exp -> Exp, Exp)] -> Maybe Exp -> Exp
+createMultiLookaheadPure zNom stModLamb funcName rsltChecks otherRslt = 
+  DoE Nothing 
+    [ BindS (VarP zNom) (InfixE (Just (AppE (VarE 'lookAheadSX) stModLamb)) (VarE '($)) (Just (InfixE (Just (VarE 'NE.head)) (VarE '(<$>)) (Just (VarE funcName)))))
+    , NoBindS (MultiIfE (ifBlocks zNom))]
+  where
+    otherRslt'
+      | (Just oRslt) <- otherRslt
+      = if (stModLamb == (VarE 'id))
+        then AppE (VarE 'return) oRslt
+        else InfixE (Just (AppE (VarE 'St.modify') stModLamb)) (VarE '(>>)) (Just (AppE (VarE 'return) oRslt))
+      -- = [| return $(pure oRslt) |]
+      | otherwise
+      =  AppE (VarE 'fail) (LitE (StringL "Could not find a lookahead."))
+      -- = [| fail "Could not find a lookahead." |]
+    ifBlocks' :: Name -> [(Guard, Exp)]
+    ifBlocks' nom = forMap rsltChecks $ \(expFunc, outp) ->
+      ( NormalG $ expFunc (VarE nom)
+      , AppE (VarE 'return) outp
+      )
+    ifBlocks :: Name -> [(Guard, Exp)]
+    ifBlocks nom = ifBlocks' nom ++ [(NormalG $ VarE 'otherwise, otherRslt')]
+
+
+
 -- Warning: Needs to modify state!
 -- Also: What if there are multiple lookaheads that
 -- make different moddifications to the state(s)?
@@ -115,6 +163,21 @@ createMultiLookahead2 funcName modCases otherRslt = do
         else InfixE (Just (AppE (VarE 'St.modify') stMod)) (VarE '(>>)) (Just (AppE (VarE 'return) oRslt))
       | otherwise
       =  AppE (VarE 'fail) (LitE (StringL "Could not find a lookahead."))
+
+createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
+createMultiLookaheadPure2 zNom funcName modCases otherRslt =
+  let rsltList = forMap modCases $ \(stModLamb, rsltChecks) -> 
+        createMultiLookaheadPure zNom stModLamb funcName rsltChecks Nothing
+  in  intersperseInfixRE (VarE '(<|>)) (snocNE rsltList otherRslt')
+  where
+    otherRslt'
+      | Just (oRslt, stMod) <- otherRslt
+      = if (stMod == (VarE 'id))
+        then AppE (VarE 'return) oRslt
+        else InfixE (Just (AppE (VarE 'St.modify') stMod)) (VarE '(>>)) (Just (AppE (VarE 'return) oRslt))
+      | otherwise
+      =  AppE (VarE 'fail) (LitE (StringL "Could not find a lookahead."))
+
 
 snocNE :: [a] -> a -> NonEmpty a
 snocNE []     y = y :| []
@@ -218,6 +281,15 @@ makePhoneCheckAlt phoneNom = LamCaseE
 
 
 -- M.Map String (Name, (Name, M.Map String Name))
+
+{-
+
+  -> M.Map String (Name, (Name, M.Map String Name))       -- ^ Function names for checking aspects.
+  -> M.Map String (Name, Maybe (Name, M.Map String Name)) -- ^ Functions for checking traits.
+  -> M.Map String Name                -- ^ Functions for checking group membership.
+
+aspectFuncs' = M.map (\(nom, mVal) -> (nom, snd <$> mVal)) aspectFuncs
+-}
 
 -- 
 constructFollowPats 
