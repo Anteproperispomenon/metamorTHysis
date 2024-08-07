@@ -120,13 +120,16 @@ createMultiLookaheadPure :: Name -> Exp -> Name -> [(Exp -> Exp, Exp)] -> Maybe 
 createMultiLookaheadPure zNom stModLamb funcName rsltChecks otherRslt = 
   DoE Nothing 
     [ BindS (VarP zNom) (InfixE (Just (AppE (VarE 'lookAheadSX) stModLamb)) (VarE '($)) (Just (InfixE (Just (VarE 'NE.head)) (VarE '(<$>)) (Just (VarE funcName)))))
-    , NoBindS (MultiIfE (ifBlocks zNom))]
+    , NoBindS (MultiIfE (ifBlocks zNom))
+    ]
   where
     otherRslt'
       | (Just oRslt) <- otherRslt
       = if (stModLamb == (VarE 'id))
-        then AppE (VarE 'return) oRslt
-        else InfixE (Just (AppE (VarE 'St.modify') stModLamb)) (VarE '(>>)) (Just (AppE (VarE 'return) oRslt))
+        -- then AppE (VarE 'return) oRslt
+        then oRslt
+        -- else InfixE (Just (AppE (VarE 'St.modify') stModLamb)) (VarE '(>>)) (Just (AppE (VarE 'return) oRslt))
+        else oRslt -- input already modifies code.
       -- = [| return $(pure oRslt) |]
       | otherwise
       =  AppE (VarE 'fail) (LitE (StringL "Could not find a lookahead."))
@@ -134,7 +137,9 @@ createMultiLookaheadPure zNom stModLamb funcName rsltChecks otherRslt =
     ifBlocks' :: Name -> [(Guard, Exp)]
     ifBlocks' nom = forMap rsltChecks $ \(expFunc, outp) ->
       ( NormalG $ expFunc (VarE nom)
-      , AppE (VarE 'return) outp
+      -- , AppE (VarE 'return) outp
+      -- , AppE (VarE 'return) outp
+      , InfixE (Just (AppE (VarE 'St.modify') stModLamb)) (VarE '(>>)) (Just outp)
       )
     ifBlocks :: Name -> [(Guard, Exp)]
     ifBlocks nom = ifBlocks' nom ++ [(NormalG $ VarE 'otherwise, otherRslt')]
@@ -173,8 +178,10 @@ createMultiLookaheadPure2 zNom funcName modCases otherRslt =
     otherRslt'
       | Just (oRslt, stMod) <- otherRslt
       = if (stMod == (VarE 'id))
-        then AppE (VarE 'return) oRslt
-        else InfixE (Just (AppE (VarE 'St.modify') stMod)) (VarE '(>>)) (Just (AppE (VarE 'return) oRslt))
+        -- then AppE (VarE 'return) oRslt
+        then oRslt -- hmm...
+        -- else InfixE (Just (AppE (VarE 'St.modify') stMod)) (VarE '(>>)) (Just (AppE (VarE 'return) oRslt))
+        else InfixE (Just (AppE (VarE 'St.modify') stMod)) (VarE '(>>)) (Just oRslt)
       | otherwise
       =  AppE (VarE 'fail) (LitE (StringL "Could not find a lookahead."))
 

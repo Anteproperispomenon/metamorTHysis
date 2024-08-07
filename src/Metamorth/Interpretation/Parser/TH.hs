@@ -1485,8 +1485,21 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
   where
+    -- Phone map
+    newPhoneMap = MM.merge MM.dropMissing MM.dropMissing (MM.zipWithMatched (\_ x y -> (x,y))) patMap aspMaps
     -- Slightly altered version of aspectFuncs to match functions used.
+    -- aspectFuncs' = M.map (Bi.second (fmap snd)) aspectFuncs
     aspectFuncs' = M.map (\(nom, mVal) -> (nom, snd mVal)) aspectFuncs
+
+    traitFuncs'  = M.map (\(nom, mVal) -> (nom, snd <$> mVal)) traitFuncs
+
+    -- Whether there are any lookahead patterns... ahead.
+    hasLookaheads = anyTrieKey isFollowPat theTrie
+    
+    -- Separating out the lookahead parts.
+    (restPats, mainPats)
+      | hasLookaheads = first Just $ partitionTrieK isFollowPat theTrie
+      | otherwise     = (Nothing, theTrie)
 
     -- Since TrieAnnotation should always be present, it should
     -- be safe to use `fromJust`.
@@ -1517,17 +1530,95 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
               let rsltX = consumerFuncX nextFunc
               return ((guardThing, rsltX), Just (elm, False, chrP, thisSubTrie))
 
-    finalRslt = otherwiseG <$> case mTrieVal of
-      Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
-      (Just (prslt, cs)) -> do
-        -- TODO : Addd in the state stuff
-        let pnom = prPhonemes  prslt
-            pmod = prStateMods prslt
-            -- applyReset = AppE (VarE resetStateFunc)
-            pmod' = mergeStatesInto resetStateMods pmod
-        cstrExp <- phoneNamePatterns patMap aspMaps pnom
-        resultModifier <- modifyStateExps sdict pmod'
-        return $ resultModifier $ phonemeRetZ mkMaj mkMin cs charVarName cstrExp
+    finalRslt = case restPats of
+      (Just lookAheadTrie) -> otherwiseG <$> do
+        -- newMap :: M.Map [ModifyStateX] [(FollowPattern, (NonEmpty PhoneName, Caseness))]
+        let newMap = groupMods $ unmapLookaheadTrie lookAheadTrie
+        case (M.size newMap) of
+          0 -> case mTrieVal of
+            Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
+            -- Copied from below
+            (Just (prslt, cs)) -> mkFinalOption prslt cs
+          1 -> do
+            -- mainVal :: ([ModifyStateX], [(FollowPattern, (NonEmpty PhoneName, Caseness))])
+            let mainVal@(stMods, followPairs) = M.findMin newMap
+                pmod = mergeStatesInto resetStateMods stMods
+            stModLamb <- makeModifyStatesLA sdict pmod 
+
+            folPatsP <- forM followPairs $ \(fPat, (phoneNoms, csn)) -> do
+                  let consPats = constructFollowPats newPhoneMap groupFuncs aspectFuncs traitFuncs' fPat
+                  cstrExp <- phoneNamePatterns patMap aspMaps phoneNoms
+                  -- resultModifier <- modifyStateExps sdict pmod
+                  return (consPats, phonemeRet' mkMaj mkMin csn Nothing cstrExp)
+            
+            -- What to do if no lookahead matches.
+            altExpr <- case mTrieVal of
+              Nothing -> return Nothing
+              (Just (prslt, cs)) -> Just <$> mkFinalOption prslt cs
+
+            return $ createMultiLookaheadPure (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
+
+          -- [(Exp, [(Exp -> Exp, Exp)])] === [(stateMod, [(phonemeCheck, result)])]
+          -- createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
+          -- createMultiLookaheadPure2 zNom funcName modCases otherRslt
+
+          -- newMap :: M.Map [ModifyStateX] [(FollowPattern, (NonEmpty PhoneName, Caseness))]
+          _ -> do
+            let zNom = mkName "zNom12"
+            folRslts <- forWithKey newMap $ \stMods followPairs -> do
+              -- All the values in one run through of this make the
+              -- same modification to the state.
+              let pmod = mergeStatesInto resetStateMods stMods
+              stModLamb <- makeModifyStatesLA sdict pmod 
+
+              -- Make the follow pats...
+              -- rslts :: [(Exp -> Exp, Exp)]
+              rslts <- forM followPairs $ \(folPat, (phoneRslt, csn)) -> do
+                -- Basically the same as above.
+                -- consPats :: Exp -> Exp
+                let consPats = constructFollowPats newPhoneMap groupFuncs aspectFuncs traitFuncs' folPat
+                -- Might need to ensure that the state is properly modified in
+                -- the result.
+                cstrExp <- phoneNamePatterns patMap aspMaps phoneRslt
+                return (consPats, phonemeRet' mkMaj mkMin csn Nothing cstrExp)
+              
+              -- Okay, now what?
+              return (stModLamb, rslts)
+            
+            -- okay, got folRslts
+            -- What to do if no lookahead matches.
+            -- Note: Need to update this to actually check
+            -- for the state change.
+            altExpr <- case mTrieVal of
+              Nothing -> return Nothing
+              (Just (prslt, cs)) -> Just . (, VarE 'id) <$> mkFinalOption prslt cs
+            
+            -- Can now construct the code...
+            return $ createMultiLookaheadPure2 zNom rstFuncName (M.elems folRslts) altExpr
+
+
+      Nothing -> 
+        otherwiseG <$> case mTrieVal of
+        Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
+        (Just (prslt, cs)) -> mkFinalOption prslt cs
+        --   let pnom = prPhonemes  prslt
+        --       pmod = prStateMods prslt
+        --       -- applyReset = AppE (VarE resetStateFunc)
+        --       pmod' = mergeStatesInto resetStateMods pmod
+        --   cstrExp        <- phoneNamePatterns patMap aspMaps pnom
+        --   resultModifier <- modifyStateExps sdict pmod'
+        --   return $ resultModifier $ phonemeRet' mkMaj mkMin cs Nothing cstrExp
+    
+    -- Originally only used once, separating this into its own
+    -- thing so I can use it multiple times.
+    mkFinalOption :: PhoneResult -> Caseness -> Either [String] Exp
+    mkFinalOption prslt cs = do
+      let pnom  = prPhonemes  prslt
+          pmod  = prStateMods prslt
+          pmod' = mergeStatesInto resetStateMods pmod
+      cstrExp        <- phoneNamePatterns patMap aspMaps pnom
+      resultModifier <- modifyStateExps sdict pmod'
+      return $ resultModifier $ phonemeRet' mkMaj mkMin cs Nothing cstrExp
 {-
 
 consumerRetX mkMaj mkMin (PlainChar   c) cs peekName rslt

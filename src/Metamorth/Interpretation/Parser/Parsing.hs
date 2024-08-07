@@ -159,7 +159,7 @@ isNonSpace :: Char -> Bool
 isNonSpace = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!')
 
 isNonSpace' :: Char -> Bool
-isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*')
+isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*') && (x /= '>')
 
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
@@ -768,7 +768,16 @@ parseNextCheckS = do
               tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match \"next-phoneme\" string : \">" ++ prop ++ "=" ++ val ++ "\"."
               return Nothing
 
-
+parseNextCheckRS :: ParserParser CharPatternRaw
+parseNextCheckRS = do
+  chk <- parseNextCheckS
+  case chk of
+    (Just fpat) -> return $ FollowPatR fpat
+    Nothing     -> return $ PlainCharR '>'
+    -- Can't just run "fail", as that would
+    -- trigger backtracking and remove the
+    -- errors from the output. Instead, we
+    -- just pass a dummy value.
 
 ----------------------------------------------------------------
 -- Phoneme Pattern Parsers
@@ -802,6 +811,7 @@ parsePhonemePatS = do
         <|> (mkList parseEndPointS  )
         <|> (mkList parseNotStartS  )
         <|> (mkList parseNotEndS    )
+        <|> (mkList parseNextCheckRS)
         <|> (parseMultiNonSpaceRS   )
         <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
@@ -839,6 +849,7 @@ parsePhonemePatMulti = do
         <|> (mkList parseEndPointS  )
         <|> (mkList parseNotStartS  )
         <|> (mkList parseNotEndS    )
+        <|> (mkList parseNextCheckRS)
         <|> (parseMultiNonSpaceRS   )
         <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
@@ -913,7 +924,7 @@ parseOrthographyFileNew grps trts asps phones = do
   hdr <- parseOrthographyProps
   (_rslt, stt, msgs) <- embedParserParserNew grps trts asps phones $ do
     -- Parse the class instances
-    parseClassDecSection
+    parseClassDecSectionNew
     lift $ many_ parseEndComment
 
     -- Parse the phoneme patterns
