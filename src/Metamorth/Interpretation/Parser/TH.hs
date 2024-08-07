@@ -1418,12 +1418,45 @@ data PhoneResult = PhoneResult
               (Just (prslt, cs)) -> Just <$> mkFinalOption prslt cs
 
             return $ createMultiLookaheadPure (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
+
+          -- [(Exp, [(Exp -> Exp, Exp)])] === [(stateMod, [(phonemeCheck, result)])]
+          -- createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
+          -- createMultiLookaheadPure2 zNom funcName modCases otherRslt
+
+          -- newMap :: M.Map [ModifyStateX] [(FollowPattern, (NonEmpty PhoneName, Caseness))]
           _ -> do
+            let zNom = mkName "zNom12"
             folRslts <- forWithKey newMap $ \stMods followPairs -> do
+              -- All the values in one run through of this make the
+              -- same modification to the state.
               let pmod = mergeStatesInto resetStateMods stMods
               stModLamb <- makeModifyStatesLA sdict pmod 
-              Left [] -- temp
-            Left []
+
+              -- Make the follow pats...
+              -- rslts :: [(Exp -> Exp, Exp)]
+              rslts <- forM followPairs $ \(folPat, (phoneRslt, csn)) -> do
+                -- Basically the same as above.
+                -- consPats :: Exp -> Exp
+                let consPats = constructFollowPats newPhoneMap groupFuncs aspectFuncs traitFuncs' folPat
+                -- Might need to ensure that the state is properly modified in
+                -- the result.
+                cstrExp <- phoneNamePatterns patMap aspMaps phoneRslt
+                return (consPats, phonemeRet' mkMaj mkMin csn mbl cstrExp)
+              
+              -- Okay, now what?
+              return (stModLamb, rslts)
+            
+            -- okay, got folRslts
+            -- What to do if no lookahead matches.
+            -- Note: Need to update this to actually check
+            -- for the state change.
+            altExpr <- case mTrieVal of
+              Nothing -> return Nothing
+              (Just (prslt, cs)) -> Just . (, VarE 'id) <$> mkFinalOption prslt cs
+            
+            -- Can now construct the code...
+            return $ createMultiLookaheadPure2 zNom rstFuncName (M.elems folRslts) altExpr
+
 
       Nothing -> 
         otherwiseG <$> case mTrieVal of
