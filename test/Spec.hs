@@ -150,6 +150,13 @@ main = do
   case back1 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+  
+  putStrLn "Testing input lookahead..."
+  let look1 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InLookahead Fol.OutFollowA lookAheadTest1
+  case look1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
 
 
 
@@ -183,6 +190,9 @@ autoTest2 = "eh'eh'a gwa'um'i" --
 
 backTest1 :: T.Text
 backTest1 = "tough tougra" -- 
+
+lookAheadTest1 :: T.Text
+lookAheadTest1 = "þa þna þøn þøjþvþ ød"
 
 -- hmm... ...
 
