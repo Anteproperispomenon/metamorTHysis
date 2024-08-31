@@ -48,6 +48,11 @@ j : y
 
 # labial
 b : b
+b : @help=helpA β
+b : @help=helpB б
+b : @help=helpC ḅ
+
+
 p : p
 f : f
 w : w
