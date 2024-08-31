@@ -17,6 +17,7 @@ module Metamorth.Interpretation.Parser.Parsing.Boolean
   -- * Binary And/Or Only
   ( Boolean2(..)
   , evaluate2
+  , leftmostB2
   -- * Arbitrary length And/Or
   , BooleanA(..)
   , evaluateA
@@ -35,7 +36,7 @@ data Boolean2 a
   | NotB2 (Boolean2 a)
   | AndB2 (Boolean2 a) (Boolean2 a)
   | OrB2  (Boolean2 a) (Boolean2 a)
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 instance Functor Boolean2 where
   fmap f (PlainB2 a) = PlainB2 (f a)
@@ -84,6 +85,14 @@ evaluate2 f (NotB2   x) = not (evaluate2 f x)
 evaluate2 f (AndB2 x y) = (evaluate2 f x) && (evaluate2 f y)
 evaluate2 f (OrB2  x y) = (evaluate2 f x) || (evaluate2 f y)
 
+-- | Extract the "leftmost" element from
+--   a `Boolean2` tree.
+leftmostB2 :: Boolean2 a -> a
+leftmostB2 (PlainB2 x) = x
+leftmostB2 (NotB2   x) = leftmostB2 x
+leftmostB2 (AndB2 x _) = leftmostB2 x
+leftmostB2 (OrB2  x _) = leftmostB2 x
+
 -- | A boolean expression tree tree that
 --   arbitrarily many sub-expressions for
 --   "AND" and "OR".
@@ -92,7 +101,7 @@ data BooleanA a
   | NotBA (BooleanA a)
   | AndBA (NonEmpty (BooleanA a))
   | OrBA  (NonEmpty (BooleanA a))
-  deriving (Show, Eq)
+  deriving (Show, Eq, Ord)
 
 instance Functor BooleanA where
   fmap f (PlainBA a) = PlainBA (f a)

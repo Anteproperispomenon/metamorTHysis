@@ -1394,7 +1394,7 @@ data PhoneResult = PhoneResult
     finalRslt = case restPats of
       (Just lookAheadTrie) -> otherwiseG <$> do
         -- newMap :: M.Map [ModifyStateX] [(FollowPattern, (NonEmpty PhoneName, Caseness))]
-        let newMap = groupMods $ unmapLookaheadTrie lookAheadTrie
+        let newMap = groupModsB $ unmapLookaheadTrie lookAheadTrie
         case (M.size newMap) of
           0 -> case mTrieVal of
             Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
@@ -1407,7 +1407,7 @@ data PhoneResult = PhoneResult
             stModLamb <- makeModifyStatesLA sdict pmod 
 
             folPatsP <- forM followPairs $ \(fPat, (phoneNoms, csn)) -> do
-                  let consPats = constructFollowPats newPhoneMap groupFuncs aspectFuncs traitFuncs' fPat
+                  let consPats = constructFollowPatsB newPhoneMap groupFuncs aspectFuncs traitFuncs' fPat
                   cstrExp <- phoneNamePatterns patMap aspMaps phoneNoms
                   -- resultModifier <- modifyStateExps sdict pmod
                   return (consPats, phonemeRet' mkMaj mkMin csn mbl cstrExp)
@@ -1437,7 +1437,7 @@ data PhoneResult = PhoneResult
               rslts <- forM followPairs $ \(folPat, (phoneRslt, csn)) -> do
                 -- Basically the same as above.
                 -- consPats :: Exp -> Exp
-                let consPats = constructFollowPats newPhoneMap groupFuncs aspectFuncs traitFuncs' folPat
+                let consPats = constructFollowPatsB newPhoneMap groupFuncs aspectFuncs traitFuncs' folPat
                 -- Might need to ensure that the state is properly modified in
                 -- the result.
                 cstrExp <- phoneNamePatterns patMap aspMaps phoneRslt
@@ -1533,7 +1533,7 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
     finalRslt = case restPats of
       (Just lookAheadTrie) -> otherwiseG <$> do
         -- newMap :: M.Map [ModifyStateX] [(FollowPattern, (NonEmpty PhoneName, Caseness))]
-        let newMap = groupMods $ unmapLookaheadTrie lookAheadTrie
+        let newMap = groupModsB $ unmapLookaheadTrie lookAheadTrie
         case (M.size newMap) of
           0 -> case mTrieVal of
             Nothing -> return $ AppE (VarE 'fail) (LitE (StringL $ "Couldn't find a match for pattern: \"" ++ (ppCharPats precPatrn) ++ "\"."))
@@ -1546,7 +1546,7 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
             stModLamb <- makeModifyStatesLA sdict pmod 
 
             folPatsP <- forM followPairs $ \(fPat, (phoneNoms, csn)) -> do
-                  let consPats = constructFollowPats newPhoneMap groupFuncs aspectFuncs traitFuncs' fPat
+                  let consPats = constructFollowPatsB newPhoneMap groupFuncs aspectFuncs traitFuncs' fPat
                   cstrExp <- phoneNamePatterns patMap aspMaps phoneNoms
                   -- resultModifier <- modifyStateExps sdict pmod
                   return (consPats, phonemeRet' mkMaj mkMin csn Nothing cstrExp)
@@ -1576,7 +1576,7 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
               rslts <- forM followPairs $ \(folPat, (phoneRslt, csn)) -> do
                 -- Basically the same as above.
                 -- consPats :: Exp -> Exp
-                let consPats = constructFollowPats newPhoneMap groupFuncs aspectFuncs traitFuncs' folPat
+                let consPats = constructFollowPatsB newPhoneMap groupFuncs aspectFuncs traitFuncs' folPat
                 -- Might need to ensure that the state is properly modified in
                 -- the result.
                 cstrExp <- phoneNamePatterns patMap aspMaps phoneRslt

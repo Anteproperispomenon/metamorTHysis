@@ -12,7 +12,9 @@ module Metamorth.Interpretation.Parser.TH.Lookahead
   -- * Other Functions
   , unmapLookaheadTrie
   , groupMods
+  , groupModsB
   , constructFollowPats
+  , constructFollowPatsB
   -- * Phone Checks
   , makePhoneCheckSimple
   , makePhoneCheckAlt
@@ -34,6 +36,7 @@ import Language.Haskell.TH.Syntax
 import Metamorth.Helpers.Map
 import Metamorth.Helpers.Parsing
 
+import Metamorth.Interpretation.Parser.Parsing.Boolean
 import Metamorth.Interpretation.Parser.Parsing.Types
 import Metamorth.Interpretation.Parser.Types
 
@@ -227,6 +230,24 @@ groupMods mpIn = M.fromList finAssocs
     finAssocs :: [([ModifyStateX], [(FollowPattern, (NonEmpty PhoneName, Caseness))])]
     finAssocs = firstUngroup $ groupBy (\(mdsts1,_) (mdsts2,_) -> mdsts1 == mdsts2) $ sort mpAssocs'
 
+groupModsB 
+  :: M.Map CharPattern     (PhoneResult  , Caseness) 
+  -> M.Map [ModifyStateX] [(Boolean2 FollowPattern, (NonEmpty PhoneName, Caseness))]
+groupModsB mpIn = M.fromList finAssocs
+  where
+    mpIn' :: M.Map (Boolean2 FollowPattern) (PhoneResult, Caseness) 
+    mpIn' = mapKeysMaybe getFollowPatB mpIn
+    mpAssocs :: [(Boolean2 FollowPattern, (PhoneResult, Caseness))]
+    mpAssocs = M.assocs mpIn'
+
+    mpAssocs' :: [([ModifyStateX], (Boolean2 FollowPattern, (NonEmpty PhoneName, Caseness)))]
+    mpAssocs' = forMap mpAssocs $ \(folPat, (phoneRes, csn)) ->
+      (sort (prStateMods phoneRes), (folPat, (prPhonemes phoneRes, csn)))
+    
+    finAssocs :: [([ModifyStateX], [(Boolean2 FollowPattern, (NonEmpty PhoneName, Caseness))])]
+    finAssocs = firstUngroup $ groupBy (\(mdsts1,_) (mdsts2,_) -> mdsts1 == mdsts2) $ sort mpAssocs'
+
+
 
 firstUngroup :: [[(a,b)]] -> [(a,[b])]
 firstUngroup [] = []
@@ -341,7 +362,24 @@ constructFollowPats phns _ _ _ (FollowPhone phnName) = case (M.lookup phnName ph
   Just (nom, _cs) -> \expr -> AppE (makePhoneCheckAlt    nom) expr
 
 
-
+constructFollowPatsB
+  :: M.Map String (Name, [M.Map String Name]) -- converted from "PhonemeInformation"
+  -> M.Map String Name -- pdbGroupMemberFuncs
+  -> M.Map String (Name, (Name, M.Map String Name)) -- pniAspects
+  -> M.Map String (Name, Maybe (M.Map String Name)) -- ondTraits
+  -> Boolean2 FollowPattern
+  -> (Exp -> Exp) -- Just a normal application, not an `fmap`ped application.
+constructFollowPatsB phns grps asps trts folPats = case folPats of
+  (PlainB2 folp) -> constructFollowPats phns grps asps trts folp
+  (NotB2   folp) -> \expr -> AppE (VarE 'not) (constructFollowPatsB phns grps asps trts folp expr)
+  (AndB2 fol1 fol2) -> \expr -> InfixE
+    (Just (constructFollowPatsB phns grps asps trts fol1 expr))
+    (VarE '(&&))
+    (Just (constructFollowPatsB phns grps asps trts fol2 expr))
+  (OrB2  fol1 fol2) -> \expr -> InfixE
+    (Just (constructFollowPatsB phns grps asps trts fol1 expr))
+    (VarE '(||))
+    (Just (constructFollowPatsB phns grps asps trts fol2 expr))
 
 
 {-
