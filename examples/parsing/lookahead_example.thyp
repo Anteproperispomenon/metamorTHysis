@@ -46,6 +46,11 @@ i : y >nasal !lastVow=on
 u : y >alveolar !lastVow=on
 j : y
 
+# Double-lookahead
+u : ɵ >i !lastVow=on
+o : ɵ >u !lastVow=on
+schwa : ɵ !lastVow=on
+
 # labial
 b : b
 b : @help=helpA β

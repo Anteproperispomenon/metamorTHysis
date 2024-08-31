@@ -162,7 +162,11 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
-
+  putStrLn "Testing input lookahead..."
+  let look3 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InLookahead Fol.OutFollowA lookAheadTest3
+  case look3 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
 
 
@@ -202,6 +206,8 @@ lookAheadTest1 = "þa þna þøn þøjþvþ ød"
 lookAheadTest2 :: T.Text
 lookAheadTest2 = "þaβ þбa þnaḅ"
 
+lookAheadTest3 :: T.Text
+lookAheadTest3 = "ɵin ɵyn ɵyd ɵyg"
 
 {-
    b : example=exam1
