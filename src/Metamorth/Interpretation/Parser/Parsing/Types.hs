@@ -5,6 +5,8 @@ module Metamorth.Interpretation.Parser.Parsing.Types
   , ParserMessage(..)
   , mkError
   , mkErrors
+  , tellError
+  , tellErrors
   , warn
   , warns
   , message
@@ -20,6 +22,7 @@ module Metamorth.Interpretation.Parser.Parsing.Types
   , runParserParser
   , execParserParser
   , embedParserParser
+  , embedParserParserNew
   ) where
 
 import Data.Function
@@ -85,16 +88,30 @@ addPhonemesPattern phones pat = do
 
 
 data ParserParsingState = ParserParsingState
-  { ppsClassDictionary :: M.Map String (S.Set Char)
-  , ppsStateDictionary :: M.Map String (Bool, Maybe (S.Set String))
-  , ppsPhonemePatterns :: M.Map PhoneResult [PhonemePattern]
+  { ppsClassDictionary   :: M.Map String (S.Set Char)
+  , ppsStateDictionary   :: M.Map String (Bool, Maybe (S.Set String))
+  , ppsPhonemePatterns   :: M.Map PhoneResult [PhonemePattern]
+  , ppsGroupDictionary   :: S.Set String
+  , ppsGroupDictionary'  :: S.Set String
+  , ppsTraitDictionary   :: M.Map String (Maybe (S.Set String))
+  , ppsTraitDictionary'  :: M.Map String (Maybe (S.Set String))
+  , ppsAspectDictionary  :: M.Map String (S.Set String)
+  , ppsAspectDictionary' :: M.Map String (S.Set String)
+  , ppsPhoneDictionary   :: S.Set String
   } deriving (Show, Eq)
 
 defParseState :: ParserParsingState
 defParseState = ParserParsingState
-  { ppsClassDictionary = M.empty
-  , ppsStateDictionary = M.empty
-  , ppsPhonemePatterns = M.empty
+  { ppsClassDictionary   = M.empty
+  , ppsStateDictionary   = M.empty
+  , ppsPhonemePatterns   = M.empty
+  , ppsGroupDictionary   = S.empty
+  , ppsGroupDictionary'  = S.empty
+  , ppsTraitDictionary   = M.empty
+  , ppsTraitDictionary'  = M.empty
+  , ppsAspectDictionary  = M.empty
+  , ppsAspectDictionary' = M.empty
+  , ppsPhoneDictionary   = S.empty
   }
 
 -- | The final result that can be found at a leaf.
@@ -126,6 +143,31 @@ execParserParser prs txt = forParseOnly txt $ do
 
 embedParserParser :: ParserParser a -> AT.Parser (a, ParserParsingState, [ParserMessage])
 embedParserParser prs = runRWST prs "N/A" defParseState
+
+embedParserParserNew   
+  -- | The `S.Set` of group names.
+  :: S.Set String 
+  -- | A `M.Map` from trait names to the values
+  --   the trait can take (if applicable).
+  -> M.Map String (Maybe (S.Set String)) 
+  -- | A `M.Map` from aspect names to the values
+  --   the aspect can take.
+  -> M.Map String (S.Set String)
+  -- | A `S.Set` of the phonemes used for this
+  --   output.
+  -> S.Set String
+  -> ParserParser a 
+  -> AT.Parser (a, ParserParsingState, [ParserMessage])
+embedParserParserNew grps trts asps phones prs = 
+  runRWST prs "N/A" 
+    (defParseState
+      { ppsGroupDictionary'  = grps
+      , ppsTraitDictionary'  = trts
+      , ppsAspectDictionary' = asps
+      , ppsPhoneDictionary   = phones
+      }
+    )
+
 
 -- | A constructor for how phoneme names
 --   are written in phoneme patterns.

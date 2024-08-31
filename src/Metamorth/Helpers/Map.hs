@@ -9,6 +9,7 @@ module Metamorth.Helpers.Map
   , lookupE
   , forMapFromSet
   , forMapFromSetM
+  , mapKeysMaybe
   ) where
 
 import Data.Functor (($>))
@@ -71,6 +72,17 @@ forMapFromSet st f = sequenceA $ M.fromSet f st
 forMapFromSetM :: (Monad m) => S.Set a -> (a -> m b) -> m (M.Map a b)
 forMapFromSetM st f = sequence $ M.fromSet f st
 
+mapKeysMaybe :: (Ord k, Ord k') => (k -> Maybe k') -> M.Map k a -> M.Map k' a
+mapKeysMaybe f = M.fromList . M.foldrWithKey fr []
+  where
+    fr k x xs = case (f k) of
+      Nothing   -> xs
+      (Just k') -> (k', x) : xs
+
+{-
+mapKeys :: Ord k2 => (k1->k2) -> Map k1 a -> Map k2 a
+mapKeys f = fromList . foldrWithKey (\k x xs -> (f k, x) : xs) []
+-}
 
 {- whoops
 mapMapMaybeWithKey :: (k -> a -> Maybe b) -> M.Map k a -> M.Map k b

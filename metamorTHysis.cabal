@@ -76,12 +76,14 @@ library
       Metamorth.Interpretation.Parser.Parsing.Trie
       Metamorth.Interpretation.Parser.Parsing.Types
       Metamorth.Interpretation.Parser.TH
+      Metamorth.Interpretation.Parser.TH.Lookahead
       Metamorth.Interpretation.Parser.Types
       Metamorth.Interpretation.Phonemes.Parsing
       Metamorth.Interpretation.Phonemes.Parsing.Types
       Metamorth.Interpretation.Phonemes.TH
       Metamorth.Interpretation.Phonemes.TH.Types
       Metamorth.Interpretation.Phonemes.Types
+      Metamorth.Interpretation.Shared.Types
   other-modules:
       Paths_metamorTHysis
   autogen-modules:

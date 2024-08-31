@@ -50,6 +50,8 @@ import Data.Set        qualified as S
 -- A lot of the code here is taken from
 -- "Metamorth.Interpretation.Parser.Parsing".
 
+import Metamorth.Interpretation.Shared.Types
+
 ----------------------------------------------------------------
 -- Main Parser
 ----------------------------------------------------------------
@@ -245,29 +247,30 @@ getImportS_ :: OutputParser ()
 getImportS_ = void getImportS
 
 -- | Import a trait/group/aspect from the phoneme file.
-getImport :: AT.Parser ImportProperty
-getImport = do
-  _ <- "import"
-  skipHoriz1
-  getAspect <|> getTrait <|> getGroup
-
-getAspect :: AT.Parser ImportProperty
-getAspect = do
-  _ <- "aspect"
-  skipHoriz1
-  ImportAspect . T.unpack <$> takeIdentifier isAlpha isFollowId
-
-getTrait :: AT.Parser ImportProperty
-getTrait = do
-  _ <- "trait"
-  skipHoriz1
-  ImportTrait . T.unpack <$> takeIdentifier isAlpha isFollowId
-
-getGroup :: AT.Parser ImportProperty
-getGroup = do
-  _ <- "group"
-  skipHoriz1
-  ImportGroup . T.unpack <$> takeIdentifier isAlpha isFollowId
+--   Moved to Metamorth.Interpretation.Shared.Types
+-- getImport :: AT.Parser ImportProperty
+-- getImport = do
+--   _ <- "import"
+--   skipHoriz1
+--   getAspect <|> getTrait <|> getGroup
+-- 
+-- getAspect :: AT.Parser ImportProperty
+-- getAspect = do
+--   _ <- "aspect"
+--   skipHoriz1
+--   ImportAspect . T.unpack <$> takeIdentifier isAlpha isFollowId
+-- 
+-- getTrait :: AT.Parser ImportProperty
+-- getTrait = do
+--   _ <- "trait"
+--   skipHoriz1
+--   ImportTrait . T.unpack <$> takeIdentifier isAlpha isFollowId
+-- 
+-- getGroup :: AT.Parser ImportProperty
+-- getGroup = do
+--   _ <- "group"
+--   skipHoriz1
+--   ImportGroup . T.unpack <$> takeIdentifier isAlpha isFollowId
 
 ----------------------------------------------------------------
 -- State Info Parsers

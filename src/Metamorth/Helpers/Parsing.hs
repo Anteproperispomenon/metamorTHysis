@@ -25,6 +25,7 @@ module Metamorth.Helpers.Parsing
   -- * Combinators lifted over `State.StateT`
   , lookAheadS
   , lookAheadS'
+  , lookAheadSX
 
   -- * Combinators lifted over `RWS.RWST`
   , lookAheadRWS
@@ -155,6 +156,17 @@ lookAheadS' :: (State.StateT s AT.Parser a) -> (State.StateT s AT.Parser (a,s))
 lookAheadS' prs = do
   st <- State.get
   lift $ AC.lookAhead (State.runStateT prs st)
+
+-- | Like `lookAheadS`, but modifies the value
+--   of the state before running the parser.
+--   This is useful if you want to modify the
+--   state value when looking ahead, but don't
+--   necessarily want to modify the state in the
+--   non-lookahead section.
+lookAheadSX :: (s -> s) -> (State.StateT s AT.Parser a) -> (State.StateT s AT.Parser a)
+lookAheadSX f prs = do
+  st <- State.get
+  lift $ AC.lookAhead (State.evalStateT prs (f $! st))
 
 -- | Lift `AC.lookAhead` over `RWS.RWST`, returning
 --   the value, state, and writer of the computation.

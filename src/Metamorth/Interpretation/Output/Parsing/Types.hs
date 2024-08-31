@@ -43,6 +43,8 @@ import Metamorth.Helpers.Char
 import Metamorth.Interpretation.Output.Types
 import Metamorth.Interpretation.Output.Types.Alt
 
+import Metamorth.Interpretation.Shared.Types (ImportProperty(..))
+
 --------------------------------
 -- Types for Parsing
 
@@ -123,11 +125,12 @@ runOnPhoneme str = local (const str)
 
 -- | Data type for declarations of the form
 --   `import (aspect | group | trait) prop_name`.
-data ImportProperty
-  = ImportAspect String
-  | ImportGroup  String
-  | ImportTrait  String
-  deriving (Show, Eq, Ord)
+-- Moved to "Metamorth.Interpretation.Shared.Types"
+-- data ImportProperty
+--   = ImportAspect String
+--   | ImportGroup  String
+--   | ImportTrait  String
+--   deriving (Show, Eq, Ord)
 
 -- | The parsed values on the left-hand side
 --   of a phoneme pattern.
@@ -149,12 +152,12 @@ data PhonePatternRaw
 pattern PhoneFollowR :: PhonePatternRaw
 pattern PhoneFollowR <- (convertFollow -> (Just _))
 
--- | Fast way to match a phoneme patterns that
+-- | Fast way to match phoneme patterns that
 --   have to go at the start of an expression.
 pattern PhoneStartR :: PhonePatternRaw
 pattern PhoneStartR <- ((\x -> x == PhoneAtStartR || x == PhoneNotStartR) -> True)
 
--- | Fast way to match a phoneme patterns that
+-- | Fast way to match phoneme patterns that
 --   have to go at the end of an expression.
 pattern PhoneEndR :: PhonePatternRaw
 pattern PhoneEndR <- ((\x -> x == PhoneAtEndR || x == PhoneNotEndR) -> True)

@@ -21,6 +21,9 @@ module Metamorth.Interpretation.Parser.Types
   
   , RawPhonemePattern(..)
   , CharPatternRaw(..)
+  , FollowPattern(..)
+  , isFollowPat
+  , getFollowPat
   ) where
 
 import Data.Bifunctor
@@ -66,6 +69,16 @@ data CharPatternRaw
   | NotEndR           -- ^ NOT the end of a word.
   | ValStateR String (Either String Bool) -- ^ Check that the state is a certain value.
   | SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
+  | FollowPatR FollowPattern
+  deriving (Show, Eq, Ord)
+
+data FollowPattern
+  = FollowAspect   String
+  | FollowAspectAt String String
+  | FollowTrait    String
+  | FollowTraitAt  String String
+  | FollowGroup    String
+  | FollowPhone    String
   deriving (Show, Eq, Ord)
 
 isStateR :: CharPatternRaw -> Bool
@@ -90,14 +103,23 @@ type CharPattern = CharPatternF [CheckStateX]
 
 -- | The "internal" version of `CharPattern`.
 data CharPatternF b
-  = PlainChar   b Char   -- ^ A single `Char`.
-  | CharOptCase b Char   -- ^ Any case of a `Char`.
-  | CharClass   b String -- ^ Any member of a class from the header.
-  | WordStart            -- ^ The start of a word.
-  | WordEnd              -- ^ The end of a word.
-  | NotStart             -- ^ NOT the start of a word.
-  | NotEnd               -- ^ NOT the end of a word.
+  = PlainChar   b Char      -- ^ A single `Char`.
+  | CharOptCase b Char      -- ^ Any case of a `Char`.
+  | CharClass   b String    -- ^ Any member of a class from the header.
+  | WordStart               -- ^ The start of a word.
+  | WordEnd                 -- ^ The end of a word.
+  | NotStart                -- ^ NOT the start of a word.
+  | NotEnd                  -- ^ NOT the end of a word.
+  | FollowPat FollowPattern -- ^ A `FollowPattern`
   deriving (Show, Eq)
+
+isFollowPat :: CharPattern -> Bool
+isFollowPat (FollowPat _) = True
+isFollowPat _ = False
+
+getFollowPat :: CharPattern -> Maybe FollowPattern
+getFollowPat (FollowPat x) = Just x
+getFollowPat _ = Nothing
 
 -- Make (CharPatternF (Down b)) an instance of `Ord` so that
 -- (CharPatternF b) has something to derive via. Also make this
@@ -252,6 +274,7 @@ startPatR _ = False
 endPatR :: CharPatternRaw -> Bool
 endPatR WordEndR = True
 endPatR NotEndR  = True
+endPatR (FollowPatR _) = True
 endPatR _ = False
 
 -- Note that NotStart must occur at the beginning of
@@ -296,8 +319,8 @@ validCharPatternE [] = Left "Can't have an empty pattern."
 validCharPatternE ((PlainCharR _):xs) = validCharPatternE' xs
 validCharPatternE ((CharClassR _):xs) = validCharPatternE' xs
 validCharPatternE [x]    | (startPatR x) = Left "Can't have a pattern with just a [not-]start-word mark."
-validCharPatternE [x,y]  | (startPatR x && endPatR y) = Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
-validCharPatternE (x:xs) | (endPatR x) = Left "Can't start a pattern with a [not-]word-end mark."
+validCharPatternE [x,y]  | (startPatR x && endPatR y) = Left "Can't have a pattern that consists of just [not-]start and [not-]end/follow mark(s)"
+validCharPatternE (x:xs) | (endPatR x) = Left "Can't start a pattern with a [not-]word-end or follow mark."
 validCharPatternE (WordStartR:xs) = validCharPatternE' xs
 validCharPatternE (NotStartR :xs) = validCharPatternE' xs
 validCharPatternE (x:_)  
@@ -312,7 +335,7 @@ validCharPatternE' ((CharClassR _):xs) = validCharPatternE' xs
 validCharPatternE' [x] | (endPatR x) = Right ()
 validCharPatternE' (x:_) 
   | (startPatR x) = Left "Can't have a [not-]word-start mark in the middle of a pattern."
-  | (endPatR   x) = Left "Can't have a [not-]word-end mark in the middle of a pattern."
+  | (endPatR   x) = Left "Can't have a [not-]word-end/follow mark in the middle of a pattern."
   | (isStateR  x) = Left "State-patterns should have been filtered out by this point."
   | otherwise     = Left "Some type of error happened in validateCharPatternE'."
 
@@ -332,8 +355,8 @@ validateCharPatternEX ((PlainCharR x):xs) = do
   ((PlainChar [] x):) <$> validateCharPatternE' xs
 validateCharPatternEX ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternE' xs
 validateCharPatternEX [x]    | (startPatR x) = lift $ Left "Can't have a pattern with just a [not-]start-word mark."
-validateCharPatternEX [x,y]  | (startPatR x && endPatR y) = lift $ Left "Can't have a pattern that consists of just [not-]start and [not-]end mark(s)"
-validateCharPatternEX (x:_)  | (endPatR x) = lift $ Left "Can't start a pattern with a [not-]word-end mark."
+validateCharPatternEX [x,y]  | (startPatR x && endPatR y) = lift $ Left "Can't have a pattern that consists of just [not-]start and [not-]end/follow mark(s)"
+validateCharPatternEX (x:_)  | (endPatR x) = lift $ Left "Can't start a pattern with a [not-]word-end/follow mark."
 validateCharPatternEX (WordStartR:xs) = (WordStart:) <$> validateCharPatternE' xs
 validateCharPatternEX (NotStartR :xs) = (NotStart :) <$> validateCharPatternE' xs
 validateCharPatternEX (x:_)  | isStateR x = lift $ Left "State-patterns should have been filtered out by this point."
@@ -353,6 +376,7 @@ validateCharPatternE' ((PlainCharR x):xs) = do
 validateCharPatternE' ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternE' xs
 validateCharPatternE' [WordEndR] = return [WordEnd]
 validateCharPatternE' [NotEndR]  = return [NotEnd]
+validateCharPatternE' [(FollowPatR fpat)] = return [FollowPat fpat]
 validateCharPatternE' (x:_) 
   | (startPatR x) = lift $ Left "Can't have a [not-]word-start mark in the middle of a pattern."
   | (endPatR   x) = lift $ Left "Can't have a [not-]word-end mark in the middle of a pattern."
@@ -393,9 +417,10 @@ validateCharPatternZ' ((PlainCharR x):xs) = do
 validateCharPatternZ' ((CharClassR x):xs) = ((CharClass [] x):) <$> validateCharPatternZ' xs
 validateCharPatternZ' [WordEndR] = return [WordEnd]
 validateCharPatternZ' [NotEndR]  = return [NotEnd]
+validateCharPatternZ' [FollowPatR fpat] = return [FollowPat fpat]
 validateCharPatternZ' (x:_) 
   | (startPatR x) = lift $ Left "Can't have a [not-]word-start mark in the middle of a pattern."
-  | (endPatR   x) = lift $ Left "Can't have a [not-]word-end mark in the middle of a pattern."
+  | (endPatR   x) = lift $ Left "Can't have a [not-]word-end/follow mark in the middle of a pattern."
   | (isStateR  x) = lift $ Left "State-patterns should have been filtered out by this point."
   | otherwise     = lift $ Left "Some type of error happened when validating a CharPatternRaw."
 

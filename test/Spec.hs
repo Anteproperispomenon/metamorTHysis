@@ -14,8 +14,6 @@ import Test.TH.Backtrack qualified as Back
 
 import Test.TH.KwakQuasi qualified as KwakQ
 
-import System.IO
-
 import Data.Text qualified as T
 import Data.Text.Lazy (toStrict)
 import Data.Text.Lazy.Encoding qualified as TLE
@@ -34,6 +32,7 @@ import System.IO
 main :: IO ()
 main = do
   hSetEncoding stdout utf8
+  hSetEncoding stderr utf8
   putStrLn "Parsing \"ᓄᓇᑦᓯᐊᕗᑦ\":"
   print $ AT.parseOnly theActualParser "ᓄᓇᑦᓯᐊᕗᑦ"
   putStrLn "Parsing longer text:"
@@ -150,7 +149,24 @@ main = do
   case back1 of
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+  
+  putStrLn "Testing input lookahead..."
+  let look1 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InLookahead Fol.OutFollowA lookAheadTest1
+  case look1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing input lookahead..."
+  let look2 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InLookahead Fol.OutFollowA lookAheadTest2
+  case look2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+  putStrLn "Testing input lookahead..."
+  let look3 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InLookahead Fol.OutFollowA lookAheadTest3
+  case look3 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
 
 
@@ -184,7 +200,14 @@ autoTest2 = "eh'eh'a gwa'um'i" --
 backTest1 :: T.Text
 backTest1 = "tough tougra" -- 
 
--- hmm... ...
+lookAheadTest1 :: T.Text
+lookAheadTest1 = "þa þna þøn þøjþvþ ød"
+
+lookAheadTest2 :: T.Text
+lookAheadTest2 = "þaβ þбa þnaḅ"
+
+lookAheadTest3 :: T.Text
+lookAheadTest3 = "ɵin ɵyn ɵyd ɵyg"
 
 {-
    b : example=exam1

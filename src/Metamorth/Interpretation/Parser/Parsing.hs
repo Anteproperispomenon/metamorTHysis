@@ -1,9 +1,10 @@
 module Metamorth.Interpretation.Parser.Parsing
   ( parseOrthographyFile
-
+  , parseOrthographyFileNew
   ) where
 
 import Control.Applicative
+import Control.Arrow ((&&&))
 
 import Control.Monad
 import Control.Monad.Trans.Class
@@ -18,6 +19,7 @@ import Data.Bifunctor
 import Data.Char (ord, chr, isSpace, isLower, isAlpha)
 import Data.Text qualified as T
 import Data.Text (Text)
+import Data.Maybe (isNothing, isJust)
 
 import Data.List.NonEmpty qualified as NE
 import Data.List.NonEmpty (NonEmpty(..))
@@ -31,6 +33,8 @@ import Metamorth.Interpretation.Parser.Types
 
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
+
+import Metamorth.Interpretation.Shared.Types
 
 -- Special Characters:
 
@@ -104,6 +108,7 @@ parseEscaped = do
     '~' -> consProd '~'
     '!' -> consProd '!'
     '@' -> consProd '@'
+    '>' -> consProd '>'
     y   -> consProd y
 
   {- -- older version
@@ -154,7 +159,7 @@ isNonSpace :: Char -> Bool
 isNonSpace = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!')
 
 isNonSpace' :: Char -> Bool
-isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*')
+isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*') && (x /= '>')
 
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
@@ -374,6 +379,21 @@ parseClassDecSection = do
   _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
   lift parseEndComment
 
+-- | Parse the class declaration section.
+--   This also includes states and imports.
+parseClassDecSectionNew :: ParserParser ()
+parseClassDecSectionNew = do
+  -- lift AT.skipSpace
+  _ <- lift $ many parseEndComment
+  _ <- AT.many' $ do
+    parseClassDecS <|> parseStateDecS <|> getImportS_ <|> parseUnspecifiedClassOrState
+    lift $ some_ parseEndComment
+  _ <- lift $ many  parseEndComment
+  _ <- lift ("====" <?> "Classes: Separator1")
+  _ <- lift ((AT.takeWhile (== '=')) <?> "Classes: Separator2")
+  lift parseEndComment
+
+
 -- | Parse a class/state that's missing the
 --   "class"/"state" keyword at the beginning.
 --   This is to improve error messages.
@@ -489,6 +509,74 @@ parseAutoOff :: AT.Parser ()
 parseAutoOff = void
   ("auto-off" <|> "auto" <|> "short" <|> "off")
 
+-- | Get an import declaration and check
+--   that it is a valid import.
+getImportS :: ParserParser ImportProperty
+getImportS = do
+  imp <- lift getImport
+  case imp of
+    (ImportGroup grpName) -> do
+      (thisDict, fullDict) <- gets (ppsGroupDictionary &&& ppsGroupDictionary')
+      if (grpName `elem` thisDict)
+        then warn ("Importing group \"" ++ grpName ++ "\" more than once.")
+        else if (grpName `elem` fullDict)
+          then do
+            let newDict = S.insert grpName thisDict
+            modify $ \x -> x {ppsGroupDictionary = newDict}
+          else tellError ("Can't find group \"" ++ grpName ++ "\" in phoneme definitions.")
+    (ImportAspect aspName) -> do
+      (thisDict, fullDict) <- gets (ppsAspectDictionary &&& ppsAspectDictionary')
+      case (M.lookup aspName thisDict) of
+        (Just _) -> warn ("Importing aspect \"" ++ aspName ++ "\" more than once.")
+        Nothing  -> case (M.lookup aspName fullDict) of
+          Nothing  -> tellError ("Can't find aspect \"" ++ aspName ++ "\" in phoneme definitions.")
+          (Just v) -> do
+            let newDict = M.insert aspName v thisDict
+            modify $ \x -> x {ppsAspectDictionary = newDict}
+    (ImportTrait trtName) -> do
+      (thisDict, fullDict) <- gets (ppsTraitDictionary &&& ppsTraitDictionary')
+      case (M.lookup trtName thisDict) of
+        (Just _) -> warn ("Importing trait \"" ++ trtName ++ "\" more than once.")
+        Nothing  -> case (M.lookup trtName fullDict) of
+          Nothing  -> tellError ("Can't find trait \"" ++ trtName ++ "\" in phoneme definitions.")
+          (Just v) -> do
+            let newDict = M.insert trtName v thisDict
+            modify $ \x -> x {ppsTraitDictionary = newDict}
+  return imp
+
+getImportS_ :: ParserParser ()
+getImportS_ = void getImportS
+
+-- | A variant of `getImportS` that defers
+--   the actual lookup of imported properties.
+--   (Unused)
+getImportDeferredS :: ParserParser ImportProperty
+getImportDeferredS = do
+  imp <- lift getImport
+  case imp of
+    (ImportGroup grpName) -> do
+      thisDict <- gets ppsGroupDictionary
+      if (grpName `elem` thisDict)
+        then warn ("Importing group \"" ++ grpName ++ "\" more than once.")
+        else do
+            let newDict = S.insert grpName thisDict
+            modify $ \x -> x {ppsGroupDictionary = newDict}
+    (ImportAspect aspName) -> do
+      thisDict <- gets ppsAspectDictionary
+      case (M.lookup aspName thisDict) of
+        (Just _) -> warn ("Importing aspect \"" ++ aspName ++ "\" more than once.")
+        Nothing  -> do
+            let newDict = M.insert aspName S.empty thisDict
+            modify $ \x -> x {ppsAspectDictionary = newDict}
+    (ImportTrait trtName) -> do
+      thisDict <- gets ppsTraitDictionary
+      case (M.lookup trtName thisDict) of
+        (Just _) -> warn ("Importing trait \"" ++ trtName ++ "\" more than once.")
+        Nothing  -> do
+            let newDict = M.insert trtName Nothing thisDict
+            modify $ \x -> x {ppsTraitDictionary = newDict}
+  return imp
+
 ----------------------------------------------------------------
 -- Orthography Properties Parsers
 ----------------------------------------------------------------
@@ -569,6 +657,127 @@ parsePhonemeList = do
     parsePhoneme1
   return (fstPhone :| rstPhones)
 
+----------------------------------------------------------------
+-- Lookahead Pattern Parsers
+----------------------------------------------------------------
+
+-- (Taken from the output parser).
+-- At the moment, doesn't work with specific
+-- phonemes... but maybe it should? Okay
+-- now it (maybe) does.
+parseNextCheck :: AT.Parser (String, Maybe String)
+parseNextCheck = do
+  _ <- AT.char '>'
+  skipHoriz
+  strProp <- takeIdentifier isAlpha isFollowId
+  strVal <- optional $ do
+    _ <- AT.char '='
+    takeIdentifier isAlpha isFollowId
+  return (T.unpack strProp, T.unpack <$> strVal)
+
+-- | Parse the next-phoneme string, checking
+--   that it matches one of the given groups,
+--   traits, aspects, or phonemes.
+parseNextCheckS :: ParserParser (Maybe FollowPattern)
+parseNextCheckS = do
+  (prop, mval) <- lift parseNextCheck
+  dicts <- get
+  -- NOTE: May want to change the order of the
+  -- error messages, in case the user is explicitly
+  -- NOT importing a group/aspect/trait that overlaps
+  -- with another value. Unlikely, but possible.
+  case mval of
+    -- If nothing, then following chances,
+    -- from most likely to least likely:
+    -- Group, Trait, Phoneme, Aspect.
+    Nothing -> if (prop `elem` (ppsGroupDictionary dicts))
+      then return $ Just $ FollowGroup prop
+      else if (prop `elem` (ppsGroupDictionary' dicts))
+        then do 
+          tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
+          return Nothing
+        else case (M.lookup prop (ppsTraitDictionary dicts)) of
+          -- Works with either type of trait.
+          (Just _) -> return $ Just $ FollowTrait prop
+          Nothing -> case (M.lookup prop (ppsTraitDictionary' dicts)) of
+            (Just _) -> do
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
+            Nothing -> if (prop `elem` (ppsPhoneDictionary dicts))
+              then return $ Just $ FollowPhone prop
+              else case (M.lookup prop (ppsAspectDictionary dicts)) of
+                (Just _) -> return $ Just $ FollowAspect prop
+                Nothing  -> case (M.lookup prop (ppsAspectDictionary' dicts)) of
+                  (Just _) -> do
+                    tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+                    return Nothing
+                  Nothing -> do
+                    phoneName <- ask
+                    tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
+                    return Nothing
+    -- There IS a second value here in this case.
+    -- Therefore it should only be a property
+    -- that can take on a second value, e.g. a
+    -- trait or an aspect.
+    (Just val) -> case (M.lookup prop (ppsTraitDictionary' dicts)) of
+      (Just (Just vs)) -> if (val `elem` vs)
+        then if (isJust ((M.lookup prop (ppsTraitDictionary dicts)))) 
+          then return $ Just $ FollowTraitAt prop val
+          else do
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v1);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
+        else do
+          phoneName <- ask
+          when (isNothing $ M.lookup prop (ppsTraitDictionary dicts)) $ 
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v2);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
+          return Nothing
+      (Just _) -> do
+          phoneName <- ask
+          when (isNothing $ M.lookup prop (ppsTraitDictionary dicts)) $ 
+            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v3);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
+          return Nothing
+      Nothing -> case (M.lookup prop (ppsAspectDictionary' dicts)) of
+        (Just vs) -> if (val `elem` vs)
+          then if (isJust ((M.lookup prop (ppsAspectDictionary dicts))))
+            then return $ Just $ FollowAspectAt prop val
+            else do
+              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+              return Nothing
+          else do
+            phoneName <- ask
+            when (prop `notElem` (M.keysSet $ ppsAspectDictionary dicts)) $
+              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for aspect \"" ++ prop ++ "\"."
+            return Nothing
+        Nothing -> if (prop `elem` (ppsGroupDictionary' dicts))
+          then do
+            phoneName <- ask
+            when (prop `notElem` (ppsGroupDictionary dicts)) $
+              tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a group: \">" ++ prop ++ "=" ++ val ++ "\"."
+            return Nothing
+          else if (prop `elem` (ppsPhoneDictionary dicts))
+            then do
+              phoneName <- ask
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a phoneme: \">" ++ prop ++ "=" ++ val ++ "\"."
+              return Nothing
+            else do
+              phoneName <- ask
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match \"next-phoneme\" string : \">" ++ prop ++ "=" ++ val ++ "\"."
+              return Nothing
+
+parseNextCheckRS :: ParserParser CharPatternRaw
+parseNextCheckRS = do
+  chk <- parseNextCheckS
+  case chk of
+    (Just fpat) -> return $ FollowPatR fpat
+    Nothing     -> return $ PlainCharR '>'
+    -- Can't just run "fail", as that would
+    -- trigger backtracking and remove the
+    -- errors from the output. Instead, we
+    -- just pass a dummy value.
 
 ----------------------------------------------------------------
 -- Phoneme Pattern Parsers
@@ -602,6 +811,7 @@ parsePhonemePatS = do
         <|> (mkList parseEndPointS  )
         <|> (mkList parseNotStartS  )
         <|> (mkList parseNotEndS    )
+        <|> (mkList parseNextCheckRS)
         <|> (parseMultiNonSpaceRS   )
         <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
@@ -639,6 +849,7 @@ parsePhonemePatMulti = do
         <|> (mkList parseEndPointS  )
         <|> (mkList parseNotStartS  )
         <|> (mkList parseNotEndS    )
+        <|> (mkList parseNextCheckRS)
         <|> (parseMultiNonSpaceRS   )
         <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
         -- These two should probably be combined into one function for better errors.
@@ -662,7 +873,7 @@ parseOrthographyFile = do
   hdr <- parseOrthographyProps
   (_rslt, stt, msgs) <- embedParserParser $ do
     -- Parse the class instances
-    parseClassDecSection
+    parseClassDecSectionNew
     lift $ many_ parseEndComment
 
     -- Parse the phoneme patterns
@@ -693,6 +904,59 @@ parseOrthographyFile = do
       wrongPhones = filter (not . sameArgsPN) phoneGroups
       phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
   return (hdr,stt,errs ++ phoneErrs, wrns)
+
+-- | Newer version that relies on input from the
+--   phoneme file.
+parseOrthographyFileNew 
+  -- | The `S.Set` of group names.
+  :: S.Set String 
+  -- | A `M.Map` from trait names to the values
+  --   the trait can take (if applicable).
+  -> M.Map String (Maybe (S.Set String)) 
+  -- | A `M.Map` from aspect names to the values
+  --   the aspect can take.
+  -> M.Map String (S.Set String)
+  -- | A `S.Set` of the phonemes used for this
+  --   output.
+  -> S.Set String
+  -> AT.Parser (HeaderData, ParserParsingState, [String], [String])
+parseOrthographyFileNew grps trts asps phones = do
+  hdr <- parseOrthographyProps
+  (_rslt, stt, msgs) <- embedParserParserNew grps trts asps phones $ do
+    -- Parse the class instances
+    parseClassDecSectionNew
+    lift $ many_ parseEndComment
+
+    -- Parse the phoneme patterns
+    _ <- AT.many' $ do
+      -- Skip spaces...
+      lift $ many_ parseEndComment
+      parsePhonemePatS
+      -- lift skipHoriz
+      lift parseEndComment
+    lift AT.skipSpace
+    lift $ many_ parseEndComment
+    _ <- AT.option () $ do
+      _ <- lift ("====" <?> "Phoneme Patterns: Separator")
+      _ <- AT.many' $ do
+        lift $ many_ parseEndComment
+        parsePhonemePatMulti
+        lift parseEndComment
+      return ()
+    return ()
+    -- hmm...
+
+  
+  let (errs, wrns, notes) = partitionMessages msgs
+      phonePatsM  = ppsPhonemePatterns stt
+      phoneNames  = M.keys phonePatsM
+      phoneNames' = concatMap (NE.toList . prPhonemes) phoneNames
+      phoneGroups = groupBy eqOnPN phoneNames'
+      wrongPhones = filter (not . sameArgsPN) phoneGroups
+      phoneErrs   = map (\ph -> "Error: Patterns for \"" <> (getStrPN ph) <> "\" have differing numbers of arguments.") wrongPhones
+  return (hdr,stt,errs ++ phoneErrs, wrns)
+
+
 
 getStrPN :: [PhoneName] -> String
 getStrPN [] = "<??>"
