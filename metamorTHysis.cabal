@@ -73,6 +73,7 @@ library
       Metamorth.Interpretation.Output.Types.Alt
       Metamorth.Interpretation.Output.Types.Interact
       Metamorth.Interpretation.Parser.Parsing
+      Metamorth.Interpretation.Parser.Parsing.Boolean
       Metamorth.Interpretation.Parser.Parsing.Trie
       Metamorth.Interpretation.Parser.Parsing.Types
       Metamorth.Interpretation.Parser.TH
