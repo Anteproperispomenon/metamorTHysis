@@ -18,6 +18,7 @@ module Metamorth.Interpretation.Parser.Parsing.Boolean
   ( Boolean2(..)
   , evaluate2
   , leftmostB2
+  , showBoolTree2
   -- * Arbitrary length And/Or
   , BooleanA(..)
   , evaluateA
@@ -92,6 +93,12 @@ leftmostB2 (PlainB2 x) = x
 leftmostB2 (NotB2   x) = leftmostB2 x
 leftmostB2 (AndB2 x _) = leftmostB2 x
 leftmostB2 (OrB2  x _) = leftmostB2 x
+
+showBoolTree2 :: (Show a) => Boolean2 a -> String
+showBoolTree2 (PlainB2 x) = show x
+showBoolTree2 (NotB2   x) = '~' : (showBoolTree2 x)
+showBoolTree2 (AndB2 x y) = '(' : (showBoolTree2 x) ++ '&' : (showBoolTree2 y) ++ ")"
+showBoolTree2 (OrB2  x y) = '(' : (showBoolTree2 x) ++ '|' : (showBoolTree2 y) ++ ")"
 
 -- | A boolean expression tree tree that
 --   arbitrarily many sub-expressions for

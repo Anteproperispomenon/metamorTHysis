@@ -35,8 +35,8 @@ parseOr = do
   c <- AT.peekChar
   -- Allow for double bars...
   case c of
-    (Just '|') -> void AT.anyChar
-    _ -> return ()
+    (Just '|') -> void AT.anyChar -- consume the char
+    _          -> return () -- don't consume the char
   skipHoriz
   return OrB2
 
@@ -47,8 +47,8 @@ parseAnd = do
   c <- AT.peekChar
   -- Allow for double ampersands...
   case c of
-    (Just '&') -> void AT.anyChar
-    _ -> return ()
+    (Just '&') -> void AT.anyChar -- consume the char
+    _          -> return () -- don't consume the char
   skipHoriz
   return AndB2
 
