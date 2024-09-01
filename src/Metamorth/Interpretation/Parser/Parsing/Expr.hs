@@ -50,7 +50,7 @@ parseAnd = do
     (Just '&') -> void AT.anyChar
     _ -> return ()
   skipHoriz
-  return OrB2
+  return AndB2
 
 parseNot :: AT.Parser (Boolean2 a -> Boolean2 a)
 parseNot = do
@@ -66,8 +66,8 @@ parseBoolean :: AT.Parser a -> AT.Parser (Boolean2 a)
 parseBoolean termParser = makeExprParser
   (parseParens termParser)
   [ [ Prefix parseNot ]
-  , [ InfixR parseOr  ]
   , [ InfixR parseAnd ]
+  , [ InfixR parseOr  ]
   ]
 
 -- | One of the main ways to call the parser for

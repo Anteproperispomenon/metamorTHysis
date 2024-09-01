@@ -30,6 +30,7 @@ import Metamorth.Helpers.Parsing
 
 
 import Metamorth.Interpretation.Parser.Parsing.Boolean
+import Metamorth.Interpretation.Parser.Parsing.Expr
 import Metamorth.Interpretation.Parser.Parsing.Types
 import Metamorth.Interpretation.Parser.Types
 
@@ -678,7 +679,16 @@ parseNextCheck = do
   return (T.unpack strProp, T.unpack <$> strVal)
 
 parseNextCheckB :: AT.Parser (Boolean2 (String, Maybe String))
-parseNextCheckB = PlainB2 <$> parseNextCheck
+parseNextCheckB  = do
+  _ <- AT.char '>'
+  skipHoriz
+  parseBooleanExpr $ do
+    strProp <- takeIdentifier isAlpha isFollowId
+    strVal <- optional $ do
+      _ <- AT.char '='
+      takeIdentifier isAlpha isFollowId
+    return (T.unpack strProp, T.unpack <$> strVal)
+
 
 -- | Parse the next-phoneme string, checking
 --   that it matches one of the given groups,

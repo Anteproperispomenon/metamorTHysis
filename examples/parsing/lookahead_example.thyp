@@ -91,8 +91,9 @@ dzh : d z h
 th : þ 
 th : þ >vowel !help=helpA
 dh : þ >nasal !help=helpC
-dh : þ >b !help=helpB
-dh : þ >v !help=helpB
+dh : þ >(b|v|r|l) !help=helpB
+# dh : þ >b !help=helpB
+# dh : þ >v !help=helpB
 
 # palatal/alveolar
 j : j
