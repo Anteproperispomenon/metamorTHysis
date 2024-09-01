@@ -74,6 +74,7 @@ library
       Metamorth.Interpretation.Output.Types.Interact
       Metamorth.Interpretation.Parser.Parsing
       Metamorth.Interpretation.Parser.Parsing.Boolean
+      Metamorth.Interpretation.Parser.Parsing.Expr
       Metamorth.Interpretation.Parser.Parsing.Trie
       Metamorth.Interpretation.Parser.Parsing.Types
       Metamorth.Interpretation.Parser.TH
@@ -107,6 +108,7 @@ library
     , bytestring
     , containers
     , directory
+    , parser-combinators
     , template-haskell
     , text
     , th-lego
@@ -140,6 +142,7 @@ executable metamorTHysis-exe
     , containers
     , directory
     , metamorTHysis
+    , parser-combinators
     , template-haskell
     , text
     , th-lego
@@ -185,6 +188,7 @@ test-suite metamorTHysis-test
     , containers
     , directory
     , metamorTHysis
+    , parser-combinators
     , template-haskell
     , text
     , th-lego

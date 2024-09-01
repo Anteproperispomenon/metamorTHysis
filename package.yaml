@@ -35,6 +35,7 @@ dependencies:
 - bytestring
 - containers
 - directory
+- parser-combinators
 - template-haskell
 - text
 - th-lego
