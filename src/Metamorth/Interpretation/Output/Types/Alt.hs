@@ -53,6 +53,8 @@ import Metamorth.Helpers.Ord
 
 import Metamorth.Interpretation.Output.Types
 
+import Metamorth.Interpretation.Parser.Parsing.Boolean
+
 -- | Alternate form of `PhonePatternX` that
 --   instead puts state and follow data into
 --   the value instead of the key.
@@ -69,7 +71,7 @@ data PhoneResultActionX
   | PRModifyState  ModifyStateX
   | PRAtEnd
   | PRNotEnd
-  | PRCheckNext PhoneFollow
+  | PRCheckNext (Boolean2 PhoneFollow)
   deriving (Show, Eq, Ord)
 
 isConfirmState :: PhoneResultActionX -> Bool
@@ -116,7 +118,7 @@ partNotEnds = partitionMap $ \case
   PRNotEnd -> Just ()
   _ -> Nothing
 
-partCheckNexts :: [PhoneResultActionX] -> ([PhoneFollow], [PhoneResultActionX])
+partCheckNexts :: [PhoneResultActionX] -> ([Boolean2 PhoneFollow], [PhoneResultActionX])
 partCheckNexts = partitionMap $ \case
   (PRCheckNext cs) -> Just cs
   _ -> Nothing

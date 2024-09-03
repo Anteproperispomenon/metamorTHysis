@@ -45,6 +45,8 @@ import Metamorth.Interpretation.Output.Types.Alt
 
 import Metamorth.Interpretation.Shared.Types (ImportProperty(..))
 
+import Metamorth.Interpretation.Parser.Parsing.Boolean
+
 --------------------------------
 -- Types for Parsing
 
@@ -140,17 +142,18 @@ data PhonePatternRaw
   | PhoneNotStartR
   | PhoneAtEndR
   | PhoneNotEndR
-  | PhoneFollowedByGroupR String
-  | PhoneFollowedByTraitR String
-  | PhoneFollowedByTraitAtR String String
-  | PhoneFollowedByAspectR String
-  | PhoneFollowedByAspectAtR String String
-  | PhoneFollowedByPhoneR String
+  -- | PhoneFollowedByGroupR String
+  -- | PhoneFollowedByTraitR String
+  -- | PhoneFollowedByTraitAtR String String
+  -- | PhoneFollowedByAspectR String
+  -- | PhoneFollowedByAspectAtR String String
+  -- | PhoneFollowedByPhoneR String
+  | PhoneFollowR (Boolean2 PhoneFollow)
   | PhoneValStateR String (Either String Bool)
   deriving (Show, Eq)
 
-pattern PhoneFollowR :: PhonePatternRaw
-pattern PhoneFollowR <- (convertFollow -> (Just _))
+-- pattern PhoneFollowR :: PhonePatternRaw
+-- pattern PhoneFollowR <- (convertFollow -> (Just _))
 
 -- | Fast way to match phoneme patterns that
 --   have to go at the start of an expression.
@@ -162,19 +165,23 @@ pattern PhoneStartR <- ((\x -> x == PhoneAtStartR || x == PhoneNotStartR) -> Tru
 pattern PhoneEndR :: PhonePatternRaw
 pattern PhoneEndR <- ((\x -> x == PhoneAtEndR || x == PhoneNotEndR) -> True)
 
-convertFollow :: PhonePatternRaw -> Maybe PhoneFollow
-convertFollow (PhoneFollowedByGroupR str)          = Just $ PhoneFollowedByGroup str
-convertFollow (PhoneFollowedByTraitR str)          = Just $ PhoneFollowedByTrait str
-convertFollow (PhoneFollowedByTraitAtR str1 str2)  = Just $ PhoneFollowedByTraitAt str1 str2
-convertFollow (PhoneFollowedByAspectR str)         = Just $ PhoneFollowedByAspect str
-convertFollow (PhoneFollowedByAspectAtR str1 str2) = Just $ PhoneFollowedByAspectAt str1 str2
-convertFollow (PhoneFollowedByPhoneR str)          = Just $ PhoneFollowedByPhone str
-convertFollow _ = Nothing 
+-- convertFollow :: PhonePatternRaw -> Maybe PhoneFollow
+-- convertFollow (PhoneFollowedByGroupR str)          = Just $ PhoneFollowedByGroup str
+-- convertFollow (PhoneFollowedByTraitR str)          = Just $ PhoneFollowedByTrait str
+-- convertFollow (PhoneFollowedByTraitAtR str1 str2)  = Just $ PhoneFollowedByTraitAt str1 str2
+-- convertFollow (PhoneFollowedByAspectR str)         = Just $ PhoneFollowedByAspect str
+-- convertFollow (PhoneFollowedByAspectAtR str1 str2) = Just $ PhoneFollowedByAspectAt str1 str2
+-- convertFollow (PhoneFollowedByPhoneR str)          = Just $ PhoneFollowedByPhone str
+-- convertFollow _ = Nothing 
 
 convertState :: PhonePatternRaw -> Maybe CheckState
 convertState (PhoneValStateR str (Left val)) = Just $ CheckStateV str val
 convertState (PhoneValStateR str (Right bl)) = Just $ CheckStateB str bl
 convertState _ = Nothing
+
+convertFollow :: PhonePatternRaw -> Maybe (Boolean2 PhoneFollow)
+convertFollow (PhoneFollowR bt) = Just bt
+convertFollow _ = Nothing
 
 -- | Convert a raw phoneme pattern list into a list of `PhonePattern`s.
 validatePhonePattern :: M.Map String (Maybe (S.Set String)) -> [PhonePatternRaw] -> Either String [PhonePattern]
@@ -184,7 +191,7 @@ validatePhonePattern mps praws = validatePhonePatternE mps pfs pss prest2
     (pss, prest2) = partitionMaybe convertState  prest1
 
 -- Running on the first element of a pattern...
-validatePhonePatternE :: M.Map String (Maybe (S.Set String)) -> [PhoneFollow] -> [CheckState] -> [PhonePatternRaw] -> Either String [PhonePattern]
+validatePhonePatternE :: M.Map String (Maybe (S.Set String)) -> [Boolean2 PhoneFollow] -> [CheckState] -> [PhonePatternRaw] -> Either String [PhonePattern]
 validatePhonePatternE _ _ _ [] = Left "Can't have an empty phoneme pattern."
 validatePhonePatternE _ _ _ [PhoneStartR] = Left "Can't have a pattern that's just a start."
 validatePhonePatternE _ _ _ (PhoneEndR:_) = Left "Can't start a pattern with an end."
@@ -195,12 +202,12 @@ validatePhonePatternE mp pfs pps ((PhoneNameR pn):xs) = do
   -- Errors on the first failing name
   pps' <- traverse (validateCheckState mp) pps
   ((PhonemeName pps' pn):) <$> validatePhonePatternEX pfs xs
-validatePhonePatternE _ _ _ (PhoneFollowR:_) = Left "Got a `PhoneFollow` (1) even though it should already have been filtered out."
+validatePhonePatternE _ _ _ (PhoneFollowR _:_) = Left "Got a `PhoneFollow` (1) even though it should already have been filtered out."
 validatePhonePatternE _ _ _ (x:_) = Left $ "Got an unexpected PhonePat (1) : \"" ++ show x ++ "\"."
 
 
 -- Run after encountering a non-PlainCharR element...
-validatePhonePatternE' :: M.Map String (Maybe (S.Set String)) -> [PhoneFollow] -> [CheckState] -> [PhonePatternRaw] -> Either String [PhonePattern]
+validatePhonePatternE' :: M.Map String (Maybe (S.Set String)) -> [Boolean2 PhoneFollow] -> [CheckState] -> [PhonePatternRaw] -> Either String [PhonePattern]
 validatePhonePatternE' _ [] [] [] = Left "Can't have an empty phoneme pattern."
 validatePhonePatternE' _ _  _  [] = Left "Can't have an empty phoneme pattern."
 validatePhonePatternE' _ _ _ (PhoneStartR:_) = Left "Can't have a start pattern in the middle of a pattern."
@@ -209,11 +216,11 @@ validatePhonePatternE' mp pfs pps ((PhoneNameR pn):xs) = do
   -- Errors on the first failing name
   pps' <- traverse (validateCheckState mp) pps
   ((PhonemeName pps' pn):) <$> validatePhonePatternEX pfs xs
-validatePhonePatternE' _ _ _ (PhoneFollowR:_) = Left "Got a `PhoneFollow` (2) even though it should already have been filtered out."
+validatePhonePatternE' _ _ _ (PhoneFollowR _:_) = Left "Got a `PhoneFollow` (2) even though it should already have been filtered out."
 validatePhonePatternE' _ _ _ (x:_) = Left $ "Got an unexpected PhonePat (2) : \"" ++ show x ++ "\"."
 
 -- Run once a PlainCharR element has been encountered.
-validatePhonePatternEX :: [PhoneFollow] -> [PhonePatternRaw] -> Either String [PhonePattern]
+validatePhonePatternEX :: [Boolean2 PhoneFollow] -> [PhonePatternRaw] -> Either String [PhonePattern]
 validatePhonePatternEX []  [] = Right []
 validatePhonePatternEX pfs [] = Right [PhoneFollow pfs]
 validatePhonePatternEX pfs ((PhoneNameR pn):xs) = ((PhonemeName [] pn):) <$> validatePhonePatternEX pfs xs
@@ -221,7 +228,7 @@ validatePhonePatternEX _ (PhoneStartR:_) = Left "Can't have a start pattern in t
 validatePhonePatternEX [] [PhoneAtEndR]  = Right [PhoneAtEnd]
 validatePhonePatternEX [] [PhoneNotEndR] = Right [PhoneNotEnd]
 validatePhonePatternEX _f (PhoneEndR:_) = Left $ "Can't have both follow-up patterns and end-patterns."
-validatePhonePatternEX _ (PhoneFollowR:_) = Left "Got a `PhoneFollow` (3) even though it should already have been filtered out."
+validatePhonePatternEX _ (PhoneFollowR _:_) = Left "Got a `PhoneFollow` (3) even though it should already have been filtered out."
 validatePhonePatternEX _ (x:_) = Left $ "Got an unexpected PhonePat (3) : \"" ++ show x ++ "\"."
 
 -- | Show a `PhonePatternRaw` in a shortened form.
@@ -233,15 +240,32 @@ showPPR PhoneAtStartR  = "^"
 showPPR PhoneNotStartR = "%"
 showPPR PhoneAtEndR    = "$"
 showPPR PhoneNotEndR   = "&"
-showPPR (PhoneFollowedByGroupR  str) = "G>" ++ str
-showPPR (PhoneFollowedByTraitR  str) = "T>" ++ str
-showPPR (PhoneFollowedByAspectR str) = "A>" ++ str
-showPPR (PhoneFollowedByTraitAtR  str str') = "T>" ++ str ++ "=" ++ str'
-showPPR (PhoneFollowedByAspectAtR str str') = "A>" ++ str ++ "=" ++ str'
-showPPR (PhoneFollowedByPhoneR str) = "P>" ++ str
+showPPR (PhoneFollowR bt) = ">" ++ showBoolTree2' showPPR2 bt
+-- showPPR (PhoneFollowedByGroupR  str) = "G>" ++ str
+-- showPPR (PhoneFollowedByTraitR  str) = "T>" ++ str
+-- showPPR (PhoneFollowedByAspectR str) = "A>" ++ str
+-- showPPR (PhoneFollowedByTraitAtR  str str') = "T>" ++ str ++ "=" ++ str'
+-- showPPR (PhoneFollowedByAspectAtR str str') = "A>" ++ str ++ "=" ++ str'
+-- showPPR (PhoneFollowedByPhoneR str) = "P>" ++ str
 showPPR (PhoneValStateR st (Left val)) = "@" ++ st ++ "=" ++ val
 showPPR (PhoneValStateR st (Right True )) = "@" ++ st ++ "=" ++ "on"
 showPPR (PhoneValStateR st (Right False)) = "@" ++ st ++ "=" ++ "off"
+
+showPPR2 :: PhoneFollow -> [Char]
+showPPR2 (PhoneFollowedByGroup  str) = str
+showPPR2 (PhoneFollowedByTrait  str) = str
+showPPR2 (PhoneFollowedByAspect str) = str
+showPPR2 (PhoneFollowedByTraitAt  str str') = str ++ "=" ++ str'
+showPPR2 (PhoneFollowedByAspectAt str str') = str ++ "=" ++ str'
+showPPR2 (PhoneFollowedByPhone str) = str
+
+showPPR' :: PhoneFollow -> [Char]
+showPPR' (PhoneFollowedByGroup  str) = "G>" ++ str
+showPPR' (PhoneFollowedByTrait  str) = "T>" ++ str
+showPPR' (PhoneFollowedByAspect str) = "A>" ++ str
+showPPR' (PhoneFollowedByTraitAt  str str') = "T>" ++ str ++ "=" ++ str'
+showPPR' (PhoneFollowedByAspectAt str str') = "A>" ++ str ++ "=" ++ str'
+showPPR' (PhoneFollowedByPhone str) = "P>" ++ str
 
 showPPRs :: [PhonePatternRaw] -> String
 showPPRs [] = ""

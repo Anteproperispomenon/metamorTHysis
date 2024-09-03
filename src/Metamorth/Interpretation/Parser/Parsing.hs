@@ -692,7 +692,8 @@ parseNextCheckB  = do
 
 -- | Parse the next-phoneme string, checking
 --   that it matches one of the given groups,
---   traits, aspects, or phonemes.
+--   traits, aspects, or phonemes. Old version
+--   only around for compatibility.
 parseNextCheckS :: ParserParser (Maybe FollowPattern)
 parseNextCheckS = do
   mval <- parseNextCheckSB
@@ -706,6 +707,9 @@ parseNextCheckSB2 = do
   -- sequenceA :: (Traversable t) => t (Maybe a) -> Maybe (t a)
   return $ sequenceA b2
 
+-- | Parse the next-phoneme string, checking
+--   that it matches one of the given groups,
+--   traits, aspects, or phonemes.
 parseNextCheckSB :: ParserParser (Boolean2 (Maybe FollowPattern))
 parseNextCheckSB = do
   -- (prop, mval) <- lift parseNextCheck
