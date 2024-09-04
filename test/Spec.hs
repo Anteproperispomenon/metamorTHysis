@@ -168,6 +168,12 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing output lookahead..."
+  let look4 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InFollowA Fol.OutLookahead lookAheadTest4
+  case look4 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
@@ -208,6 +214,9 @@ lookAheadTest2 = "þaβ þбa þnaḅ"
 
 lookAheadTest3 :: T.Text
 lookAheadTest3 = "ɵin ɵyn ɵyd ɵyg"
+
+lookAheadTest4 :: T.Text
+lookAheadTest4 = "apabaranadax awshawchawg"
 
 {-
    b : example=exam1

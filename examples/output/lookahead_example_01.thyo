@@ -1,0 +1,71 @@
+
+name : lookahead
+
+default case : /at
+
+====
+
+# no classes/states
+
+import group alveolar
+
+import group palatal_velar
+
+import trait nasal
+
+import trait example
+
+====
+
+# vowels
+a : a
+e : e
+i : i
+o : o
+oo : ʊ
+# oo : o o
+# aw : a w
+aw : ɒ
+schwa : ə
+u : u
+
+# Testing "follow" stuff
+aw                 : ɑ
+aw >(sh|ch|zh|ts|dz) : ɒ
+a  >alveolar       : æ
+a  >(b|p|m|n|r)    : ɐ
+i  >nasal          : ɪ
+schwa >example     : ɵ
+e >example=exam1   : é
+e >example=exam2   : è
+
+# labial
+b : b
+p : p
+f : f
+w : w
+v : v
+m : m
+
+# alveolar
+n : n
+d : d
+t : t
+s : s
+l : l
+r : r
+sh : ʃ
+ch : t ʃ
+zh : ʒ
+ts : c
+dz : d z
+th : θ
+dh : ð
+dzh : d ʒ
+
+# palatal/alveolar
+j : j
+k : k
+g : g
+ng : ŋ
+h : x # to avoid conflicts
