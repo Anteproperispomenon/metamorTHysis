@@ -1,11 +1,19 @@
 
-name : followA
+name : lookahead
 
 default case : /at
 
 ====
 
-# no classes/states?
+# no classes/states
+
+import group alveolar
+
+import group palatal_velar
+
+import trait nasal
+
+import trait example
 
 ====
 
@@ -22,12 +30,14 @@ schwa : ə
 u : u
 
 # Testing "follow" stuff
-# aw >palatal_velar  : ɑ
-# a  >alveolar       : æ
-aw >g : ɑ
-aw >h : ɑ
-# aw >j : ɑ
-a >(sh|dz|dh) : æ
+aw                 : ɑ
+aw >(sh|ch|zh|ts|dz) : ɒ
+a  >alveolar       : æ
+a  >(b|p|m|n|r)    : ɐ
+i  >nasal          : ɪ
+schwa >example     : ɵ
+e >example=exam1   : é
+e >example=exam2   : è
 
 # labial
 b : b
@@ -51,6 +61,7 @@ ts : c
 dz : d z
 th : θ
 dh : ð
+dzh : d ʒ
 
 # palatal/alveolar
 j : j

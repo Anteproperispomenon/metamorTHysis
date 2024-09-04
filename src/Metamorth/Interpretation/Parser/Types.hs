@@ -24,6 +24,7 @@ module Metamorth.Interpretation.Parser.Types
   , FollowPattern(..)
   , isFollowPat
   , getFollowPat
+  , getFollowPatB
   ) where
 
 import Data.Bifunctor
@@ -47,6 +48,8 @@ import Data.Set qualified as S
 import Metamorth.Helpers.Either
 import Metamorth.Helpers.Ord
 
+import Metamorth.Interpretation.Parser.Parsing.Boolean
+
 -- | The data that's found in the header of the
 --   parser file.
 data HeaderData = HeaderData
@@ -69,7 +72,7 @@ data CharPatternRaw
   | NotEndR           -- ^ NOT the end of a word.
   | ValStateR String (Either String Bool) -- ^ Check that the state is a certain value.
   | SetStateR String (Either String Bool) -- ^ Set the state to a certain value.
-  | FollowPatR FollowPattern
+  | FollowPatR (Boolean2 FollowPattern)
   deriving (Show, Eq, Ord)
 
 data FollowPattern
@@ -110,7 +113,7 @@ data CharPatternF b
   | WordEnd                 -- ^ The end of a word.
   | NotStart                -- ^ NOT the start of a word.
   | NotEnd                  -- ^ NOT the end of a word.
-  | FollowPat FollowPattern -- ^ A `FollowPattern`
+  | FollowPat (Boolean2 FollowPattern) -- ^ A boolean expression of `FollowPattern`s.
   deriving (Show, Eq)
 
 isFollowPat :: CharPattern -> Bool
@@ -118,8 +121,12 @@ isFollowPat (FollowPat _) = True
 isFollowPat _ = False
 
 getFollowPat :: CharPattern -> Maybe FollowPattern
-getFollowPat (FollowPat x) = Just x
+getFollowPat (FollowPat x) = Just $ leftmostB2 x
 getFollowPat _ = Nothing
+
+getFollowPatB :: CharPattern -> Maybe (Boolean2 FollowPattern)
+getFollowPatB (FollowPat x) = Just x
+getFollowPatB _ = Nothing
 
 -- Make (CharPatternF (Down b)) an instance of `Ord` so that
 -- (CharPatternF b) has something to derive via. Also make this

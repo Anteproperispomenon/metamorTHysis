@@ -47,6 +47,10 @@ import Metamorth.Interpretation.Output.Types.Alt
 import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
+-- For handling more complex lookahead operations
+import Metamorth.Interpretation.Parser.Parsing.Expr
+import Metamorth.Interpretation.Parser.Parsing.Boolean
+
 -- A lot of the code here is taken from
 -- "Metamorth.Interpretation.Parser.Parsing".
 
@@ -556,104 +560,129 @@ parsePhonemeListS = do
   -- Use the phone name when trying the next check.
   phoneLast <- fmap join $ optional $ runOnPhoneme phoneName $ do
     lift skipHoriz1
-    parseNextCheckS
+    -- sequenceA :: (Traversable t) => t (Maybe a) -> Maybe (t a)
+    sequenceA <$> parseNextCheckSB
   
   case phoneLast of
     Nothing   -> return lst
-    (Just pl) -> return (phoneFst :| (phoneRst ++ [pl]))
+    (Just pl) -> return (phoneFst :| (phoneRst ++ [PhoneFollowR pl]))
+
+parseNextCheckB :: AT.Parser (Boolean2 (String, Maybe String))
+parseNextCheckB  = do
+  _ <- AT.char '>'
+  skipHoriz
+  parseBooleanExpr $ do
+    strProp <- takeIdentifier isAlpha isFollowId
+    strVal <- optional $ do
+      _ <- AT.char '='
+      takeIdentifier isAlpha isFollowId
+    return (T.unpack strProp, T.unpack <$> strVal)
+
+-- | Parse the next-phoneme string, checking
+--   that it matches one of the given groups,
+--   traits, aspects, or phonemes. Old version
+--   only around for compatibility.
+parseNextCheckS :: OutputParser (Maybe PhoneFollow)
+parseNextCheckS = do
+  mval <- parseNextCheckSB
+  case mval of
+    (PlainB2 x) -> return x
+    _ -> return Nothing
 
 -- | Parse the next-phoneme string, checking
 --   that it matches one of the given groups,
 --   traits, aspects, or phonemes.
-parseNextCheckS :: OutputParser (Maybe PhonePatternRaw)
-parseNextCheckS = do
-  (prop, mval) <- lift parseNextCheck
+parseNextCheckSB :: OutputParser (Boolean2 (Maybe PhoneFollow))
+parseNextCheckSB = do
+  -- (prop, mval) <- lift parseNextCheck
   dicts <- get
+  props <- lift parseNextCheckB
   -- NOTE: May want to change the order of the
   -- error messages, in case the user is explicitly
   -- NOT importing a group/aspect/trait that overlaps
   -- with another value. Unlikely, but possible.
-  case mval of
-    -- If nothing, then following chances,
-    -- from most likely to least likely:
-    -- Group, Trait, Phoneme, Aspect.
-    Nothing -> if (prop `elem` (opsGroupDictionary dicts))
-      then return $ Just $ PhoneFollowedByGroupR prop
-      else if (prop `elem` (opsGroupDictionary' dicts))
-        then do 
-          tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
-          return Nothing
-        else case (M.lookup prop (opsTraitDictionary dicts)) of
-          -- Works with either type of trait.
-          (Just _) -> return $ Just $ PhoneFollowedByTraitR prop
-          Nothing -> case (M.lookup prop (opsTraitDictionary' dicts)) of
-            (Just _) -> do
-              tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
-              return Nothing
-            Nothing -> if (prop `elem` (opsPhoneDictionary dicts))
-              then return $ Just $ PhoneFollowedByPhoneR prop
-              else case (M.lookup prop (opsAspectDictionary dicts)) of
-                (Just _) -> return $ Just $ PhoneFollowedByAspectR prop
-                Nothing  -> case (M.lookup prop (opsAspectDictionary' dicts)) of
-                  (Just _) -> do
-                    tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
-                    return Nothing
-                  Nothing -> do
-                    phoneName <- ask
-                    tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
-                    return Nothing
-    -- There IS a second value here in this case.
-    -- Therefore it should only be a property
-    -- that can take on a second value, e.g. a
-    -- trait or an aspect.
-    (Just val) -> case (M.lookup prop (opsTraitDictionary' dicts)) of
-      (Just (Just vs)) -> if (val `elem` vs)
-        then if (isJust ((M.lookup prop (opsTraitDictionary dicts)))) 
-          then return $ Just $ PhoneFollowedByTraitAtR prop val
-          else do
-              tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v1);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
-              return Nothing
-        else do
-          phoneName <- ask
-          when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
-            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v2);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
-          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
-          return Nothing
-      (Just _) -> do
-          phoneName <- ask
-          when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
-            tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v3);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
-          tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
-          return Nothing
-      Nothing -> case (M.lookup prop (opsAspectDictionary' dicts)) of
-        (Just vs) -> if (val `elem` vs)
-          then if (isJust ((M.lookup prop (opsAspectDictionary dicts))))
-            then return $ Just $ PhoneFollowedByAspectAtR prop val
+  forM props $ \(prop, mval) -> do
+    case mval of
+      -- If nothing, then following chances,
+      -- from most likely to least likely:
+      -- Group, Trait, Phoneme, Aspect.
+      Nothing -> if (prop `elem` (opsGroupDictionary dicts))
+        then return $ Just $ PhoneFollowedByGroup prop
+        else if (prop `elem` (opsGroupDictionary' dicts))
+          then do 
+            tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
+            return Nothing
+          else case (M.lookup prop (opsTraitDictionary dicts)) of
+            -- Works with either type of trait.
+            (Just _) -> return $ Just $ PhoneFollowedByTrait prop
+            Nothing -> case (M.lookup prop (opsTraitDictionary' dicts)) of
+              (Just _) -> do
+                tellError $ "Trait \"" ++ prop ++ "\" has not been imported;\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+                return Nothing
+              Nothing -> if (prop `elem` (opsPhoneDictionary dicts))
+                then return $ Just $ PhoneFollowedByPhone prop
+                else case (M.lookup prop (opsAspectDictionary dicts)) of
+                  (Just _) -> return $ Just $ PhoneFollowedByAspect prop
+                  Nothing  -> case (M.lookup prop (opsAspectDictionary' dicts)) of
+                    (Just _) -> do
+                      tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+                      return Nothing
+                    Nothing -> do
+                      phoneName <- ask
+                      tellError $ "Phoneme \"" ++ phoneName ++ "\" : Couldn't match next-phoneme string: \">" ++ prop ++ "\"."
+                      return Nothing
+      -- There IS a second value here in this case.
+      -- Therefore it should only be a property
+      -- that can take on a second value, e.g. a
+      -- trait or an aspect.
+      (Just val) -> case (M.lookup prop (opsTraitDictionary' dicts)) of
+        (Just (Just vs)) -> if (val `elem` vs)
+          then if (isJust ((M.lookup prop (opsTraitDictionary dicts)))) 
+            then return $ Just $ PhoneFollowedByTraitAt prop val
             else do
-              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
-              return Nothing
+                tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v1);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+                return Nothing
           else do
             phoneName <- ask
-            when (prop `notElem` (M.keysSet $ opsAspectDictionary dicts)) $
-              tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
-            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for aspect \"" ++ prop ++ "\"."
+            when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v2);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
             return Nothing
-        Nothing -> if (prop `elem` (opsGroupDictionary' dicts))
-          then do
+        (Just _) -> do
             phoneName <- ask
-            when (prop `notElem` (opsGroupDictionary dicts)) $
-              tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
-            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a group: \">" ++ prop ++ "=" ++ val ++ "\"."
+            when (isNothing $ M.lookup prop (opsTraitDictionary dicts)) $ 
+              tellError $ "Trait \"" ++ prop ++ "\" has not been imported (v3);\nAdd \"import trait " ++ prop ++ "\" to the class/state/import section to import it."
+            tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for trait \"" ++ prop ++ "\"."
             return Nothing
-          else if (prop `elem` (opsPhoneDictionary dicts))
+        Nothing -> case (M.lookup prop (opsAspectDictionary' dicts)) of
+          (Just vs) -> if (val `elem` vs)
+            then if (isJust ((M.lookup prop (opsAspectDictionary dicts))))
+              then return $ Just $ PhoneFollowedByAspectAt prop val
+              else do
+                tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+                return Nothing
+            else do
+              phoneName <- ask
+              when (prop `notElem` (M.keysSet $ opsAspectDictionary dicts)) $
+                tellError $ "Aspect \"" ++ prop ++ "\" has not been imported;\nAdd \"import aspect " ++ prop ++ "\" to the class/state/import section to import it."
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't find value \"" ++ val ++ "\" for aspect \"" ++ prop ++ "\"."
+              return Nothing
+          Nothing -> if (prop `elem` (opsGroupDictionary' dicts))
             then do
               phoneName <- ask
-              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a phoneme: \">" ++ prop ++ "=" ++ val ++ "\"."
+              when (prop `notElem` (opsGroupDictionary dicts)) $
+                tellError $ "Group \"" ++ prop ++ "\" has not been imported;\nAdd \"import group " ++ prop ++ "\" to the class/state/import section to import it."
+              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a group: \">" ++ prop ++ "=" ++ val ++ "\"."
               return Nothing
-            else do
-              phoneName <- ask
-              tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match \"next-phoneme\" string : \">" ++ prop ++ "=" ++ val ++ "\"."
-              return Nothing
+            else if (prop `elem` (opsPhoneDictionary dicts))
+              then do
+                phoneName <- ask
+                tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match two strings for a phoneme: \">" ++ prop ++ "=" ++ val ++ "\"."
+                return Nothing
+              else do
+                phoneName <- ask
+                tellError $ "Phoneme \"" ++ phoneName ++ "\" : Can't match \"next-phoneme\" string : \">" ++ prop ++ "=" ++ val ++ "\"."
+                return Nothing
 
 -- At the moment, doesn't work with specific
 -- phonemes... but maybe it should? Okay

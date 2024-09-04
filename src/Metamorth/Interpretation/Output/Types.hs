@@ -41,6 +41,8 @@ import Data.Trie.Map qualified as TM
 
 import Metamorth.Helpers.Ord
 
+import Metamorth.Interpretation.Parser.Parsing.Boolean
+
 data OutputPattern = OutputPattern
   { opCharPattern  :: CharPattern
   , opCasedness    :: OutputCase
@@ -113,7 +115,7 @@ data CaseApply
 -- for more info on this.
 -- | The pattern of Phonemes on the left-hand-side
 --   of a pattern.
-type PhonePattern = PhonePatternF [CheckStateX] [PhoneFollow]
+type PhonePattern = PhonePatternF [CheckStateX] [Boolean2 PhoneFollow]
 {-# COMPLETE PhonemeName, PhoneAtStart, PhoneNotStart, PhoneAtEnd, PhoneNotEnd, PhoneFollow #-}
 
 pattern PhonemeName :: [CheckStateX] -> PhoneName -> PhonePattern
@@ -126,7 +128,7 @@ pattern PhoneAtEnd :: PhonePattern
 pattern PhoneAtEnd = PhoneAtEndX
 pattern PhoneNotEnd :: PhonePattern
 pattern PhoneNotEnd = PhoneNotEndX
-pattern PhoneFollow :: [PhoneFollow] -> PhonePattern
+pattern PhoneFollow :: [Boolean2 PhoneFollow] -> PhonePattern
 pattern PhoneFollow fols = PhoneFollowX fols
 
 -- | The pattern of Phonemes on the left-hand-side

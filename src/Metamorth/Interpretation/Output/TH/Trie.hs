@@ -49,6 +49,10 @@ import Metamorth.ForOutput.Char
 
 import THLego.Helpers
 
+-- For handling more complex lookahead operations
+import Metamorth.Interpretation.Parser.Parsing.Expr
+import Metamorth.Interpretation.Parser.Parsing.Boolean
+
 -- | Since each condition requires a different
 --   number of arguments, we need to keep the
 --   different kinds of arguments separated.
@@ -370,12 +374,32 @@ collectActionData ond ps = toEither $ do
       atEnds  = map (\_ -> appliedTo 'isNothing)  atEnds'
       notEnds = map (\_ -> appliedTo 'isJust   ) notEnds'
 
-      checksX = mapMaybe (getLookups ond) checks
+      checksX = mapMaybe (getLookupsB ond) checks
 
   return $ PhoneActionData modifys confirms (atEnds ++ notEnds ++ checksX)
 
 appliedTo :: Name -> Name -> Exp
 appliedTo func val = AppE (VarE func) (VarE val)
+
+getLookupsB :: OutputNameDatabase -> Boolean2 PhoneFollow -> Maybe (Name -> Exp)
+getLookupsB ond (PlainB2 val) = getLookups ond val
+getLookupsB ond (NotB2   pfs) = do
+  func <- getLookupsB ond pfs
+  return $ \nom -> AppE (VarE 'not) (func nom)
+getLookupsB ond (AndB2 p1 p2) = do
+  func1 <- getLookupsB ond p1
+  func2 <- getLookupsB ond p2
+  return $ \nom ->  InfixE
+    (Just (func1 nom))
+    (VarE '(&&))
+    (Just (func2 nom))
+getLookupsB ond (OrB2  p1 p2) = do
+  func1 <- getLookupsB ond p1
+  func2 <- getLookupsB ond p2
+  return $ \nom ->  InfixE
+    (Just (func1 nom))
+    (VarE '(||))
+    (Just (func2 nom))
 
 -- Again, uses `any` to lift boolean functions
 -- over `Maybe`.
