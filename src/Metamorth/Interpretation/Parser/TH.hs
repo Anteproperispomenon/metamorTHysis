@@ -1114,7 +1114,7 @@ constructFunctionsBoth spi bl trie funNomStrt funNomRst = do
                   -- phoneType = spiPhoneTypeName spi
                   stateType = spiStateTypeName spi
                   -- stateCons = spiStateConsName spi
-              functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty $(return phoneType)) |]
+              functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty (C2.CasedValue $(return phoneType) ) ) |]
               -- Might want to check these strings are valid...
               let func1Dec = FunD funNom1 [Clause [] (NormalB combinedFuncExp) []]
                   func2Dec = FunD funNom2 [Clause [] (NormalB followFuncExp  ) []]
@@ -1200,7 +1200,7 @@ constructFunctionsSB toReduce spi xcp stVals funcNames trie = do
           caseStuff = if toReduce then (groupCaseGuards casePrime) else casePrime
           stateType = spiStateTypeName spi
           -- stateCons = spiStateConsName spi
-      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty $(return $ ConT phoneType)) ) |]
+      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty (C2.CasedValue $(return $ ConT phoneType) ) ) ) |]
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP stateNom, VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
@@ -1262,6 +1262,7 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal fu
       -- mchar <- lift $ [t| Maybe Char |]
       let phonType = ConT $ spiPhoneTypeName spi
           phonType' = AppT (ConT ''NonEmpty) phonType
+          -- phonType' = AppT (ConT ''NonEmpty) (AppT (ConT ''C2.CasedValue) phonType)
           statType = ConT $ spiStateTypeName spi
           funcType = arrowChainT margs (parserT' statType phonType')
           funcSign = SigD funcNom funcType
@@ -1636,6 +1637,8 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
       let pnom  = prPhonemes  prslt
           pmod  = prStateMods prslt
           pmod' = mergeStatesInto resetStateMods pmod
+      -- Since this is in the "case not yet determined" part,
+      -- we need to figure out what the case should be.
       cstrExp        <- phoneNamePatterns patMap aspMaps pnom
       resultModifier <- modifyStateExps sdict pmod'
       return $ resultModifier $ phonemeRet' mkMaj mkMin cs Nothing cstrExp

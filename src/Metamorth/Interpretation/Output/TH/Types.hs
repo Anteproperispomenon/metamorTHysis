@@ -88,6 +88,9 @@ data OutputNameDatabase = OutputNameDatabase
   --   a (possibly enclosed) Phoneme to get 
   --   its plain phoneme value.
   , ondPhoneExpr :: Exp
+  -- | Whether this phoneme set uses cases
+  --   or not
+  , ondIsCased :: Bool
   
   } deriving (Show, Eq)
 

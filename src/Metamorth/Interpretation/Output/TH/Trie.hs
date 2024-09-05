@@ -38,7 +38,7 @@ import Data.Set        qualified as S
 
 import Metamorth.ForOutput.Monad.EitherFail
 
-import Metamorth.ForOutput.Monad.Matcher.Stateful
+import Metamorth.ForOutput.Monad.Matcher.Stateful2
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 import Metamorth.Helpers.Q
