@@ -111,7 +111,7 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
   func3Exp <- [| matchesSimple $(pure func2Exp) |]
 
   funcByteExp1 <- [| matchesRF' $(pure $ VarE stNom) $(pure $ VarE nstNom) |]
-  funcByteExp2 <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz]) -> TLE.encodeUtf8Builder <$> matchElse $(pure caseFunc) $(pure $ VarE xyz) $(pure defSt) $(pure funcByteExp1) 
+  funcByteExp2 <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz]) -> TLE.encodeUtf8Builder <$> matchElse $(pure caseFunc) $(pure phonFunc) $(pure $ VarE xyz) $(pure defSt) $(pure funcByteExp1) 
                            ; $(pure $ ConP wordCon2 [] [VarP xyz]) -> return $ TE.encodeUtf8Builder $(pure $ VarE xyz) 
                            }
                   |]
@@ -138,7 +138,8 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
   
   outputSign4 <- [t| [$(pure $ ConT wordType)] -> Either String BL.ByteString |]
   outputFunc4 <- if (ondIsCased ond)
-    then [e| evalMatcherE (\x -> $(pure (ondCaseExpr ond)) x) () $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
+    -- then [e| evalMatcherE (\x -> $(pure (ondCaseExpr ond)) x) () $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
+    then [e| evalMatcherE (const ()) id $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
     else [e| evalMatcherE (const ()) id $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
   let outputSig4  = SigD userFuncName4 outputSign4
       outputDec4  = FunD userFuncName4 [Clause [VarP xyz] (NormalB outputFunc4) []]

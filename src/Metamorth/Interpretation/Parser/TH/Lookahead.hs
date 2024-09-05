@@ -8,7 +8,11 @@ module Metamorth.Interpretation.Parser.TH.Lookahead
   -- ** Pure Versions
   , createLookaheadPure
   , createMultiLookaheadPure
+  , createMultiLookaheadPure'
+  , createMultiLookaheadPureX
   , createMultiLookaheadPure2
+  , createMultiLookaheadPure2'
+  , createMultiLookaheadPure2X
   -- * Other Functions
   , unmapLookaheadTrie
   , groupMods
@@ -49,6 +53,8 @@ import Control.Monad.Trans.State.Strict qualified as St
 
 import Data.Trie.Map          qualified as TM
 import Data.Trie.Map.Internal qualified as TMI
+
+import Metamorth.ForOutput.Functor.Cased qualified as C2
 
 import Metamorth.Helpers.Trie
 
@@ -120,11 +126,20 @@ createMultiLookahead stModLamb funcName rsltChecks otherRslt = do
     ifBlocks nom = ifBlocks' nom ++ [(NormalG $ VarE 'otherwise, otherRslt')]
 
 createMultiLookaheadPure :: Name -> Exp -> Name -> [(Exp -> Exp, Exp)] -> Maybe Exp -> Exp
-createMultiLookaheadPure zNom stModLamb funcName rsltChecks otherRslt = 
+createMultiLookaheadPure = createMultiLookaheadPure' True
+
+createMultiLookaheadPureX :: Name -> Exp -> Name -> [(Exp -> Exp, Exp)] -> Maybe Exp -> Exp
+createMultiLookaheadPureX = createMultiLookaheadPure' False
+
+createMultiLookaheadPure' :: Bool -> Name -> Exp -> Name -> [(Exp -> Exp, Exp)] -> Maybe Exp -> Exp
+createMultiLookaheadPure' isCased zNom stModLamb funcName rsltChecks otherRslt = 
   DoE Nothing 
-    [ BindS (VarP zNom) (InfixE (Just (AppE (VarE 'lookAheadSX) stModLamb)) (VarE '($)) (Just (InfixE (Just (VarE 'NE.head)) (VarE '(<$>)) (Just (VarE funcName)))))
+    [ if isCased 
+           then BindS (VarP zNom) (InfixE (Just (AppE (VarE 'lookAheadSX) stModLamb)) (VarE '($)) (Just (InfixE (Just (InfixE (Just (VarE 'C2.extractValue)) (VarE '(.)) (Just (VarE 'NE.head)))) (VarE '(<$>)) (Just (VarE funcName)))))
+           else BindS (VarP zNom) (InfixE (Just (AppE (VarE 'lookAheadSX) stModLamb)) (VarE '($)) (Just (InfixE (Just (VarE 'NE.head)) (VarE '(<$>)) (Just (VarE funcName)))))
     , NoBindS (MultiIfE (ifBlocks zNom))
     ]
+-- InfixE (Just (InfixE (Just (VarE 'C2.extractValue)) (VarE '(.)) (Just (VarE 'NE.head)))) (VarE '(<$>)) (Just (VarE funcName))
   where
     otherRslt'
       | (Just oRslt) <- otherRslt
@@ -173,9 +188,15 @@ createMultiLookahead2 funcName modCases otherRslt = do
       =  AppE (VarE 'fail) (LitE (StringL "Could not find a lookahead."))
 
 createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
-createMultiLookaheadPure2 zNom funcName modCases otherRslt =
+createMultiLookaheadPure2 = createMultiLookaheadPure2' True
+
+createMultiLookaheadPure2X :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
+createMultiLookaheadPure2X = createMultiLookaheadPure2' False
+
+createMultiLookaheadPure2' :: Bool -> Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
+createMultiLookaheadPure2' isCased zNom funcName modCases otherRslt =
   let rsltList = forMap modCases $ \(stModLamb, rsltChecks) -> 
-        createMultiLookaheadPure zNom stModLamb funcName rsltChecks Nothing
+        createMultiLookaheadPure' isCased zNom stModLamb funcName rsltChecks Nothing
   in  intersperseInfixRE (VarE '(<|>)) (snocNE rsltList otherRslt')
   where
     otherRslt'

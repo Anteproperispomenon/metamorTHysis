@@ -1234,7 +1234,7 @@ constructFunctions'
 constructFunctions' _ _ _ _ _ _ TrieLeaf _ _ = return []
 constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal funcNames@(strtFuncName, rstFuncName) = do
   -- uh...
-  rslts <- eitherToRWST $ constructGuards mbl peekName trieAnn thisVal theTrie rstFuncName spi cPats
+  rslts <- eitherToRWST $ constructGuards mbl peekName trieAnn thisVal theTrie rstFuncName spi isCased cPats
   case rslts of
     Nothing -> return []
     (Just (bod, conts)) -> do
@@ -1297,10 +1297,11 @@ constructGuards
   -> Maybe (PhoneResult, Caseness)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)) -- ^ This node in the Trie.
   -> Name
-  -> StaticParserInfo -- ^ Constant info about the parser.
+  -> StaticParserInfo -- ^ Constant info about the parser
+  -> Bool
   -> [CharPattern]
   -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneResult, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)))])
-constructGuards mbl charVarName trieAnn mTrieVal theTrie rstFuncName spi = makeGuards
+constructGuards mbl charVarName trieAnn mTrieVal theTrie rstFuncName spi isCased = makeGuards
       mbl
       charVarName
       trieAnn
@@ -1309,6 +1310,7 @@ constructGuards mbl charVarName trieAnn mTrieVal theTrie rstFuncName spi = makeG
       (spiAnnotationMap spi)
       (spiMkMaj spi)
       (spiMkMin spi)
+      (isCased)
       (spiConstructorMap spi)
       (spiAspectMaps spi)
       (spiClassMap spi)
@@ -1331,6 +1333,7 @@ makeGuards
   -> M.Map TrieAnnotation Name     -- ^ Mapping from `TrieAnnotation`s to function names.
   -> (Exp -> Exp)                  -- ^ Maj-maker
   -> (Exp -> Exp)                  -- ^ Min-maker
+  -> Bool                          -- ^ Whether this phoneme set is casable.
   -> (M.Map String Name)           -- ^ Map for patterns/constructors.
   -> (M.Map String ([M.Map String Name])) -- ^ Map for constructors of sub-elements.
   -> (M.Map String (Name, [Char])) -- ^ Map for class function names.
@@ -1345,7 +1348,7 @@ makeGuards
   -> Name                          -- ^ Name of the "not first" parser.
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
   -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneResult, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)))])
-makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
+makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin isCased patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1438,7 +1441,7 @@ data PhoneResult = PhoneResult
               Nothing -> return Nothing
               (Just (prslt, cs)) -> Just <$> mkFinalOption prslt cs
 
-            return $ createMultiLookaheadPure (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
+            return $ createMultiLookaheadPure' isCased (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
 
           -- [(Exp, [(Exp -> Exp, Exp)])] === [(stateMod, [(phonemeCheck, result)])]
           -- createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
@@ -1501,7 +1504,7 @@ data PhoneResult = PhoneResult
       cstrExp        <- phoneNamePatterns patMap aspMaps pnom
       resultModifier <- modifyStateExps sdict pmod'
       return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
-makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
+makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin isCased patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1577,7 +1580,7 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
               Nothing -> return Nothing
               (Just (prslt, cs)) -> Just <$> mkFinalOption prslt cs
 
-            return $ createMultiLookaheadPure (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
+            return $ createMultiLookaheadPure' isCased (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
 
           -- [(Exp, [(Exp -> Exp, Exp)])] === [(stateMod, [(phonemeCheck, result)])]
           -- createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp

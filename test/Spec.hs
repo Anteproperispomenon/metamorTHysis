@@ -201,13 +201,13 @@ boasText1 :: T.Text
 boasText1 = "ăăë gŭ"
 
 autoTest2 :: T.Text
-autoTest2 = "eh'eh'a gwa'um'i" -- 
+autoTest2 = "Eh'eh'A gwA'uM'i" -- 
 
 backTest1 :: T.Text
-backTest1 = "tough tougra" -- 
+backTest1 = "Tough TouGra" -- 
 
 lookAheadTest1 :: T.Text
-lookAheadTest1 = "þa þna þøn þøjþvþ ød"
+lookAheadTest1 = "þa þnA þøn þøjþVþ ød"
 
 lookAheadTest2 :: T.Text
 lookAheadTest2 = "þaβ þбa þnaḅ"
@@ -216,7 +216,7 @@ lookAheadTest3 :: T.Text
 lookAheadTest3 = "ɵin ɵyn ɵyd ɵyg"
 
 lookAheadTest4 :: T.Text
-lookAheadTest4 = "apabaranadax awshawchawg"
+lookAheadTest4 = "ApAbaranAdax AwshawchAwg"
 
 {-
    b : example=exam1
