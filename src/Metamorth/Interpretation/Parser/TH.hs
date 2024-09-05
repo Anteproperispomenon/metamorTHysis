@@ -1110,11 +1110,11 @@ constructFunctionsBoth spi bl trie funNomStrt funNomRst = do
                 [| do { st <- State.get ; pkc <- $(peekCharQ') ; ($(return $ VarE nom1) st pkc) <|> ( $(return $ VarE nom3) st pkc) } |]
               followFuncExp <-
                 [| do { st <- State.get ; pkc <- $(peekCharQ') ; ($(return $ VarE nom2) st pkc) <|> ( $(return $ VarE nom3) st pkc) } |]
-              let phoneType = spiEncPhoneType spi
+              let encPhoneType = spiEncPhoneType spi
                   -- phoneType = spiPhoneTypeName spi
                   stateType = spiStateTypeName spi
                   -- stateCons = spiStateConsName spi
-              functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty (C2.CasedValue $(return phoneType) ) ) |]
+              functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty $(return encPhoneType) ) |]
               -- Might want to check these strings are valid...
               let func1Dec = FunD funNom1 [Clause [] (NormalB combinedFuncExp) []]
                   func2Dec = FunD funNom2 [Clause [] (NormalB followFuncExp  ) []]
@@ -1261,8 +1261,8 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal fu
       -- mbool <- lift $ [t| Maybe Bool |]
       -- mchar <- lift $ [t| Maybe Char |]
       let phonType = ConT $ spiPhoneTypeName spi
-          phonType' = AppT (ConT ''NonEmpty) phonType
-          -- phonType' = AppT (ConT ''NonEmpty) (AppT (ConT ''C2.CasedValue) phonType)
+          -- phonType' = AppT (ConT ''NonEmpty) phonType
+          phonType' = AppT (ConT ''NonEmpty) (AppT (ConT ''C2.CasedValue) phonType)
           statType = ConT $ spiStateTypeName spi
           funcType = arrowChainT margs (parserT' statType phonType')
           funcSign = SigD funcNom funcType
