@@ -81,9 +81,14 @@ data OutputNameDatabase = OutputNameDatabase
   -- | The `Name`s of the word type and its
   --   two constructors.
   , ondWordTypes :: (Name, (Name, Name))
-  -- | A function that can be applied to the
+  -- | A function that can be applied to
   --   a Phoneme to get its case.
   , ondCaseExpr :: Exp
+  -- | A function that can be applied to
+  --   a (possibly enclosed) Phoneme to get 
+  --   its plain phoneme value.
+  , ondPhoneExpr :: Exp
+  
   } deriving (Show, Eq)
 
 --------------------------------

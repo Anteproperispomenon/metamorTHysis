@@ -67,6 +67,8 @@ import Metamorth.Interpretation.Output.Parsing.Types
 import Metamorth.ForOutput.Monad.Matcher.Stateful
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
+import Metamorth.ForOutput.Functor.Cased qualified as C2
+
 -- | The main function for creating output 
 --   declarations.
 generateOutputDecs 
@@ -152,6 +154,16 @@ makeOutputDatabase opo pni = do
   -- Create the group dict by looking up the names of the
   -- necessary functions in the PhonemeNameInformation.
   groupDict <- M.mapMaybe id <$> forMapFromSet (opoGroupDictionary opo) (\str -> qLookupErrorS str (pniGroups pni))
+  
+  let theCaseExpr  = if (pniCanBeCased pni)
+        then (VarE 'C2.extractCase3)
+        else AppE (VarE 'const) (ConE 'LowerCase)
+      thePhoneExpr = if (pniCanBeCased pni)
+        then (VarE 'C2.extractValue)
+        else (VarE 'id)
+      -- thePhoneType = if (pniCanBeCased pni)
+      --   then (AppT (ConT 'C2.CasedValue))
+      --   else ()
 
   let ond = OutputNameDatabase
         { ondPhonemes  = pniPhones  pni
@@ -162,8 +174,9 @@ makeOutputDatabase opo pni = do
         , ondStates    = stDict
         , ondPhoneType = pniPhoneType pni
         , ondWordTypes = pniWordTypeNames pni
-        , ondCaseExpr  = AppE (VarE 'const) (ConE 'LowerCase) -- temp
+        , ondCaseExpr  = theCaseExpr
         , ondDefState  = makeDefaultState stRecNameC stDict
+        , ondPhoneExpr = thePhoneExpr
         }
   return (stDecs, ond, opoOutputTrie opo)
   where

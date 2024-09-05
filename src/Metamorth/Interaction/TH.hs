@@ -85,6 +85,8 @@ import System.IO
 
 import THLego.Helpers
 
+import Metamorth.ForOutput.Functor.Cased
+
 -- | Simple type for the output of the generated
 --   declarations.
 data GeneratedDecs = GeneratedDecs
@@ -390,6 +392,7 @@ getParserData fp pdb txt epd = do
             (pdbTopPhonemeType pdb)
             (pdbMkMaj pdb)
             (pdbMkMin pdb)
+            (pdbIsCased pdb)
             (pdbWordTypeNames pdb)
             (pniAspects pni)
             (pdbTraitInformation pdb)
@@ -418,6 +421,7 @@ makePhonemeInformation pdb = PhonemeNameInformation
   , pniWordTypeNames = pdbWordTypeNames pdb
   , pniCaseExpr  = AppE (VarE 'const) (ConE 'LowerCase)
   , pniPhoneType = pdbTopPhonemeType pdb
+  , pniCanBeCased = pdbIsCased pdb
   }
   where 
     pdt = pdbPropertyData pdb
