@@ -50,6 +50,8 @@ import Metamorth.Interpretation.Phonemes.Parsing (parsePhonemeFile)
 
 import Metamorth.Interpretation.Phonemes.Parsing.Types 
 
+import Metamorth.Interpretation.Phonemes.Types (PhonemeParsingStructure(..))
+
 import Metamorth.Interpretation.Parser.Parsing
 import Metamorth.Interpretation.Parser.Types
 
@@ -255,9 +257,9 @@ createParsersNew canBeCased phonemePath parserPaths outputPaths = do
     (Right pb) -> return pb
   
   -- Get the phoneme database and the decs.
-  (pdb', phoneDecs) <- producePhonemeDatabase pps
+  (pdb, phoneDecs) <- producePhonemeDatabase (pps {ppsCanBeCased = canBeCased})
 
-  let pdb = pdb' {pdbIsCased = canBeCased}
+  -- let pdb = pdb' {pdbIsCased = canBeCased}
 
   -- Check the group map:
   -- qDebugNotice $ "Group Map: " ++ show (pdbGroupMemberFuncs pdb)

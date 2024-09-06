@@ -1200,7 +1200,8 @@ constructFunctionsSB toReduce spi xcp stVals funcNames trie = do
           caseStuff = if toReduce then (groupCaseGuards casePrime) else casePrime
           stateType = spiStateTypeName spi
           -- stateCons = spiStateConsName spi
-      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty (C2.CasedValue $(return $ ConT phoneType) ) ) ) |]
+      let encPhoneType = spiEncPhoneType spi
+      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty $(return $ encPhoneType)  ) ) |]
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP stateNom, VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
@@ -1262,7 +1263,9 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal fu
       -- mchar <- lift $ [t| Maybe Char |]
       let phonType = ConT $ spiPhoneTypeName spi
           -- phonType' = AppT (ConT ''NonEmpty) phonType
-          phonType' = AppT (ConT ''NonEmpty) (AppT (ConT ''C2.CasedValue) phonType)
+          -- phonType' = AppT (ConT ''NonEmpty) (AppT (ConT ''C2.CasedValue) phonType)
+          encPhone = spiEncPhoneType spi
+          phonType' = AppT (ConT ''NonEmpty) encPhone
           statType = ConT $ spiStateTypeName spi
           funcType = arrowChainT margs (parserT' statType phonType')
           funcSign = SigD funcNom funcType
