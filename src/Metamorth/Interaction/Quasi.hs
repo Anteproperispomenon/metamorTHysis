@@ -44,14 +44,18 @@ makeTheDecs :: String -> Q [Dec]
 makeTheDecs str = do
   let txt = T.pack str
       -- eRslt = AT.parseOnly (embedQQ parseOrthographyDetailsDebug) txt
-      eRslt = AT.parseOnly (embedQQ parseOrthographyDetails) txt
+      eRslt = AT.parseOnly (embedQQ parseOrthographyDetailsNew) txt
   case eRslt of
     (Left err) -> do 
       reportError $ "Parse Error: " ++ err
       return []
     -- (Right ((pfp, ods, odsDebug, ondDebug), msgs)) -> do
-    (Right ((pfp, mLang, ods), msgs)) -> do
-      let (errs,wrns,_mmsgs) =  partitionMessages msgs
+    -- (Right ((pfp, mLang, ods), msgs)) -> do
+    (Right ((qh, ods), msgs)) -> do
+      let pfp   = qhFilePath qh
+          mLang = qhLanguage qh
+          isCas = qhIsCased  qh
+          (errs,wrns,_mmsgs) =  partitionMessages msgs
       mapM_ reportError   errs
       mapM_ reportWarning wrns
       let ((irslts',orslts'), descMap) = flip State.runState M.empty $ fmap unzip $ forM ods $ \od -> case (odInputFile od, odOutputFile od) of
@@ -119,6 +123,6 @@ makeTheDecs str = do
       extraDeets <- [d| languageDetails :: (Maybe String, M.Map String String) -- ExtraLanguageDetails
                         languageDetails = ExtraLanguageDetails mLang descMap |]
 
-      finalDecs <- declareFullParsers pfp irslts orslts
+      finalDecs <- declareFullParsersNew isCas pfp irslts orslts
       return (finalDecs <> extraDeets)
 

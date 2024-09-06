@@ -2,6 +2,7 @@ module Metamorth.Interaction.Quasi.Parser
   ( parseOrthographyBlock
   , parseOrthographyBlocks
   , parseOrthographyDetails
+  , parseOrthographyDetailsNew
   , parseOrthographyDetailsDebug
   -- * Debug
   , parseIndentedOptions
@@ -68,6 +69,15 @@ data OrthographyDetails = OrthographyDetails
   , odCLINames      :: [String]
   } deriving (Show, Eq)
 -}
+
+parseOrthographyDetailsNew :: ParserQQ (QuasiHeader, [OrthographyDetails])
+parseOrthographyDetailsNew = do
+  -- lift $ many'_ consumeEndComment
+  -- fp <- parsePhoneFileName
+  -- lift $ many'_ consumeEndComment
+  qh <- parseHeaderNew
+  dts <- parseOrthographyBlocks
+  return (qh, dts)
 
 parseOrthographyDetails :: ParserQQ (FilePath, Maybe String, [OrthographyDetails])
 parseOrthographyDetails = do
