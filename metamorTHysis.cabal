@@ -61,7 +61,9 @@ library
       Metamorth.Interaction.Quasi
       Metamorth.Interaction.Quasi.Parser
       Metamorth.Interaction.Quasi.Parser.Helpers
+      Metamorth.Interaction.Quasi.Parser.Helpers.Low
       Metamorth.Interaction.Quasi.Parser.Types
+      Metamorth.Interaction.Quasi.Parser.Types.More
       Metamorth.Interaction.TH
       Metamorth.Interpretation.Output.Parsing
       Metamorth.Interpretation.Output.Parsing.Trie
