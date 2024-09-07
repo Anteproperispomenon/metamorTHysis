@@ -180,6 +180,11 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing Case Output..."
+  let case2 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InFollowA Fol.OutLookahead2 caseTest2
+  case case2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
@@ -226,6 +231,9 @@ lookAheadTest4 = "ApAbaranAdax AwshawchAwg"
 
 caseTest1 :: T.Text
 caseTest1 = "Ehtla eHtlA"
+
+caseTest2 :: T.Text
+caseTest2 = "Iga iga"
 
 {-
    b : example=exam1

@@ -469,6 +469,7 @@ getCaseType = AT.peekChar' >>= \case
     (Just '9') -> AT.anyChar >> getCaseType' <%> CSHigh
     (Just 't') -> AT.anyChar >> getCaseType' <%> CSHigh
     (Just 'T') -> AT.anyChar >> getCaseType' <%> CSHigh
+    (Just '?') -> AT.anyChar >> OCDetectSep  <$> getCaseTypeZ
     -- These two will probably be redundant.
     -- (Just 'i') -> AT.anyChar $> OCDetectIndividual
     -- (Just 'I') -> AT.anyChar $> OCDetectIndividual
@@ -495,6 +496,18 @@ getCaseType' = AT.peekChar >>= \case
   (Just 'L') -> AT.anyChar >> return (\x -> OCDetect x CAExactLower)
   (Just '-') -> AT.anyChar >> return (\x -> OCDetect x CAExactLower)
   _ -> return $ \x -> OCDetect x CATitle
+
+getCaseTypeZ :: AT.Parser CaseSource
+getCaseTypeZ = AT.peekChar >>= \case
+  (Just 'a') -> AT.anyChar $> CSFirst
+  (Just 'A') -> AT.anyChar $> CSFirst
+  (Just 'z') -> AT.anyChar $> CSLast
+  (Just 'Z') -> AT.anyChar $> CSLast
+  (Just '0') -> AT.anyChar $> CSLow
+  (Just '9') -> AT.anyChar $> CSHigh
+  (Just 't') -> AT.anyChar $> CSHigh
+  (Just 'T') -> AT.anyChar $> CSHigh
+  _ -> return CSFirst
 
 ----------------------------------------------------------------
 -- Phoneme list parsers

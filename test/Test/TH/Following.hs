@@ -24,6 +24,7 @@ declareFullParsers
   , ("examples/output/example_follow_02.thyo"   , defExtraOutputDetails {eodSuffix = "_f02out", eodOutputName = "follow2Output", eodOtherNames = ["f2"]}) 
   , ("examples/output/example_follow_03.thyo"   , defExtraOutputDetails {eodSuffix = "_f03out", eodOutputName = "follow3Output", eodOtherNames = ["f3"]}) 
   , ("examples/output/lookahead_example_01.thyo", defExtraOutputDetails {eodSuffix = "_f04out", eodOutputName = "follow4Output", eodOtherNames = ["f4"]}) 
+  , ("examples/output/lookahead_example_02.thyo", defExtraOutputDetails {eodSuffix = "_f05out", eodOutputName = "follow5Output", eodOtherNames = ["f5"]}) 
   ]
 
 

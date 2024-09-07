@@ -494,8 +494,19 @@ createCaseExpAlt' ocs cpats expr mkTup =
 
 -- | Create an expression that can be applied to 
 --   the list of cases to get the desired output.
-createCaseExp :: (Quote q, Quasi q) => OutputCase -> [CharPatternItem] -> q Exp
-createCaseExp ocs cpats = do 
+createCaseExp :: (Quote q, Quasi q) => OutputCase -> CharPatternItems -> q Exp
+createCaseExp ocs (CaseSeparate outpU outpL) = do
+  case ocs of
+    (OCDetectSep src) -> do
+      func1 <- case src of
+        CSFirst -> pure 'getFirstCase
+        CSLast  -> pure 'getLastCase
+        CSHigh  -> pure 'getMaxCase
+        CSLow   -> pure 'getMinCase
+      [| \x -> if (( $(pure $ VarE func1) x) == UpperCase ) then $(stringE outpU) else $(stringE outpL) |]
+    -- Could change this to qReportError.
+    _ -> fail "Got CaseSeparate, but not OCDetectSep. "
+createCaseExp ocs (CaseRegular cpats) = do 
   case ocs of
     OCMaj    -> [| \x -> if (getMaxCase x) == UpperCase then (return $(strQ $ plainCharPat cpats)) else (fail "Not (an) upper-case phoneme(s)") |]
     OCMin    -> [| \x -> if (getMaxCase x) /= UpperCase then (return $(strQ $ plainCharPat cpats)) else (fail  "Not (a) lower-case phoneme(s)") |]
@@ -525,6 +536,14 @@ createCaseExp ocs cpats = do
             e2 <- [| return $(strQ (plainCharPat cpats)) |]
             return (e1,e2)
       [| \x -> if (( $(pure $ VarE func1) x) == UpperCase ) then $(pure expr1) else $(pure expr2) |]
+    -- OCDetectSep should only be used with CaseSeparate
+    -- Could change this to qReportError.
+    (OCDetectSep _) -> do
+      qReportWarning "Using a \"\\?...\" case, but not using separate upper/lower case outputs."
+      [| \_ -> $(stringE (map extractChars cpats)) |]
+      
+
+
 
 strQ :: (Quote q) => String -> q Exp
 strQ str = return (strE str)
