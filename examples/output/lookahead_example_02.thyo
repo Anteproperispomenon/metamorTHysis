@@ -15,13 +15,14 @@ import trait nasal
 
 import trait example
 
+state blah
+
 ====
 
 # vowels
 a : a
 e : e
-i : + I
-i : - ı
+i : /?9 I | ı !blah=on
 o : o
 oo : ʊ
 # oo : o o
@@ -67,6 +68,7 @@ dzh : d ʒ
 # palatal/alveolar
 j : j
 k : k
+g @blah=on : ǧ
 g : g
 ng : ŋ
 h : x # to avoid conflicts

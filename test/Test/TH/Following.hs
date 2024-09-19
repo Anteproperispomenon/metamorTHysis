@@ -27,4 +27,5 @@ declareFullParsers
   , ("examples/output/lookahead_example_02.thyo", defExtraOutputDetails {eodSuffix = "_f05out", eodOutputName = "follow5Output", eodOtherNames = ["f5"]}) 
   ]
 
-
+-- Search for outputBranch_0000_f05out
+-- or outputReturn_0013_f05out

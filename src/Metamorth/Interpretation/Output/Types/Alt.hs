@@ -129,7 +129,7 @@ type PhoneResult = PhoneResultX [PhoneResultActionX]
 
 data PhoneResultX a = PhoneResult
   { prPhoneConditions :: a
-  , prPhoneOutput :: [CharPatternItem]
+  , prPhoneOutput :: CharPatternItems
   , prOutputCase  :: OutputCase
   } deriving (Show, Eq)
 

@@ -233,7 +233,7 @@ caseTest1 :: T.Text
 caseTest1 = "Ehtla eHtlA"
 
 caseTest2 :: T.Text
-caseTest2 = "Iga iga"
+caseTest2 = "Iga iga oga"
 
 {-
    b : example=exam1

@@ -260,7 +260,7 @@ necessaryPhoneRet (PhoneActionData _  ys []) = StateRet
 necessaryPhoneRet (PhoneActionData [] [] zs) = CondPlainRet
 necessaryPhoneRet (PhoneActionData _  _  _ ) = CondStateRet
 
-addPhoneActionClause :: (Quasi q, Quote q) => OutputNameDatabase -> OutputCase -> RetType -> [CharPatternItem] -> PhoneActionData -> ReturnClauses -> q ReturnClauses
+addPhoneActionClause :: (Quasi q, Quote q) => OutputNameDatabase -> OutputCase -> RetType -> CharPatternItems -> PhoneActionData -> ReturnClauses -> q ReturnClauses
 -- Plain returns only
 addPhoneActionClause ond oc PlainRet cpi pad rcs = case pad of
   (PhoneActionData [] [] []) -> do
@@ -503,7 +503,7 @@ createCaseExp ocs (CaseSeparate outpU outpL) = do
         CSLast  -> pure 'getLastCase
         CSHigh  -> pure 'getMaxCase
         CSLow   -> pure 'getMinCase
-      [| \x -> if (( $(pure $ VarE func1) x) == UpperCase ) then $(stringE outpU) else $(stringE outpL) |]
+      [| \x -> if (( $(pure $ VarE func1) x) == UpperCase ) then return $(stringE outpU) else return $(stringE outpL) |]
     -- Could change this to qReportError.
     _ -> fail "Got CaseSeparate, but not OCDetectSep. "
 createCaseExp ocs (CaseRegular cpats) = do 

@@ -11,6 +11,7 @@ module Metamorth.Interpretation.Output.Parsing
   , parsePhonemePatMulti
   , parsePhonemePatMulti'
   , parsePatternSection
+  , getCaseType
   ) where
 
 import Control.Applicative
@@ -205,6 +206,8 @@ parseEscaped = do
     '-' -> consProd '-'
     '%' -> consProd '%'
     's' -> consProd ' '
+    '|' -> consProd '|'
+    'p' -> consProd '|'
     y   -> consProd y
 
 parseEscapedRS :: OutputParser CharPatternRaw
@@ -450,7 +453,13 @@ parseStateSetRS' = do
 
 getCaseTypeS :: OutputParser OutputCase
 getCaseTypeS = do
-  mct <- optional $ lift getCaseType
+  -- mct <- optional $ lift (getCaseType <?> "Get pattern Case")
+  mct <- do
+    nxt <- lift (AT.peekChar)
+    case nxt of
+      (Just '/') -> do 
+        Just <$> lift (getCaseType <?> "Get pattern Case")
+      _ -> return Nothing
   case mct of
     (Just ct) -> return ct
     Nothing   -> gets opsDefaultCasing
@@ -760,18 +769,41 @@ parseStateValRSX' = do
 parseNonSpace :: AT.Parser Char
 parseNonSpace = AT.satisfy isNonSpace
 
+parseNonSpace'' :: AT.Parser Char
+parseNonSpace'' = AT.satisfy isNonSpace''
+
 isNonSpace :: Char -> Bool
 isNonSpace = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!')
 
 isNonSpace' :: Char -> Bool
 isNonSpace' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*')
 
+isNonSpace'' :: Char -> Bool
+isNonSpace'' = \x -> (not $ isSpace x) && (x /= '#') && (x /= '@') && (x /= '!') && (x /= '*') && (x /= '|')
+
 parseNonSpaceR :: AT.Parser CharPatternRaw
 parseNonSpaceR = PlainCharR <$> parseNonSpace
+
+parseNonSpaceR'' :: AT.Parser CharPatternRaw
+parseNonSpaceR'' = PlainCharR <$> parseNonSpace''
 
 parseNonSpaceRS :: OutputParser CharPatternRaw
 parseNonSpaceRS = lift parseNonSpaceR
 
+-- | Like parseNonSpaceRS, but warns if
+--   a pipe is encountered.
+parseNonSpaceRSX :: OutputParser CharPatternRaw
+parseNonSpaceRSX = do
+  c <- lift parseNonSpaceR
+  case c of
+    (PlainCharR '|') -> do
+      phoneName <- ask
+      warn $ "Phoneme \"" ++ phoneName ++ "\" has an unescaped pipe (\"|\"). Did you mean to use explicit casing?"
+    _ -> return ()
+  return c
+
+parseNonSpaceRS'' :: OutputParser CharPatternRaw
+parseNonSpaceRS'' = lift parseNonSpaceR''
 
 parseMultiNonSpace :: AT.Parser (Either T.Text Char)
 parseMultiNonSpace = do
@@ -781,6 +813,16 @@ parseMultiNonSpace = do
     Nothing  -> return $ Right c1
     (Just x) -> case x of
       y | isNonSpace' y -> Left . (T.cons c1) <$> AT.takeWhile1 isNonSpace
+      _ -> return $ Right c1
+
+parseMultiNonSpace' :: AT.Parser (Either T.Text Char)
+parseMultiNonSpace' = do
+  c1 <- AT.satisfy isNonSpace''
+  nxt <- AT.peekChar
+  case nxt of
+    Nothing  -> return $ Right c1
+    (Just x) -> case x of
+      y | isNonSpace'' y -> Left . (T.cons c1) <$> AT.takeWhile1 isNonSpace''
       _ -> return $ Right c1
 
 parseMultiNonSpaceS :: OutputParser (Either T.Text Char)
@@ -793,9 +835,42 @@ parseMultiNonSpaceS = do
       return rslt
     _ -> return rslt
 
+parseMultiNonSpaceS' :: OutputParser (Either T.Text Char)
+parseMultiNonSpaceS' = do
+  rslt <- lift parseMultiNonSpace'
+  case rslt of
+    (Left txt) -> do
+      phone <- ask
+      warn $ "Phoneme \"" <> phone <> "\" is missing spaces in one of its patterns: ... " <> (T.unpack txt) <> " ..."
+      return rslt
+    _ -> return rslt
+
 parseMultiNonSpaceRS :: OutputParser [CharPatternRaw]
 parseMultiNonSpaceRS = do
   rslt <- parseMultiNonSpaceS
+  case rslt of
+    (Left txt) -> return $ map PlainCharR $ T.unpack txt
+    (Right ch) -> return   [PlainCharR ch]
+
+parseMultiNonSpaceRSX :: OutputParser [CharPatternRaw]
+parseMultiNonSpaceRSX = do
+  rslt <- parseMultiNonSpaceS
+  case rslt of
+    (Left txt) -> do
+       let txt' = T.unpack txt
+       when (any (== '|') txt') $ do
+         phoneName <- ask
+         warn $ "Phoneme \"" ++ phoneName ++ "\" has an unescaped pipe (\"|\"). Did you mean to use explicit casing?"
+       return $ map PlainCharR txt'
+    (Right ch) -> do
+      when (ch == '|') $ do
+         phoneName <- ask
+         warn $ "Phoneme \"" ++ phoneName ++ "\" has an unescaped pipe (\"|\"). Did you mean to use explicit casing?"
+      return   [PlainCharR ch]
+
+parseMultiNonSpaceRS' :: OutputParser [CharPatternRaw]
+parseMultiNonSpaceRS' = do
+  rslt <- parseMultiNonSpaceS'
   case rslt of
     (Left txt) -> return $ map PlainCharR $ T.unpack txt
     (Right ch) -> return   [PlainCharR ch]
@@ -821,37 +896,85 @@ parsePhonemePatMulti' = do
   _ <- lift ((AT.char ':') <?> ("Phoneme pattern for \"" <> phoneName <> "\" is missing ':'."))
   lift skipHoriz
   -- hmm...
-  theCase <- getCaseTypeS
+  theCase <- getCaseTypeS -- <?> "Get pattern Case"
+  lift skipHoriz
   
-  -- Set the internal phoneme name to phoneName.
-  runOnPhoneme phoneName $ do
-    thePats <- concat <$> AT.sepBy1' 
-      ( (mkList parseCodepointRS )
-        -- <|> (mkList parseClassNameRS)
-        <|> (mkList parseEscapedRS  )
-        <|> (parseMultiNonSpaceRS   )
-        <|> (mkList parseNonSpaceRS ) -- this will consume almost any individual `Char`, so it must go (almost) last.
-        -- These two should probably be combined into one function for better errors.
-        -- <|> (mkList parseStateValRS')
-        <|> (mkList parseStateSetRS')
-      ) 
-      (lift skipHoriz1)
-    -- hmm...
-    -- return ()
+  case theCase of
+    (OCDetectSep _src) -> runOnPhoneme phoneName $ do -- Set the internal phoneme name to phoneName.
+      pats1 <- parseOutPattern True
+      lift skipHoriz
+      x <- lift AT.peekChar
+      case x of
+        (Just '|') -> do
+          _ <- lift AT.anyChar
+          lift skipHoriz
+          pats2 <- parseOutPattern False
+          combinePatterns2 phones pats1 pats2 theCase
+        _ -> do
+          let err = "Explicit case pattern has no '|' separating upper-case and lower-case."
+          mkError ("Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err)
+          -- Now, take until the end of line...
+          lift $ AT.skipWhile (not . AT.isEndOfLine) -- Don't actually take the EOL, though.
+          return ([], OutputPattern (CharPattern (CaseSeparate [] []) []) OCNull)
+    _ -> runOnPhoneme phoneName $ do -- Set the internal phoneme name to phoneName.
+      thePats <- parseOutPattern False
+      combinePatterns1 phones thePats theCase
+      
+  where 
+    parseOutPattern isSep = do 
+      thePats <- concat <$> AT.sepBy1' 
+        ( (mkList parseCodepointRS )
+          -- <|> (mkList parseClassNameRS)
+          <|> (mkList parseEscapedRS  )
+          <|> (if isSep then parseMultiNonSpaceRS' else parseMultiNonSpaceRSX )
+          -- Originally, the next line was "mkList parseNonSpaceRS", but then I changed it to also ignore pipes.
+          <|> (mkList (if isSep then parseNonSpaceRS'' else parseNonSpaceRSX) ) -- this will consume almost any individual `Char`, so it must go (almost) last.
+          -- These two should probably be combined into one function for better errors.
+          -- <|> (mkList parseStateValRS')
+          <|> (mkList parseStateSetRS')
+        ) 
+        (lift skipHoriz1)
+      -- hmm...
+      return thePats
+      
+    combinePatterns1 phones thePats theCase = do
+      phoneName <- ask
+      sdict <- gets (M.map snd . opsStateDictionary)
+      let  ePhonePats = validatePhonePattern sdict (NE.toList phones)
+      case ePhonePats of
+        (Left  errs) -> do 
+          mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
+          return ([], OutputPattern (CharPattern (CaseRegular []) []) OCNull)
+        (Right phonePats) -> -- addPhonemesPattern phones rslt
+          case (validateCharPattern sdict thePats) of
+            (Left  errs) -> do 
+              mkErrors $ map (\err -> "Error with output pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
+              return ([], OutputPattern (CharPattern (CaseRegular []) []) OCNull)
+            (Right cPats) -> return (phonePats, OutputPattern cPats theCase)
     
-    sdict <- gets (M.map snd . opsStateDictionary)
-    let  ePhonePats = validatePhonePattern sdict (NE.toList phones)
-    case ePhonePats of
-      (Left  errs) -> do 
-        mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
-        return ([], OutputPattern (CharPattern [] []) OCNull)
-      (Right phonePats) -> -- addPhonemesPattern phones rslt
-        case (validateCharPattern sdict thePats) of
-          (Left  errs) -> do 
-            mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
-            return ([], OutputPattern (CharPattern [] []) OCNull)
-          (Right cPats) -> return (phonePats, OutputPattern cPats theCase)
+    combinePatterns2 phones pats1 pats2 theCase = do
+      phoneName <- ask
+      sdict <- gets (M.map snd . opsStateDictionary)
+      let  ePhonePats = validatePhonePattern sdict (NE.toList phones)
+      case ePhonePats of
+        (Left  errs) -> do 
+          mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
+          return ([], OutputPattern (CharPattern (CaseSeparate [] []) []) OCNull)
+        (Right phonePats) -> -- addPhonemesPattern phones rslt
+          case (validateCharPattern2 sdict pats1 pats2) of
+            (Left  errs) -> do 
+              mkErrors $ map (\err -> "Error with output pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
+              return ([], OutputPattern (CharPattern (CaseRegular []) []) OCNull)
+            (Right cPats) -> return (phonePats, OutputPattern cPats theCase)
 
+
+{-
+data CharPattern = CharPattern
+  { cpPatterns     :: CharPatternItems -- [CharPatternItem]
+  , cpStateChanges :: [ModifyStateX]
+  } deriving (Show, Eq)
+
+-}
 
 -- testing:
 
