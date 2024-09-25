@@ -24,6 +24,9 @@ a : a
 e : e
 i : /?9 I | ı !blah=on
 o : o
+# Using the +/- version still doesn't work.
+# o : + O
+# o : - o
 oo : ʊ
 # oo : o o
 # aw : a w

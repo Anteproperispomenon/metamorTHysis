@@ -453,13 +453,13 @@ parseStateSetRS' = do
 
 getCaseTypeS :: OutputParser OutputCase
 getCaseTypeS = do
-  -- mct <- optional $ lift (getCaseType <?> "Get pattern Case")
-  mct <- do
-    nxt <- lift (AT.peekChar)
-    case nxt of
-      (Just '/') -> do 
-        Just <$> lift (getCaseType <?> "Get pattern Case")
-      _ -> return Nothing
+  mct <- optional $ lift (getCaseType <?> "Get pattern Case")
+  -- mct <- do
+  --   nxt <- lift (AT.peekChar)
+  --   case nxt of
+  --     (Just '/') -> do 
+  --       Just <$> lift (getCaseType <?> "Get pattern Case")
+  --     _ -> return Nothing
   case mct of
     (Just ct) -> return ct
     Nothing   -> gets opsDefaultCasing

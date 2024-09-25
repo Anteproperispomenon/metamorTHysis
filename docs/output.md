@@ -123,7 +123,7 @@ is still the correct syntax.
 Cases are more complicated in output specifications compared to how they
 are in parser specifications. Most cases are now specified in the form `/xy`
 where `x` determines how to interpret the case of the input, and `y` 
-determines how to apply the case to the output[^1]. 
+determines how to apply the case to the output. 
 
 Since multiple phonemes can be compacted into a single character, there
 needs to be a way to handle multiple phonemes of different cases. The
@@ -161,6 +161,17 @@ You can also just use `/` to set the case to "null". This means that the input
 case is ignored and the output uses the exact same characters listed in the
 patterns. You might want to use this for uncased orthographies, such as most
 syllabaries.
+
+However, if the character you're using doesn't follow standard unicode casing conventions,
+you can use the special case pattern `/?x`, where `x` is the input style of the
+case[^1]. Now, the output pattern can be divided in two: one portion for upper-case,
+and one portion for lower-case. The two halves are separated by a pipe (`|`). For example,
+
+```
+i : \?9 I | ı
+```
+
+would produce `I` when upper-case and `ı` when lower-case. 
 
 #### "Followed-By" Patterns
 
@@ -250,11 +261,56 @@ g : g
 
 ```
 
+**NEW**: You can now use boolean expressions with followed-by patterns.
+They work similarly to plain followed-by patterns, but are grouped together
+between parentheses after the `>`. e.g.
+
+```
+t >(a|o|u) : ...
+e >(nasal|air=rough) : ...
+i >!nasal : ... # or >~nasal
+```
+
+If you aren't familiar with Boolean expressions, they work like so:
+
+|symbol|example|description|
+|------|-------|-----------|
+| `&`/`&&`     |`a&b` | Only true if both expressions are true. |
+| `\|`/`\|\|`  |`a\|b`| True if either expression is true |
+| `!`/`~`      |`!a`  | Only true if the following expression is false |
+
+
+You can also use nested parentheses for more complex expressions. However,
+if you don't use nested parentheses when mixing `&`s and `|`s, it will be
+interpreted like so:
+
+```
+(a&b|!c&d|e|f&!g&h) ==> ((a & b) | ((!c) & d) | e | (f & (!g) & h))
+```
+
+**Note**: Using `!`/`~` together with aspect-at/trait-at patterns might
+not work as expected; e.g.
+
+```
+t >~air=rough : ...
+```
+
+would match any following phoneme *except* those that have the aspect `air`
+set to `rough`. i.e. it would match any phoneme that doesn't have the `air`
+aspect at all, as well as phoneme *with* air set to anything other than
+`rough`.
+
+If you want to simulate something more like `air!=rough`, i.e. "the next 
+phoneme must have the `air` aspect, but it can't be `rough`", you can use
+the following equivalent expression:
+
+```
+t >(air&!air=rough)
+```
 
 
 ## Footnotes
 
-[^1]: You can use `+` and `-` to refer to patterns that should only match upper-case
-      or lower-case phonemes, but they may not work as intended. Since the actual support
-      for casing hasn't yet been implemented, getting these cases to work hasn't been a
-      priority.
+[^1]: Arguably, this reverses the order of input style and output style, which
+      can be confusing. The reason for the reversal has to do with how the 
+      parser and internal types work.
