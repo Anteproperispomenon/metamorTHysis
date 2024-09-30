@@ -11,8 +11,11 @@ but with some key differences:
   - No classes
   - State-checks are placed **to the left** of the colon
   - More complicated types of cases/capitalisations.
-  - Support for checking the following phoneme.
-  - Support for checking traits and groups.
+  - ~~Support for checking the following phoneme.~~\*
+  - ~~Support for checking traits and groups.~~\*
+
+(\*Note: Support for checking the following phoneme and checking
+traits/groups has since been added to the parser specification.)
 
 So if you haven't read [the parser specification](parsing.md) yet,
 you'll probably want to do that first.

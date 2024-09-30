@@ -212,8 +212,11 @@ special information about the pattern:
   - `*` : Indicates that a `class` is being used (see below).
   - `@` : Indicates that a `state` must be equal to a certain value for this pattern to be valid.
   - `!` : Indicates that a `state` must be changed/set to certain value if this pattern is successful.
+  - `>` : Indicates that a `follow-pattern` is being used.
   - `+` : This pattern represents an upper-case letter/grapheme.
   - `-` : This pattern represents a  lower-case letter/grapheme.
+
+##### Capitalisation Patterns
 
 First, if `+` or `-` are to be used, they must be the **first** symbol 
 in the input sequence. However, most of the time, using `+` or `-` is
@@ -233,6 +236,8 @@ i-dot : + U+0130
 i-no-dot : - U+0131
 i-no-dot : + I
 ```
+
+##### Word Start/End Patterns
 
 Next are the patterns `^` and `%`. If present, these must be the first[^1]
 value in the sequence (but still after `+`/`-` if they're present). 
@@ -285,6 +290,24 @@ fit the usual pronunciation rules. e.g.
 ...
 ```
 
+**Note**: Try to avoid using `&` in general. It will cause problems when
+trying to use it alongside a similar pattern that ends with a 
+[follow-pattern](#follow-patterns). e.g.
+
+```
+ts1 : t s &
+ts2 : t s >(a|e|i)
+ts3 : t s >(o|u)
+ts4 : t s $
+
+```
+
+would always parse "ts" as `ts1` in the middle of a word, or as `ts4`
+at the end of the word[^4]. To fix this case, just remove the `&` from
+the end of the `ts1` pattern.
+
+##### Class Patterns
+
 Next is `*`, which is just how `classes` are used in input sequences.
 To use them, you just write `*` immediately followed by the name of
 the class (no space between `*` and the name). e.g. if `apost` is the
@@ -299,9 +322,11 @@ ts' : t s *apost
 For more information on how to write and use classes, see [Classes](#classes)
 below.
 
-Finally, there are the special characters `@` and `!`. These are 
-used like `*` for classes, except they have an additional parameter.
-You use them like so:
+##### State Patterns
+
+Finally, there are the special characters `@` and `!`. These are used
+for state patterns. They are used like `*` for classes, 
+except they have an additional parameter. You use them like so:
 
 ```
 u : u !last_vowel=high
@@ -317,7 +342,31 @@ r  : r
 
 Again, `@` is used to check the current state, and
 `!` is used to change one of the state values. See
-[States](@states) for more information.
+[States](#states) for more information.
+
+##### Follow Patterns
+
+Follow patterns were initially created for the [output specification](output.md),
+so you can read more about them [there](output.md#followed-by-patterns).
+
+Basically, a follow pattern succeeds if the *following phoneme* to be parsed
+matches a certain condition. e.g. the following phoneme have a certain trait
+or aspect, or maybe is one of several specified phonemes.
+
+Follow patterns can only go at the *end* of a full pattern, and are indicated
+by a `>` character followed by the condition. For a single phoneme, trait,
+or aspect, the condition is just the name of that phoneme/trait/aspect, e.g.
+`>velar` or `>a`. For value-traits and aspects, you can also specify which
+value the trait/aspect has to take for the condition to hold. This is indicated
+by adding an `=` after the trait/aspect name, followed by the name of value.
+e.g. `>breath=rough` or `length=long`.
+
+You can also combine different conditions into compound conditions by using
+**Boolean Operators**. To use Boolean operators, you must surround the condition
+in parentheses, e.g. `>(a|e|i)` would succeed if the following phoneme is `a`, `e`,
+or `i`. For more details on Boolean Operators, see the [section on follow patterns](output.md#followed-by-patterns)
+in the output documentation.
+
 
 ### Classes
 
@@ -334,6 +383,14 @@ class apost : ' ` U+0313 U+0315
 in the class section. This will let you cut down
 on the number of patterns you need to write, since
 you don't have to write one for each possible apostrophe.
+e.g.
+
+```
+...
+ts' : t *apost s
+ts' : t s *apost
+...
+```
 
 #### Overlapping Classes
 
@@ -588,3 +645,11 @@ uses both `all` state checks (the patterns for `ng`) and
       by a Latin letter, an Arabic numeral, or one of the characters `-`, `_`, or `'`.
 [^3]: Technically, it can be anywhere in the pattern so long as it's after a `+` or `-`
       character if present.
+[^4]: This has to do with how the code is generated for each step in the trie. Follow-Patterns
+      are always the second-last pattern to be checked, so any earlier pattern that would
+      also succeed would have priority. Since a "not-at-end" pattern would succeed any time a
+      follow-pattern would also succeed, the "not-at-end" pattern would thus override any 
+      follow-patterns in the same step. The only pattern that is "checked" after follow-patterns
+      is the pattern that succeeds if all other checks failed. If you absolutely must have
+      a "not-at-end" pattern alongside a follow-pattern, remove the `&` from the end of the
+      "not-at-end" pattern and add an additional pattern that ends with `$`.
