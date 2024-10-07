@@ -57,7 +57,7 @@ phoneme set : name_of_phoneme_set
 
 ```
 
-...would be a pattern with no classes or states.
+...would be a pattern section with no classes or states.
 
 ### Header
 
@@ -90,8 +90,11 @@ ts : t s
 ```
 
 with the output phoneme(s) on the left of the colon and
-the input sequence on the right. Note that there must
-be a space between each value in the input sequence.
+the input sequence on the right. The input sequence consists of
+a list of **symbols** with spaces between each symbol. A symbol
+can either be a **"character"** (aka a **"grapheme"**), or a **"marker"** 
+that specifies additional information about that particular
+pattern.
 
 Note that you can have multiple patterns for the same
 phoneme. In which case, you just put patterns with the
@@ -104,6 +107,9 @@ ts : c
 ```
 
 #### Characters
+
+Characters represent the input letters/diacritics/punctuation
+that are read and converted by the resulting program.
 
 For the most part, when writing the input sequence, 
 you'll just use the characters you want to use directly
@@ -137,7 +143,7 @@ Also note that you can use this form of codepoint input
 when defining a class, as seen [in the classes section](#classes).
 
 Finally, since some characters have other meanings when
-used (see [Special Patterns](#special-patterns)), they can't
+used (see [Markers](#markers)), they can't
 be used directly when writing a pattern. To use them in 
 a pattern, either use their codepoint form, or just prepend
 a blackslash (`\`) to the character in question. e.g. if
@@ -198,9 +204,9 @@ left-hand-sides/output phonemes are interpreted
 differently. The right-hand-sides/input sequences are
 treated the same in the two sections.
 
-#### Special Patterns
+#### Markers
 
-Not all values in the output sequence/right-hand-side
+Not all symbols in the output sequence/right-hand-side
 of a pattern represent characters that can be parsed.
 There are also several characters that represent 
 special information about the pattern:
@@ -216,9 +222,9 @@ special information about the pattern:
   - `+` : This pattern represents an upper-case letter/grapheme.
   - `-` : This pattern represents a  lower-case letter/grapheme.
 
-##### Capitalisation Patterns
+##### Capitalisation Markers
 
-First, if `+` or `-` are to be used, they must be the **first** symbol 
+First, if `+` or `-` are to be used, they must be the **first** symbol
 in the input sequence. However, most of the time, using `+` or `-` is
 completely unnecessary, as the program automatically generates parsers
 for the "official" upper-case and lower-case variants of a character.
@@ -237,10 +243,10 @@ i-no-dot : - U+0131
 i-no-dot : + I
 ```
 
-##### Word Start/End Patterns
+##### Word Start/End Markers
 
 Next are the patterns `^` and `%`. If present, these must be the first[^1]
-value in the sequence (but still after `+`/`-` if they're present). 
+symbol in the sequence (but still after `+`/`-` if they're present). 
 These require that a pattern only work at the start of a word, or
 work anywhere *except* the start of a word, respectively. These can
 be useful when a letter has a different interpretation depending on
@@ -269,11 +275,11 @@ phoneme of a word. Thus, the primary purpose of `%` is to enforce
 that a certain phoneme **can't** occur at the beginning of a word.
 
 `$` and `&` work similarly, except they match the *end* of a word
-instead of the beginning. They must be the final value in an input
+instead of the beginning. They must be the final symbol in an input
 sequence if present. Like `^`/`%`, they can be useful if the final
 grapheme of a word is interpreted differently from how it would
 be interpreted in the middle of a word. Again, it's only necessary
-to use `%` if a certain sequence of characters can **only** occur
+to use `&` if a certain sequence of characters can **only** occur
 in the middle of a word.
 
 Another use of `^` and `$` is for matching specific words that don't
@@ -292,7 +298,7 @@ fit the usual pronunciation rules. e.g.
 
 **Note**: Try to avoid using `&` in general. It will cause problems when
 trying to use it alongside a similar pattern that ends with a 
-[follow-pattern](#follow-patterns). e.g.
+[follow-marker](#follow-markers). e.g.
 
 ```
 ts1 : t s &
@@ -306,7 +312,7 @@ would always parse "ts" as `ts1` in the middle of a word, or as `ts4`
 at the end of the word[^4]. To fix this case, just remove the `&` from
 the end of the `ts1` pattern.
 
-##### Class Patterns
+##### Class Markers
 
 Next is `*`, which is just how `classes` are used in input sequences.
 To use them, you just write `*` immediately followed by the name of
@@ -322,10 +328,10 @@ ts' : t s *apost
 For more information on how to write and use classes, see [Classes](#classes)
 below.
 
-##### State Patterns
+##### State Markers
 
-Finally, there are the special characters `@` and `!`. These are used
-for state patterns. They are used like `*` for classes, 
+Finally, there are the special symbols `@` and `!`. These are used
+as state markers. They are used like `*` for classes, 
 except they have an additional parameter. You use them like so:
 
 ```
@@ -344,16 +350,20 @@ Again, `@` is used to check the current state, and
 `!` is used to change one of the state values. See
 [States](#states) for more information.
 
-##### Follow Patterns
+##### Follow Markers
+
+A follow marker is a special marker that allows the parser to check the
+upcoming phoneme. Patterns that end with a follow marker are thus called
+"follow patterns".
 
 Follow patterns were initially created for the [output specification](output.md),
-so you can read more about them [there](output.md#followed-by-patterns).
+so you can read more about them [there](output.md#followed-by-patterns]).
 
-Basically, a follow pattern succeeds if the *following phoneme* to be parsed
-matches a certain condition. e.g. the following phoneme have a certain trait
-or aspect, or maybe is one of several specified phonemes.
+Basically, a pattern with a follow marker succeeds if the *following phoneme* 
+to be parsed matches a certain condition. e.g. the following phoneme have 
+a certain trait or aspect, or maybe is one of several specified phonemes.
 
-Follow patterns can only go at the *end* of a full pattern, and are indicated
+Follow markers can only go at the *end* of a full pattern, and are indicated
 by a `>` character followed by the condition. For a single phoneme, trait,
 or aspect, the condition is just the name of that phoneme/trait/aspect, e.g.
 `>velar` or `>a`. For value-traits and aspects, you can also specify which
@@ -570,14 +580,14 @@ pattern.
 
 In order for changing the state to have any meaning, there
 needs to be a way to inspect the state during a pattern.
-To do this, you add a string of the following form
+To do this, you add a marker of the following form
 near[^3] the beginning of the output sequence:
 
 ```
 @<state_name>=<state_value>
 ```
 
-The form is nearly identical to the change-state strings,
+The form is nearly identical to the change-state markers,
 except that the first character is `@` instead of `!`. The 
 other difference is that you **can** check whether a **value**
 state is `on`, since all it checks is that **value** state in

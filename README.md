@@ -153,19 +153,23 @@ and run them there. For more info, see [running](docs/running.md).
 
 ### Case/Capitalisation
 
-Note that as of 2024-06-07, case detection is *still not implemented*.
+Casing has now been implemented as of September/October 2024. However,
+you should still make sure you check that casing behaves as you expect it 
+when testing the generated parser.
+
+~~Note that as of 2024-06-07, case detection is *still not implemented*.
 i.e. When a phoneme is parsed, data about whether the character was 
 upper-case or lower-case is not retained. While there is already a lot 
 of code to handle cases, it's effectively useless, since there's no
-indication of which case a `Phoneme` should be.
+indication of which case a `Phoneme` should be.~~
 
-This does not mean that you just shouldn't care about case; the
+~~This does not mean that you just shouldn't care about case; the
 generated parsers already interpret both upper-case and lower-case
 versions of the same character **as** the same character; you
-don't have to write out two patterns for the same character.
+don't have to write out two patterns for the same character.~~
 
-Similarly, you should still include case information in your
+~~Similarly, you should still include case information in your
 specifications where it's important. Once casing is implemented,
 it will correctly interpret the casing information in your
-specification files.
+specification files.~~
 

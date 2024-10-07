@@ -92,7 +92,7 @@ The most important distinctions are:
   - No separate single-phoneme section
   - State-checks come **before** the colon
   - Cases (i.e. capitalisation rules) are more complicated
-  - New "followed-by" patterns
+  - New "followed-by" markers
 
 The lack of a separate "single-phoneme" section just means that you need to
 write your patterns as though they were in the Multi-Phoneme section in the
@@ -166,7 +166,7 @@ patterns. You might want to use this for uncased orthographies, such as most
 syllabaries.
 
 However, if the character you're using doesn't follow standard unicode casing conventions,
-you can use the special case pattern `/?x`, where `x` is the input style of the
+you can use the special case marker `/?x`, where `x` is the input style of the
 case[^1]. Now, the output pattern can be divided in two: one portion for upper-case,
 and one portion for lower-case. The two halves are separated by a pipe (`|`). For example,
 
@@ -184,7 +184,8 @@ but doesn't change how that next phoneme is represented. e.g. If a phoneme is
 represented one way when followed by a vowel, and another way when followed by
 a consonant, you'll want to use a "Followed-By" pattern. 
 
-To use a followed-by pattern, you start with a `>` followed by a string. That
+To use a followed-by pattern, you write a pattern whose left-hand side
+ends with a followed-by marker. A followed-by marker starts with a `>` followed by a string. That
 string can be a group, a trait, an aspect, or a phoneme. For value-traits and
 value-aspects, it can optionally followed by an `=` and then a value. For example,
 for the phoneme specification...
@@ -242,7 +243,7 @@ u : u
 (a smooth) : a
 
 # A rough "i" followed by q or xh
-(i rough)  : ḯ
+(i rough) >back=uvular  : ḯ
 # Any other rough "i".
 (i rough)  : í
 
@@ -264,8 +265,8 @@ g : g
 
 ```
 
-**NEW**: You can now use boolean expressions with followed-by patterns.
-They work similarly to plain followed-by patterns, but are grouped together
+**NEW**: You can now use boolean expressions with followed-by markers.
+They work similarly to plain followed-by markers, but are grouped together
 between parentheses after the `>`. e.g.
 
 ```
@@ -291,7 +292,7 @@ interpreted like so:
 (a&b|!c&d|e|f&!g&h) ==> ((a & b) | ((!c) & d) | e | (f & (!g) & h))
 ```
 
-**Note**: Using `!`/`~` together with aspect-at/trait-at patterns might
+**Note**: Using `!`/`~` together with aspect-at/trait-at markers might
 not work as expected; e.g.
 
 ```
