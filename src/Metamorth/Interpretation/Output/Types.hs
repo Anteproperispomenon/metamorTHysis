@@ -18,6 +18,8 @@ module Metamorth.Interpretation.Output.Types
   , PhonePatternF(PhonemeName, PhoneAtStart, PhoneNotStart, PhoneAtEnd, PhoneNotEnd, PhoneFollow)
   , PhoneFollow(..)
   , CharPatternItem(..)
+  , extractChars
+  , CharPatternItems(..)
   , CharPattern(..)
   , OutputHeader(..)
   -- * State Operations
@@ -75,6 +77,9 @@ data OutputCase
   --   The parameters tell you how to transform
   --   the input case to the output case. 
   | OCDetect CaseSource CaseApply
+  -- | Like `OCDetect`, but has specific characters
+  --   for upper and lower.
+  | OCDetectSep CaseSource
   -- | OCDetectIndividual -- not yet implemented.
   deriving (Show, Eq, Ord)
 
@@ -274,8 +279,20 @@ data CharPatternItem
   | UncasableChar Char -- ^ A single uncasable `Char`.
   deriving (Show, Eq, Ord)
 
+extractChars :: CharPatternItem -> Char
+extractChars (CasableChar   c) = c
+extractChars (UncasableChar c) = c
+
+-- | A newer version of `[CharPatternItem]` that
+--   allows a pattern to have separate upper and
+--   lower case letters.
+data CharPatternItems
+  = CaseRegular  [CharPatternItem]
+  | CaseSeparate [Char] [Char]
+  deriving (Show, Eq, Ord)
+
 data CharPattern = CharPattern
-  { cpPatterns     :: [CharPatternItem]
+  { cpPatterns     :: CharPatternItems -- [CharPatternItem]
   , cpStateChanges :: [ModifyStateX]
   } deriving (Show, Eq)
 

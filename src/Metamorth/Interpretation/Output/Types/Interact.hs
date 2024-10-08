@@ -17,8 +17,9 @@ data PhonemeNameInformation = PhonemeNameInformation
   , pniTraits  :: M.Map String (Name, Maybe (Name, M.Map String Name))
   , pniGroups  :: M.Map String Name -- :: Phoneme -> Bool
   , pniWordTypeNames  :: (Name, (Name, Name))
-  , pniCaseExpr  :: Exp
-  , pniPhoneType :: Name
+  , pniCaseExpr   :: Exp
+  , pniPhoneType  :: Name
+  , pniCanBeCased :: Bool
   } deriving (Show, Eq)
 
 

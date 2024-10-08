@@ -48,6 +48,7 @@ data PhonemeParsingStructure
       { ppsPhonemeInventory :: PhonemeInventory
       , ppsPhonemeAspects   :: M.Map String [String]
       , ppsPhonemeTraits    :: M.Map String [String]
+      , ppsCanBeCased       :: Bool
       } deriving (Show, Eq)
 
 defaultPhonemeStructure :: PhonemeParsingStructure
@@ -56,6 +57,7 @@ defaultPhonemeStructure
       (PhonemeSet M.empty)
       M.empty
       M.empty
+      True
 
 -- | The set of phonemes, sorted into groups, along with
 --   their properties.

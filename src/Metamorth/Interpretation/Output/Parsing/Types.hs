@@ -4,10 +4,13 @@
 module Metamorth.Interpretation.Output.Parsing.Types
   ( OutputParser
   , embedOutputParser
+  , testOutputParser1
+  , testOutputParser2
   , OutputParsingState(..)
   , runOnPhoneme
   , CharPatternRaw(..)
   , validateCharPattern
+  , validateCharPattern2
   , ImportProperty(..)
   , PhoneName(..)
   , PhonePatternRaw(..)
@@ -39,6 +42,7 @@ import Metamorth.Helpers.Error
 import Metamorth.Helpers.Error.RWS
 import Metamorth.Helpers.Maybe
 import Metamorth.Helpers.Char
+import Metamorth.Helpers.List
 
 import Metamorth.Interpretation.Output.Types
 import Metamorth.Interpretation.Output.Types.Alt
@@ -77,6 +81,27 @@ embedOutputParser grps trts asps phons prs
       , opsDefaultCasing     = OCNull
       , opsOutputTrie        = TM.empty
       }
+
+testOutputParser1 :: OutputParser a -> T.Text -> Either String (a, OutputParsingState, [ParserMessage])
+testOutputParser1 prs = AT.parseOnly (runRWST prs "N/A" st) 
+  where 
+    st = OutputParsingState
+        { opsStateDictionary   = M.empty
+        , opsGroupDictionary   = S.empty
+        , opsGroupDictionary'  = S.empty
+        , opsTraitDictionary   = M.empty
+        , opsTraitDictionary'  = M.empty
+        , opsAspectDictionary  = M.empty
+        , opsAspectDictionary' = M.empty
+        , opsPhoneDictionary   = S.empty
+        , opsDefaultCasing     = OCNull
+        , opsOutputTrie        = TM.empty
+        }
+
+testOutputParser2 :: OutputParser a -> T.Text -> Either String (a, [ParserMessage])
+testOutputParser2 prs txt = do 
+  (rslt,_,msgs) <- testOutputParser1 prs txt
+  return (rslt, msgs)
 
 -- | The State type for `OutputParser`.
 data OutputParsingState = OutputParsingState
@@ -291,6 +316,10 @@ getPlainChar (PlainCharR c)
   | otherwise   = Just $ UncasableChar c
 getPlainChar _ = Nothing
 
+getFreeChar :: CharPatternRaw -> Maybe Char
+getFreeChar (PlainCharR c) = Just c
+getFreeChar _              = Nothing
+
 getPlainState :: CharPatternRaw -> Maybe ModifyState
 getPlainState (SetStateR str (Left val)) = Just $ ModifyStateV str val
 getPlainState (SetStateR str (Right bl)) = Just $ ModifyStateB str bl
@@ -301,6 +330,15 @@ validateCharPattern mp cps = do
   let (sts, rst) = partitionMaybe getPlainState cps
       itms       = mapMaybe getPlainChar rst
   sts' <- traverse (validateModifyState mp) sts
-  return $ CharPattern itms sts'
+  return $ CharPattern (CaseRegular itms) sts'
 
+validateCharPattern2 :: M.Map String (Maybe (S.Set String)) -> [CharPatternRaw] -> [CharPatternRaw] -> Either String CharPattern
+validateCharPattern2 mp cps1 cps2 = do
+  let (sts1, rst1) = partitionMaybe getPlainState cps1
+      (sts2, rst2) = partitionMaybe getPlainState cps2
+      itms1        = mapMaybe getFreeChar rst1
+      itms2        = mapMaybe getFreeChar rst2
+      sts          = nubSort (sts1 ++ sts2)
+  sts' <- traverse (validateModifyState mp) sts
+  return $ CharPattern (CaseSeparate itms1 itms2) sts'
 

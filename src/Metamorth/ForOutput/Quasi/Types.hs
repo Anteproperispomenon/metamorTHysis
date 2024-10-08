@@ -13,14 +13,16 @@ module Metamorth.ForOutput.Quasi.Types
 
 import Data.Map.Strict qualified as M
 
-type ExtraLanguageDetails = (Maybe String, M.Map String String)
-
+type ExtraLanguageDetails = (Maybe String, M.Map String String) -- , Bool)
+ 
 -- | Details about the language that
 --   don't fit nicely into one piece
 --   or another.
 pattern ExtraLanguageDetails :: Maybe String -> M.Map String String -> ExtraLanguageDetails
 pattern ExtraLanguageDetails { eldLanguageName, eldOrthDescs } = (eldLanguageName, eldOrthDescs)
 
+-- pattern ExtraLanguageDetails :: Maybe String -> M.Map String String -> Bool -> ExtraLanguageDetails
+-- pattern ExtraLanguageDetails { eldLanguageName, eldOrthDescs, eldIsCased } = (eldLanguageName, eldOrthDescs, eldIsCased)
 
 
 

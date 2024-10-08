@@ -64,8 +64,10 @@ import Metamorth.Interpretation.Output.TH.Misc
 
 import Metamorth.Interpretation.Output.Parsing.Types
 
-import Metamorth.ForOutput.Monad.Matcher.Stateful
+import Metamorth.ForOutput.Monad.Matcher.Stateful2
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
+
+import Metamorth.ForOutput.Functor.Cased qualified as C2
 
 -- | The main function for creating output 
 --   declarations.
@@ -91,21 +93,25 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
   let (wordType, (wordCon1, wordCon2)) = ondWordTypes ond
       defSt = ondDefState ond
       charCase = ondCaseExpr ond
+      charPhon = ondPhoneExpr ond
   
   xyz <- newName "xyz"
   makeOutStr <- newName "makeMonoid"
 
+  -- The function for checking case, lifted into a lambda.
   caseFunc <- [| \x -> [$(pure charCase) x] |]
+  phonFunc <- [| \x -> $(pure charPhon) x |]
+
 
   func1Exp <- [| matchesLF' $(pure $ VarE stNom) $(pure $ VarE nstNom) |]
-  func2Exp <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz] ) -> matchElse $(pure caseFunc) $(pure $ VarE xyz) $(pure defSt) $(pure func1Exp) 
+  func2Exp <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz] ) -> matchElse $(pure caseFunc) $(pure phonFunc) $(pure $ VarE xyz) $(pure defSt) $(pure func1Exp) 
                        ; $(pure $ ConP wordCon2 [] [VarP xyz] ) -> return $(pure $ AppE (VarE makeOutStr) (VarE xyz))
                        }  
               |]
   func3Exp <- [| matchesSimple $(pure func2Exp) |]
 
   funcByteExp1 <- [| matchesRF' $(pure $ VarE stNom) $(pure $ VarE nstNom) |]
-  funcByteExp2 <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz]) -> TLE.encodeUtf8Builder <$> matchElse $(pure caseFunc) $(pure $ VarE xyz) $(pure defSt) $(pure funcByteExp1) 
+  funcByteExp2 <- [| \case { $(pure $ ConP wordCon1 [] [VarP xyz]) -> TLE.encodeUtf8Builder <$> matchElse $(pure caseFunc) $(pure phonFunc) $(pure $ VarE xyz) $(pure defSt) $(pure funcByteExp1) 
                            ; $(pure $ ConP wordCon2 [] [VarP xyz]) -> return $ TE.encodeUtf8Builder $(pure $ VarE xyz) 
                            }
                   |]
@@ -113,25 +119,28 @@ generateOutputDecs userName sfx opo pni = runQS sfx $ do
 
 -- matchElse :: (Monad m, Monoid w) => (j -> w) -> [j] -> s' -> MatcherT j w s' m r -> MatcherT i v s m r
 
-  outputSign1 <- [t| forall str. (IsString str, Monoid str) => (T.Text -> str) -> MatcherE $(pure $ ConT wordType) () () str |]
+  outputSign1 <- [t| forall str. (IsString str, Monoid str) => (T.Text -> str) -> MatcherE $(pure $ ConT wordType) $(pure $ ConT wordType) () () str |]
   let outputSig1  = SigD userFuncName2 outputSign1
       -- outputDec1  = ValD (VarP userFuncName2) (NormalB func3Exp) []
       outputDec1 = FunD userFuncName2 [Clause [VarP makeOutStr] (NormalB func3Exp) []]
       outputDefn1 = [outputSig1, outputDec1]
   
   outputSign2 <- [t| forall str. (IsString str, Monoid str) => (T.Text -> str) -> [$(pure $ ConT wordType)] -> Either String str |]
-  outputFuncX <- [e| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ AppE (VarE userFuncName2) (VarE makeOutStr)) |]
+  outputFuncX <- [e| evalMatcherE (const ()) id $(pure $ VarE xyz) () $(pure $ AppE (VarE userFuncName2) (VarE makeOutStr)) |]
   let outputSig2  = SigD userFuncName outputSign2
       outputDec2  = FunD userFuncName [Clause [VarP makeOutStr, VarP xyz] (NormalB outputFuncX) []]
       outputDefn2 = [outputSig2, outputDec2]
 
-  outputSign3 <- [t| MatcherE $(pure $ ConT wordType) () () BL.ByteString |]
+  outputSign3 <- [t| MatcherE $(pure $ ConT wordType) $(pure $ ConT wordType) () () BL.ByteString |]
   let outputSig3  = SigD userFuncName3 outputSign3
       outputDec3  = FunD userFuncName3 [Clause [] (NormalB funcByteExp3) []]
       outputDefn3 = [outputSig3, outputDec3]
   
   outputSign4 <- [t| [$(pure $ ConT wordType)] -> Either String BL.ByteString |]
-  outputFunc4 <- [e| evalMatcherE (const ()) $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
+  outputFunc4 <- if (ondIsCased ond)
+    -- then [e| evalMatcherE (\x -> $(pure (ondCaseExpr ond)) x) () $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
+    then [e| evalMatcherE (const ()) id $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
+    else [e| evalMatcherE (const ()) id $(pure $ VarE xyz) () $(pure $ VarE userFuncName3) |]
   let outputSig4  = SigD userFuncName4 outputSign4
       outputDec4  = FunD userFuncName4 [Clause [VarP xyz] (NormalB outputFunc4) []]
       outputDefn4 = [outputSig4, outputDec4]
@@ -152,6 +161,16 @@ makeOutputDatabase opo pni = do
   -- Create the group dict by looking up the names of the
   -- necessary functions in the PhonemeNameInformation.
   groupDict <- M.mapMaybe id <$> forMapFromSet (opoGroupDictionary opo) (\str -> qLookupErrorS str (pniGroups pni))
+  
+  let theCaseExpr  = if (pniCanBeCased pni)
+        then (VarE 'C2.extractCase3)
+        else AppE (VarE 'const) (ConE 'LowerCase)
+      thePhoneExpr = if (pniCanBeCased pni)
+        then (VarE 'C2.extractValue)
+        else (VarE 'id)
+      -- thePhoneType = if (pniCanBeCased pni)
+      --   then (AppT (ConT 'C2.CasedValue))
+      --   else ()
 
   let ond = OutputNameDatabase
         { ondPhonemes  = pniPhones  pni
@@ -162,8 +181,10 @@ makeOutputDatabase opo pni = do
         , ondStates    = stDict
         , ondPhoneType = pniPhoneType pni
         , ondWordTypes = pniWordTypeNames pni
-        , ondCaseExpr  = AppE (VarE 'const) (ConE 'LowerCase) -- temp
+        , ondCaseExpr  = theCaseExpr
         , ondDefState  = makeDefaultState stRecNameC stDict
+        , ondPhoneExpr = thePhoneExpr
+        , ondIsCased   = pniCanBeCased pni
         }
   return (stDecs, ond, opoOutputTrie opo)
   where

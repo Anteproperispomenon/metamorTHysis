@@ -28,10 +28,13 @@ module Metamorth.ForOutput.Functor.Cased
   , extractValue
   , extractCased
   , extractCase
+  , extractCase3
   , liftPred
   ) where
 
 import Data.Foldable
+
+import Metamorth.ForOutput.Char (CharCase(..))
 
 -- | A simple `Functor` with two options.
 --   Therefore, @CasedValue a@ is equivalent
@@ -52,6 +55,10 @@ extractCased (MajVal x) = x
 extractCase :: CasedValue a -> Bool
 extractCase (MinVal _) = False
 extractCase (MajVal _) = True
+
+extractCase3 :: CasedValue a -> CharCase
+extractCase3 (MinVal _) = LowerCase
+extractCase3 (MajVal _) = UpperCase
 
 -- | Lift a predicate to work on any
 --   instance of `Foldable`. This is

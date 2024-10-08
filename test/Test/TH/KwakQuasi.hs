@@ -25,6 +25,8 @@ language : "Kwak'wala"
 
 phonemes : "examples/phonemes/kwakwala.thym"
 
+cased : yes
+
 Umista  
   input  : "examples/parsing/kwakwala_umista.thyp"
   output : "examples/output/kwakwala_umista.thyo"
