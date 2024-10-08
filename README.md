@@ -151,6 +151,9 @@ and run them there. For more info, see [running](docs/running.md).
 
 ## Notes
 
+There is also [a glossary](docs/glossary.md) of terms used in the documentation
+available.
+
 ### Case/Capitalisation
 
 Casing has now been implemented as of September/October 2024. However,
