@@ -163,6 +163,7 @@ import Metamorth.Interpretation.Parser.Parsing.Trie (generaliseStateTrie)
 import Metamorth.Interpretation.Parser.TH.Lookahead
 import Metamorth.Helpers.TH
 
+import Metamorth.ForOutput.Functor.Cased qualified as C2
 
 -- How to check for the end of a word:
 -- Create a bool function that checks
@@ -210,6 +211,7 @@ testTheParserE spi fp = do
             (spiPhoneTypeName spi)
             (spiMkMaj spi)
             (spiMkMin spi)
+            (False)
             (spiWordTypeNames spi)
             M.empty
             M.empty
@@ -237,6 +239,7 @@ testTheParser spi fp = do
             (spiPhoneTypeName spi)
             (spiMkMaj spi)
             (spiMkMin spi)
+            (False)
             (spiWordTypeNames spi)
             M.empty
             M.empty
@@ -303,6 +306,7 @@ makeTheParser
   -> Name                             -- ^ The name of the type of Phonemes.
   -> (Exp -> Exp)                     -- ^ How to convert a Pattern synonym to an upper-case character.
   -> (Exp -> Exp)                     -- ^ How to convert a Pattern synonym to an lower-case character.
+  -> Bool                             -- ^ Whether the phoneme set supports casing.
   -> (Name, (Name, Name))             -- ^ The type/data constructors for the word/punct type.
   -> M.Map String (Name, (Name, M.Map String Name))       -- ^ Function names for checking aspects.
   -> M.Map String (Name, Maybe (Name, M.Map String Name)) -- ^ Functions for checking traits.
@@ -310,8 +314,8 @@ makeTheParser
   -> ParserParsingState               -- ^ The data from parsing the specification.
   -> ParserOptions                    -- ^ Parser 
   -> Q ([Dec], StaticParserInfo, Name)
-makeTheParser phoneMap aspectMap phoneName mkMaj mkMin wordDataNames aspectFuncs traitFuncs groupFuncs pps pops
-  = runQS (poNameSuffix pops) $ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames aspectFuncs traitFuncs groupFuncs pps pops
+makeTheParser phoneMap aspectMap phoneName mkMaj mkMin canBeCased wordDataNames aspectFuncs traitFuncs groupFuncs pps pops
+  = runQS (poNameSuffix pops) $ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin canBeCased wordDataNames aspectFuncs traitFuncs groupFuncs pps pops
 
 -- | Construct the actual parser code.
 makeTheParser'
@@ -320,6 +324,7 @@ makeTheParser'
   -> Name                             -- ^ The name of the type of Phonemes.
   -> (Exp -> Exp)                     -- ^ How to convert a Pattern synonym to an upper-case character.
   -> (Exp -> Exp)                     -- ^ How to convert a Pattern synonym to an lower-case character.
+  -> Bool                             -- ^ Whether the phoneme set supports casing.
   -> (Name, (Name, Name))             -- ^ The type/data constructors for the word/punct type.
   -> M.Map String (Name, (Name, M.Map String Name))
   -> M.Map String (Name, Maybe (Name, M.Map String Name)) -- ^ Functions for checking traits.
@@ -327,7 +332,7 @@ makeTheParser'
   -> ParserParsingState               -- ^ The data from parsing the specification.
   -> ParserOptions                    -- ^ Parser 
   -> QS ([Dec], StaticParserInfo, Name)
-makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames aspectFuncs traitFuncs groupFuncs pps pops = do
+makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin canBeCased wordDataNames aspectFuncs traitFuncs groupFuncs pps pops = do
   -- The name for the function that resets the auto-off states after
   -- every phoneme. If there are no auto-off states, this function
   -- should be a no op.
@@ -356,6 +361,10 @@ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames aspectFunc
 
   (charPredDecs, (punctName, isEndName, noEndName)) <- makeWordEndFunctions mainTrie newClassDict
 
+  let encPhoneType = if canBeCased
+        then (AppT (ConT ''C2.CasedValue) (ConT phoneName))
+        else (ConT phoneName)
+
   let spi = StaticParserInfo
               { spiAnnotationMap   = annNames
               , spiConstructorMap  = phoneMap
@@ -370,6 +379,7 @@ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin wordDataNames aspectFunc
               , spiStateTypeName   = stateTypeName
               , spiStateConsName   = stateConsName
               , spiDefStateName    = defStateName
+              , spiEncPhoneType    = encPhoneType
               , spiResetContFunc   = resetContName
               , spiStateDictionary = newStateDict
               , spiWordTypeNames   = wordDataNames
@@ -727,10 +737,11 @@ createCasesForStart grdName stateValName spi cp trieAnn@(TrieAnn _) _mph = case 
     if (any isCasable cs)
       then Right (Left (NormalG checkExp', consumerFuncE boolExp funcName), True )
       else Right (Left (NormalG checkExp', consumerFuncX         funcName), False)
-  WordStart -> Left ["Shouldn't encounter a \"WordStart\" when using this function."]
-  WordEnd   -> Left ["Shouldn't encounter a \"WordEnd\" when using this function."]
-  NotStart  -> Left ["Shouldn't encounter a \"NotStart\" when using this function."]
-  NotEnd    -> Left ["Shouldn't encounter a \"NotEnd\" when using this function."]
+  WordStart     -> Left ["Shouldn't encounter a \"WordStart\" when using this function."]
+  WordEnd       -> Left ["Shouldn't encounter a \"WordEnd\" when using this function."]
+  NotStart      -> Left ["Shouldn't encounter a \"NotStart\" when using this function."]
+  NotEnd        -> Left ["Shouldn't encounter a \"NotEnd\" when using this function."]
+  (FollowPat _) -> Left ["Shouldn't encounter a \"FollowPat\" when using this function."]
 
   where
     funcMap  = spiAnnotationMap spi
@@ -787,17 +798,20 @@ createCasesForStart grdName stateValName spi cp TrieLeaf mph = case cp of
     stateModifier <- modifyStateExps sdict stateMods
     let checkExp = AppE (VarE classFunc) (VarE grdName)
         -- boolExp  = AppE (VarE 'isUpperCase) (VarE grdName)
-        -- checkExp' = case mgrdExp of
-        --   Nothing -> checkExp
-        --   (Just guardExp) -> andE checkExp guardExp
+        -- These lines were commented out, and I don't know why.
+        -- I've uncommented them, since I'm pretty sure they're necessary.
+        checkExp' = case mgrdExp of
+          Nothing -> checkExp
+          (Just guardExp) -> andE checkExp guardExp
     -- can probably just reduce to one expression.
     if (any isCasable zs)
-      then Right (Left (NormalG checkExp, stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs), True ) -- need to change, maybe?
-      else Right (Left (NormalG checkExp, stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs), False)
-  WordStart -> Left ["Shouldn't encounter a \"WordStart\" when using this function."]
-  WordEnd   -> Left ["Shouldn't encounter a \"WordEnd\" when using this function."]
-  NotStart  -> Left ["Shouldn't encounter a \"NotStart\" when using this function."]
-  NotEnd    -> Left ["Shouldn't encounter a \"NotEnd\" when using this function."]
+      then Right (Left (NormalG checkExp', stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs), True ) -- need to change, maybe?
+      else Right (Left (NormalG checkExp', stateModifier $ consumerRetB mkMaj mkMin grdName cs mulExprs), False)
+  WordStart     -> Left ["Shouldn't encounter a \"WordStart\" when using this function."]
+  WordEnd       -> Left ["Shouldn't encounter a \"WordEnd\" when using this function."]
+  NotStart      -> Left ["Shouldn't encounter a \"NotStart\" when using this function."]
+  NotEnd        -> Left ["Shouldn't encounter a \"NotEnd\" when using this function."]
+  (FollowPat _) -> Left ["Shouldn't encounter a \"FollowPat\" when using this function."]
 
   where
     classMap = spiClassMap spi
@@ -933,6 +947,9 @@ data StaticParserInfo = StaticParserInfo
   , spiStateConsName   :: Name
   -- | The `Name` of the default value for the state value.
   , spiDefStateName    :: Name
+  -- | The `Type` used for phonemes. It can be either a plain
+  --   phoneme, or one enclosed in `CasedValue`.
+  , spiEncPhoneType   :: Type
   -- | The State information dictionary. This is
   --   implemented as a `M.Map` from `String`s to
   --   `Name`s of the argument in the State type.
@@ -983,6 +1000,7 @@ instance Eq StaticParserInfo where
       && ((spiStateTypeName x) == (spiStateTypeName y))
       && ((spiStateConsName x) == (spiStateConsName y))
       && ((spiDefStateName x) == (spiDefStateName y))
+      && ((spiEncPhoneType x) == (spiEncPhoneType y))
       && ((spiStateDictionary x) == (spiStateDictionary y))
       && ((spiWordTypeNames x) == (spiWordTypeNames y))
       && ((spiResetContFunc x) == (spiResetContFunc y))
@@ -1004,6 +1022,7 @@ instance Show StaticParserInfo where
       <> ", spiPhoneTypeName = "   <> show (spiPhoneTypeName x)
       <> ", spiStateTypeName = "   <> show (spiStateTypeName x)
       <> ", spiStateConsName = "   <> show (spiStateConsName x)
+      <> ", spiEncPhoneType = "    <> show (spiEncPhoneType x)  
       <> ", spiDefStateName = "    <> show (spiDefStateName x)
       <> ", spiStateDictionary = " <> show (spiStateDictionary x)
       <> ", spiWordTypeNames = "   <> show (spiWordTypeNames x)
@@ -1091,10 +1110,11 @@ constructFunctionsBoth spi bl trie funNomStrt funNomRst = do
                 [| do { st <- State.get ; pkc <- $(peekCharQ') ; ($(return $ VarE nom1) st pkc) <|> ( $(return $ VarE nom3) st pkc) } |]
               followFuncExp <-
                 [| do { st <- State.get ; pkc <- $(peekCharQ') ; ($(return $ VarE nom2) st pkc) <|> ( $(return $ VarE nom3) st pkc) } |]
-              let phoneType = spiPhoneTypeName spi
+              let encPhoneType = spiEncPhoneType spi
+                  -- phoneType = spiPhoneTypeName spi
                   stateType = spiStateTypeName spi
                   -- stateCons = spiStateConsName spi
-              functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty $(return $ ConT phoneType)) |]
+              functionType    <- [t| $(parserTQ (ConT stateType)) (NonEmpty $(return encPhoneType) ) |]
               -- Might want to check these strings are valid...
               let func1Dec = FunD funNom1 [Clause [] (NormalB combinedFuncExp) []]
                   func2Dec = FunD funNom2 [Clause [] (NormalB followFuncExp  ) []]
@@ -1168,7 +1188,7 @@ constructFunctionsSB toReduce spi xcp stVals funcNames trie = do
           -- Zip the bool results with stuff.
           subTriesX = zip subTries rsltsZ
           -- Partition the class matches from the char matches.
-          (grds, mtchs) = partitionEithers  rsltsY
+          (grds, mtchs) = partitionEithers rsltsY
           grdBody   = GuardedB $ map fst grds
           -- Matching for class types
           grdMatch  = if (null grds) then [] else [Match (VarP grdName) grdBody []]
@@ -1180,7 +1200,8 @@ constructFunctionsSB toReduce spi xcp stVals funcNames trie = do
           caseStuff = if toReduce then (groupCaseGuards casePrime) else casePrime
           stateType = spiStateTypeName spi
           -- stateCons = spiStateConsName spi
-      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty $(return $ ConT phoneType)) ) |]
+      let encPhoneType = spiEncPhoneType spi
+      mainType <- [t| $(return $ ConT stateType) -> Char -> ( $(parserTQ (ConT stateType)) (NonEmpty $(return $ encPhoneType)  ) ) |]
       let mainSign = SigD topFuncName mainType
           mainDec  = FunD topFuncName [Clause [VarP stateNom, VarP peekName] (NormalB caseStuff) []]
       -- okay, the hard part
@@ -1214,7 +1235,7 @@ constructFunctions'
 constructFunctions' _ _ _ _ _ _ TrieLeaf _ _ = return []
 constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal funcNames@(strtFuncName, rstFuncName) = do
   -- uh...
-  rslts <- eitherToRWST $ constructGuards mbl peekName trieAnn thisVal theTrie rstFuncName spi cPats
+  rslts <- eitherToRWST $ constructGuards mbl peekName trieAnn thisVal theTrie rstFuncName spi isCased cPats
   case rslts of
     Nothing -> return []
     (Just (bod, conts)) -> do
@@ -1241,7 +1262,10 @@ constructFunctions' blName peekName isCased spi theTrie cPats trieAnn thisVal fu
       -- mbool <- lift $ [t| Maybe Bool |]
       -- mchar <- lift $ [t| Maybe Char |]
       let phonType = ConT $ spiPhoneTypeName spi
-          phonType' = AppT (ConT ''NonEmpty) phonType
+          -- phonType' = AppT (ConT ''NonEmpty) phonType
+          -- phonType' = AppT (ConT ''NonEmpty) (AppT (ConT ''C2.CasedValue) phonType)
+          encPhone = spiEncPhoneType spi
+          phonType' = AppT (ConT ''NonEmpty) encPhone
           statType = ConT $ spiStateTypeName spi
           funcType = arrowChainT margs (parserT' statType phonType')
           funcSign = SigD funcNom funcType
@@ -1276,10 +1300,11 @@ constructGuards
   -> Maybe (PhoneResult, Caseness)
   -> TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)) -- ^ This node in the Trie.
   -> Name
-  -> StaticParserInfo -- ^ Constant info about the parser.
+  -> StaticParserInfo -- ^ Constant info about the parser
+  -> Bool
   -> [CharPattern]
   -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneResult, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)))])
-constructGuards mbl charVarName trieAnn mTrieVal theTrie rstFuncName spi = makeGuards
+constructGuards mbl charVarName trieAnn mTrieVal theTrie rstFuncName spi isCased = makeGuards
       mbl
       charVarName
       trieAnn
@@ -1288,6 +1313,7 @@ constructGuards mbl charVarName trieAnn mTrieVal theTrie rstFuncName spi = makeG
       (spiAnnotationMap spi)
       (spiMkMaj spi)
       (spiMkMin spi)
+      (isCased)
       (spiConstructorMap spi)
       (spiAspectMaps spi)
       (spiClassMap spi)
@@ -1310,6 +1336,7 @@ makeGuards
   -> M.Map TrieAnnotation Name     -- ^ Mapping from `TrieAnnotation`s to function names.
   -> (Exp -> Exp)                  -- ^ Maj-maker
   -> (Exp -> Exp)                  -- ^ Min-maker
+  -> Bool                          -- ^ Whether this phoneme set is casable.
   -> (M.Map String Name)           -- ^ Map for patterns/constructors.
   -> (M.Map String ([M.Map String Name])) -- ^ Map for constructors of sub-elements.
   -> (M.Map String (Name, [Char])) -- ^ Map for class function names.
@@ -1324,7 +1351,7 @@ makeGuards
   -> Name                          -- ^ Name of the "not first" parser.
   -> [CharPattern]                 -- ^ The `CharPattern` leading up to this point.
   -> Either [String] (Body, [((TrieAnnotation, Maybe (PhoneResult, Caseness)), Bool, CharPattern, TM.TMap CharPattern (TrieAnnotation, Maybe (PhoneResult, Caseness)))])
-makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
+makeGuards mbl@(Just blName) charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin isCased patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1417,7 +1444,7 @@ data PhoneResult = PhoneResult
               Nothing -> return Nothing
               (Just (prslt, cs)) -> Just <$> mkFinalOption prslt cs
 
-            return $ createMultiLookaheadPure (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
+            return $ createMultiLookaheadPure' isCased (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
 
           -- [(Exp, [(Exp -> Exp, Exp)])] === [(stateMod, [(phonemeCheck, result)])]
           -- createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
@@ -1480,7 +1507,7 @@ data PhoneResult = PhoneResult
       cstrExp        <- phoneNamePatterns patMap aspMaps pnom
       resultModifier <- modifyStateExps sdict pmod'
       return $ resultModifier $ phonemeRet' mkMaj mkMin cs mbl cstrExp
-makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
+makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin isCased patMap aspMaps classMap endWordFunc notEndWordFunc resetStateFunc resetStateMods sdict aspectFuncs traitFuncs groupFuncs rstFuncName precPatrn = do
   (grds, subs) <- fmap unzip $ Bi.first concat $ liftEitherList $ map mkRslts subTries
   lstGrd       <- finalRslt
   return (GuardedB $ (map (first NormalG) grds) ++ [lstGrd], catMaybes subs)
@@ -1556,7 +1583,7 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
               Nothing -> return Nothing
               (Just (prslt, cs)) -> Just <$> mkFinalOption prslt cs
 
-            return $ createMultiLookaheadPure (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
+            return $ createMultiLookaheadPure' isCased (mkName "zNom12") stModLamb rstFuncName folPatsP altExpr
 
           -- [(Exp, [(Exp -> Exp, Exp)])] === [(stateMod, [(phonemeCheck, result)])]
           -- createMultiLookaheadPure2 :: Name -> Name -> [(Exp, [(Exp -> Exp, Exp)])] -> Maybe (Exp, Exp) -> Exp
@@ -1616,6 +1643,8 @@ makeGuards Nothing charVarName trieAnn mTrieVal theTrie funcMap mkMaj mkMin patM
       let pnom  = prPhonemes  prslt
           pmod  = prStateMods prslt
           pmod' = mergeStatesInto resetStateMods pmod
+      -- Since this is in the "case not yet determined" part,
+      -- we need to figure out what the case should be.
       cstrExp        <- phoneNamePatterns patMap aspMaps pnom
       resultModifier <- modifyStateExps sdict pmod'
       return $ resultModifier $ phonemeRet' mkMaj mkMin cs Nothing cstrExp
@@ -1794,7 +1823,9 @@ phonemeRetZB
 phonemeRetZB mkMaj mkMin cs peekName rslts
   | cs == CMaj = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMaj rslt)
   | cs == CMin = AppE ret $ formMulExp $ forMap rslts $ \rslt -> (mkMin rslt)
-  | otherwise  = condCaseExp (AppE (VarE 'isUpperCase) (VarE peekName)) mkMaj mkMin rslts
+  -- Temp?
+  | otherwise  = condCaseExp (ConE 'False) mkMaj mkMin rslts 
+  -- | otherwise  = condCaseExp (AppE (VarE 'isUpperCase) (VarE peekName)) mkMaj mkMin rslts
   where ret = VarE 'return
 
 
@@ -2193,6 +2224,7 @@ exampleInfo
       (mkName "PhonemeState")
       (mkName "PhonemeState2")
       (mkName "defStateVal")
+      (ConT (mkName "Phoneme"))
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
       M.empty
@@ -2218,6 +2250,7 @@ exampleInfo2
       (mkName "PhonemeState")
       (mkName "PhonemeState2")
       (mkName "defStateVal")
+      (ConT (mkName "Phoneme"))
       (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")])))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))
       M.empty
@@ -2248,6 +2281,7 @@ exampleInfo3
       (mkName "PhonemeState")
       (mkName "PhonemeState2")
       (mkName "defStateVal")
+      (ConT (mkName "Phoneme"))
       M.empty -- filled in by `makeTheParser`
       -- (M.fromList $ [("position",(mkName "vowPosition",Just (mkName "Position", M.fromList [("front", mkName "Front"), ("back", mkName "Back")]))), ("hasw", (mkName "doesHaveW", Nothing))]) -- for now.
       (mkName "CasedWord", (mkName "WordPh", mkName "WordPunct"))

@@ -85,7 +85,7 @@ fields, as well as a description of that orthography.
 
 The [metamorTHysis template](https://github.com/Anteproperispomenon/metamorTHysis-template) also
 provides a simple HTML server that can be accessed by users without having to use a separate
-program. It can be accessed by going to `localhost:8081/iteractive/convert.html`, which provides
+program. It can be accessed by going to `localhost:8081/interactive/convert.html`, which provides
 a simple interface to using the JSON server. Note that the files in the `interactive` directory
 are served from the `static` directory in your project.
 

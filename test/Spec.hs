@@ -174,6 +174,17 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing Case Output..."
+  let case1 = TLE.decodeUtf8 <$> KwakQ.convertOrthographyBS KwakQ.InGrubb KwakQ.OutUmista caseTest1
+  case case1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
+  putStrLn "Testing Case Output..."
+  let case2 = TLE.decodeUtf8 <$> Fol.convertOrthographyBS Fol.InFollowA Fol.OutLookahead2 caseTest2
+  case case2 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
@@ -201,13 +212,13 @@ boasText1 :: T.Text
 boasText1 = "ăăë gŭ"
 
 autoTest2 :: T.Text
-autoTest2 = "eh'eh'a gwa'um'i" -- 
+autoTest2 = "Eh'eh'A gwA'uM'i" -- 
 
 backTest1 :: T.Text
-backTest1 = "tough tougra" -- 
+backTest1 = "Tough TouGra" -- 
 
 lookAheadTest1 :: T.Text
-lookAheadTest1 = "þa þna þøn þøjþvþ ød"
+lookAheadTest1 = "þa þnA þøn þøjþVþ ød"
 
 lookAheadTest2 :: T.Text
 lookAheadTest2 = "þaβ þбa þnaḅ"
@@ -216,7 +227,13 @@ lookAheadTest3 :: T.Text
 lookAheadTest3 = "ɵin ɵyn ɵyd ɵyg"
 
 lookAheadTest4 :: T.Text
-lookAheadTest4 = "apabaranadax awshawchawg"
+lookAheadTest4 = "ApAbaranAdax AwshawchAwg"
+
+caseTest1 :: T.Text
+caseTest1 = "Ehtla eHtlA"
+
+caseTest2 :: T.Text
+caseTest2 = "Iga iga oga"
 
 {-
    b : example=exam1

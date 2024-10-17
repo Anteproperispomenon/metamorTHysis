@@ -11,8 +11,11 @@ but with some key differences:
   - No classes
   - State-checks are placed **to the left** of the colon
   - More complicated types of cases/capitalisations.
-  - Support for checking the following phoneme.
-  - Support for checking traits and groups.
+  - ~~Support for checking the following phoneme.~~\*
+  - ~~Support for checking traits and groups.~~\*
+
+(\*Note: Support for checking the following phoneme and checking
+traits/groups has since been added to the parser specification.)
 
 So if you haven't read [the parser specification](parsing.md) yet,
 you'll probably want to do that first.
@@ -79,7 +82,7 @@ this section.
 For more info on how to actually use groups or traits in patterns,
 go down to the ["Followed-by" Patterns](#followed-by-patterns) section.
 
-### Patterns
+### Patterns and Markers
 
 Patterns work much the same way they did [in phoneme specifications](parsing.md#patterns),
 with a few differences [as mentioned in the introduction](#introduction).
@@ -89,7 +92,7 @@ The most important distinctions are:
   - No separate single-phoneme section
   - State-checks come **before** the colon
   - Cases (i.e. capitalisation rules) are more complicated
-  - New "followed-by" patterns
+  - New "followed-by" markers
 
 The lack of a separate "single-phoneme" section just means that you need to
 write your patterns as though they were in the Multi-Phoneme section in the
@@ -123,7 +126,7 @@ is still the correct syntax.
 Cases are more complicated in output specifications compared to how they
 are in parser specifications. Most cases are now specified in the form `/xy`
 where `x` determines how to interpret the case of the input, and `y` 
-determines how to apply the case to the output[^1]. 
+determines how to apply the case to the output. 
 
 Since multiple phonemes can be compacted into a single character, there
 needs to be a way to handle multiple phonemes of different cases. The
@@ -162,6 +165,17 @@ case is ignored and the output uses the exact same characters listed in the
 patterns. You might want to use this for uncased orthographies, such as most
 syllabaries.
 
+However, if the character you're using doesn't follow standard unicode casing conventions,
+you can use the special case marker `/?x`, where `x` is the input style of the
+case[^1]. Now, the output pattern can be divided in two: one portion for upper-case,
+and one portion for lower-case. The two halves are separated by a pipe (`|`). For example,
+
+```
+i : \?9 I | ı
+```
+
+would produce `I` when upper-case and `ı` when lower-case. 
+
 #### "Followed-By" Patterns
 
 "Followed-By" patterns are patterns that depend on the next phoneme in the list.
@@ -170,7 +184,8 @@ but doesn't change how that next phoneme is represented. e.g. If a phoneme is
 represented one way when followed by a vowel, and another way when followed by
 a consonant, you'll want to use a "Followed-By" pattern. 
 
-To use a followed-by pattern, you start with a `>` followed by a string. That
+To use a followed-by pattern, you write a pattern whose left-hand side
+ends with a followed-by marker. A followed-by marker starts with a `>` followed by a string. That
 string can be a group, a trait, an aspect, or a phoneme. For value-traits and
 value-aspects, it can optionally followed by an `=` and then a value. For example,
 for the phoneme specification...
@@ -228,7 +243,7 @@ u : u
 (a smooth) : a
 
 # A rough "i" followed by q or xh
-(i rough)  : ḯ
+(i rough) >back=uvular  : ḯ
 # Any other rough "i".
 (i rough)  : í
 
@@ -250,11 +265,56 @@ g : g
 
 ```
 
+**NEW**: You can now use boolean expressions with followed-by markers.
+They work similarly to plain followed-by markers, but are grouped together
+between parentheses after the `>`. e.g.
+
+```
+t >(a|o|u) : ...
+e >(nasal|air=rough) : ...
+i >!nasal : ... # or >~nasal
+```
+
+If you aren't familiar with Boolean expressions, they work like so:
+
+|symbol|example|description|
+|------|-------|-----------|
+| `&`/`&&`     |`a&b` | Only true if both expressions are true. |
+| `\|`/`\|\|`  |`a\|b`| True if either expression is true |
+| `!`/`~`      |`!a`  | Only true if the following expression is false |
+
+
+You can also use nested parentheses for more complex expressions. However,
+if you don't use nested parentheses when mixing `&`s and `|`s, it will be
+interpreted like so:
+
+```
+(a&b|!c&d|e|f&!g&h) ==> ((a & b) | ((!c) & d) | e | (f & (!g) & h))
+```
+
+**Note**: Using `!`/`~` together with aspect-at/trait-at markers might
+not work as expected; e.g.
+
+```
+t >~air=rough : ...
+```
+
+would match any following phoneme *except* those that have the aspect `air`
+set to `rough`. i.e. it would match any phoneme that doesn't have the `air`
+aspect at all, as well as phoneme *with* air set to anything other than
+`rough`.
+
+If you want to simulate something more like `air!=rough`, i.e. "the next 
+phoneme must have the `air` aspect, but it can't be `rough`", you can use
+the following equivalent expression:
+
+```
+t >(air&!air=rough)
+```
 
 
 ## Footnotes
 
-[^1]: You can use `+` and `-` to refer to patterns that should only match upper-case
-      or lower-case phonemes, but they may not work as intended. Since the actual support
-      for casing hasn't yet been implemented, getting these cases to work hasn't been a
-      priority.
+[^1]: Arguably, this reverses the order of input style and output style, which
+      can be confusing. The reason for the reversal has to do with how the 
+      parser and internal types work.

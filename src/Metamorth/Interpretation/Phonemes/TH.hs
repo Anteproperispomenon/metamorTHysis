@@ -54,6 +54,8 @@ import Metamorth.Helpers.TH
 import Metamorth.Helpers.Map
 import Metamorth.Helpers.Q
 
+import Metamorth.ForOutput.Functor.Cased
+
 -- | A type to make understanding the output
 --   of `producePropertyData` easier.
 data PropertyData = PropertyData
@@ -164,6 +166,8 @@ data PhonemeDatabase = PhonemeDatabase
   , pdbMkMaj :: Exp -> Exp
   -- | Make an uncased expression a  lower-case expression.
   , pdbMkMin :: Exp -> Exp
+  -- | Whether the orthography will use case or not.
+  , pdbIsCased :: Bool
   }
 
 instance Show PhonemeDatabase where
@@ -177,6 +181,7 @@ instance Show PhonemeDatabase where
       <> ", pdbTraitInformation = " <> show (pdbTraitInformation x)
       <> ", pdbMkMaj = "            <> show (PP.ppr mkMajRep)
       <> ", pdbMkMin = "            <> show (PP.ppr mkMinRep)
+      <> ", pdbIsCased = "          <> show (pdbIsCased x)
       <> "}"
     where
       exprNom  = mkName "expr"
@@ -205,8 +210,10 @@ producePhonemeDatabase pps = do
   --     } deriving (Show, Eq)
 
 
-  let thisMkMaj = id -- Temporary
-      thisMkMin = id -- Temporary
+  let canBeCased = ppsCanBeCased pps
+    
+      thisMkMaj = if canBeCased then AppE (ConE 'MajVal) else id
+      thisMkMin = if canBeCased then AppE (ConE 'MinVal) else id
 
       -- we want `M.Map String [M.Map String Name]`.
       phoneInv   = ppsPhonemeInventory pps
@@ -235,12 +242,15 @@ producePhonemeDatabase pps = do
   
   -- Combining the two maps...
   let phoneInfoMap = makePhonemeInformation patNoms aspectListMap
-
+ 
   wordTypeName  <- newName "CasedWord"
   wordConsName1 <- newName "WordPh"
   wordConsName2 <- newName "WordPunct"
   
-  wordConsType1 <- [t| [ $(pure $ ConT mainTypeName) ] |]
+
+  wordConsType1 <- if canBeCased
+    then [t| [ CasedValue $(pure $ ConT mainTypeName) ] |]
+    else [t| [ $(pure $ ConT mainTypeName) ] |]
   wordConsType2 <- [t| T.Text |]
 
   -- sumAdtDecDeriv :: Name -> [(Name, [Type])] -> [Type] -> Dec
@@ -296,6 +306,7 @@ producePhonemeDatabase pps = do
         , pdbTraitInformation = traitNames
         , pdbMkMaj = thisMkMaj
         , pdbMkMin = thisMkMin
+        , pdbIsCased = canBeCased
         }
   
   -- Return the actual stuff

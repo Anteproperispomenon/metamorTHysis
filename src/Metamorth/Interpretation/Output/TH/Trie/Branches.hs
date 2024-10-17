@@ -27,7 +27,7 @@ import Metamorth.Helpers.Trie
 import Metamorth.Helpers.Monad
 
 import Metamorth.ForOutput.Char
-import Metamorth.ForOutput.Monad.Matcher.Stateful
+import Metamorth.ForOutput.Monad.Matcher.Stateful2
 import Metamorth.ForOutput.Monad.Matcher.Stateful.Result
 
 import Metamorth.Interpretation.Output.TH.Types
@@ -42,6 +42,8 @@ import Metamorth.Interpretation.Output.TH.Trie
 import Text.Printf
 
 import Data.Semigroup (Arg(..))
+
+import Metamorth.ForOutput.Functor.Cased qualified as C2
 
 -- TM.TMap PhonePatternAlt (S.Set PhoneResult)
 
@@ -224,8 +226,13 @@ generateBranches' ond tmp = do
 
   failExp <- lift [| MatchFail $ \x -> "Error encountered at phoneme " ++ (show x) |]
   let failPat = Match WildP (NormalB failExp) []
-      phoneType = ConT $ ondPhoneType ond
+      phoneType  = ConT $ ondPhoneType ond
+      phoneTypeE = if ondIsCased ond
+        then AppT (ConT ''C2.CasedValue) (ConT $ ondPhoneType ond)
+        else ConT $ ondPhoneType ond
       stateType = ConT $ ondStateType ond
+      
+      
 
   funcSign <- lift [t| forall m s. (MonadFail m, IsString s) => $(pure phoneType) -> MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]
   othrSign <- lift [t| forall m s. (MonadFail m, IsString s) => MatchResult m $(pure phoneType) [CharCase] $(pure stateType) s |]

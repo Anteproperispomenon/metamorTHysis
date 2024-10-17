@@ -6,6 +6,7 @@ module Metamorth.Interaction.TH
   ( createParsers
   , declareParsers
   , declareFullParsers
+  , declareFullParsersNew
   , ExtraParserDetails(ExtraParserDetails, epdParserName, epdOtherNames, epdUnifyBranches, epdGroupGuards, epdCheckStates, epdMainFuncName, epdNameSuffix)
   -- , ParserOptions(..)
   , defExtraParserDetails
@@ -49,6 +50,8 @@ import Metamorth.Interpretation.Phonemes.Parsing (parsePhonemeFile)
 
 import Metamorth.Interpretation.Phonemes.Parsing.Types 
 
+import Metamorth.Interpretation.Phonemes.Types (PhonemeParsingStructure(..))
+
 import Metamorth.Interpretation.Parser.Parsing
 import Metamorth.Interpretation.Parser.Types
 
@@ -84,6 +87,8 @@ import System.Directory
 import System.IO
 
 import THLego.Helpers
+
+import Metamorth.ForOutput.Functor.Cased
 
 -- | Simple type for the output of the generated
 --   declarations.
@@ -203,11 +208,18 @@ declareParsers fp1 fps2 fps3 = do
 --   will fail if either the input list or
 --   the output list is empty.
 declareFullParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
-declareFullParsers fp1 fps2 fps3 = do
+declareFullParsers = declareFullParsersNew True
+
+-- | Declare the full parser, parsing from
+--   any input type to any output type. This
+--   will fail if either the input list or
+--   the output list is empty.
+declareFullParsersNew :: Bool -> FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
+declareFullParsersNew isCas fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsers fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsersNew isCas fp1 fps2 fps3
   
   -- Create the full function...
   funcDecs <- makeFullFunction iNom oNom inMap outMap outMapBS
@@ -225,7 +237,11 @@ declareFullParsers fp1 fps2 fps3 = do
 
 -- | Create a `GeneratedDecs` from the desired input files.
 createParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q GeneratedDecs
-createParsers phonemePath parserPaths outputPaths = do
+createParsers = createParsersNew True
+
+-- | Create a `GeneratedDecs` from the desired input files.
+createParsersNew :: Bool -> FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q GeneratedDecs
+createParsersNew canBeCased phonemePath parserPaths outputPaths = do
   
   -- Be careful running IO here...
   ePhoneData <- runIO $ readPhonemeFile phonemePath
@@ -241,7 +257,9 @@ createParsers phonemePath parserPaths outputPaths = do
     (Right pb) -> return pb
   
   -- Get the phoneme database and the decs.
-  (pdb, phoneDecs) <- producePhonemeDatabase pps
+  (pdb, phoneDecs) <- producePhonemeDatabase (pps {ppsCanBeCased = canBeCased})
+
+  -- let pdb = pdb' {pdbIsCased = canBeCased}
 
   -- Check the group map:
   -- qDebugNotice $ "Group Map: " ++ show (pdbGroupMemberFuncs pdb)
@@ -390,6 +408,7 @@ getParserData fp pdb txt epd = do
             (pdbTopPhonemeType pdb)
             (pdbMkMaj pdb)
             (pdbMkMin pdb)
+            (pdbIsCased pdb)
             (pdbWordTypeNames pdb)
             (pniAspects pni)
             (pdbTraitInformation pdb)
@@ -418,6 +437,7 @@ makePhonemeInformation pdb = PhonemeNameInformation
   , pniWordTypeNames = pdbWordTypeNames pdb
   , pniCaseExpr  = AppE (VarE 'const) (ConE 'LowerCase)
   , pniPhoneType = pdbTopPhonemeType pdb
+  , pniCanBeCased = pdbIsCased pdb
   }
   where 
     pdt = pdbPropertyData pdb

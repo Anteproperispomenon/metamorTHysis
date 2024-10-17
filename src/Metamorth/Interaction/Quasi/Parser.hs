@@ -2,6 +2,7 @@ module Metamorth.Interaction.Quasi.Parser
   ( parseOrthographyBlock
   , parseOrthographyBlocks
   , parseOrthographyDetails
+  , parseOrthographyDetailsNew
   , parseOrthographyDetailsDebug
   -- * Debug
   , parseIndentedOptions
@@ -22,7 +23,9 @@ import Metamorth.Helpers.Parsing
 
 import Metamorth.Interaction.Quasi.Parser.Helpers
 import Metamorth.Interaction.Quasi.Parser.Types
+import Metamorth.Interaction.Quasi.Parser.Types.More
 
+import Control.Monad.Trans.State.Strict
 
 
 {-
@@ -66,6 +69,15 @@ data OrthographyDetails = OrthographyDetails
   , odCLINames      :: [String]
   } deriving (Show, Eq)
 -}
+
+parseOrthographyDetailsNew :: ParserQQ (QuasiHeader, [OrthographyDetails])
+parseOrthographyDetailsNew = do
+  -- lift $ many'_ consumeEndComment
+  -- fp <- parsePhoneFileName
+  -- lift $ many'_ consumeEndComment
+  qh <- parseHeaderNew
+  dts <- parseOrthographyBlocks
+  return (qh, dts)
 
 parseOrthographyDetails :: ParserQQ (FilePath, Maybe String, [OrthographyDetails])
 parseOrthographyDetails = do
@@ -150,6 +162,19 @@ parseHeader = do
       fp <- parsePhoneFileName <|> fail "Missing Phoneme File Location"
       lift $ many'_ consumeEndComment
       return (fp, Just lang)
+
+parseHeaderNew :: ParserQQ QuasiHeader
+parseHeaderNew = do
+  qh <- execStateT' defQuasiHeader $ do
+    many'_ $ do
+      lift $ lift $ many'_ consumeEndComment
+      parsePhoneFileNameQH <|> parseLanguageNameQH <|> parseCaseOptionQH
+      lift $ lift $ many'_ consumeEndComment
+  -- Now check that the filepath is well-formed...
+  let fp = qhFilePath qh
+  when (fp == "" || fp == ".") $ tellError "Missing Phoneme File Location."
+  return qh
+  where execStateT' = flip execStateT
 
 
 --------------------------------
