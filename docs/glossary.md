@@ -195,6 +195,12 @@ A [property](phonemes.md#properties) is a predefined set of extra information
 that can then be applied to a phoneme in the phoneme specification. A property
 is either an [aspect](#aspect) or a [trait](#trait).
 
+#### Section
+
+A section is a portion of a Specification file that defines a certain
+part of the specification. In all files, sections are separated by
+four or more equal signs (i.e. `====`) at the start of a line.
+
 #### Specification
 
 The user-created docuements that specify the [phoneme set](phonemes.md), the

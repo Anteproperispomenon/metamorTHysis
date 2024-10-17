@@ -82,7 +82,7 @@ this section.
 For more info on how to actually use groups or traits in patterns,
 go down to the ["Followed-by" Patterns](#followed-by-patterns) section.
 
-### Patterns
+### Patterns and Markers
 
 Patterns work much the same way they did [in phoneme specifications](parsing.md#patterns),
 with a few differences [as mentioned in the introduction](#introduction).

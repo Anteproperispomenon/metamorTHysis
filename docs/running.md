@@ -152,7 +152,7 @@ to find if you don't know where to look.
 When running `stack build`, near the end, there will be a line something like:
 
 ```
-Installing executable my-converter-cli in ...\my-converter\.stack-work\install\9c13eb14\bin
+Installing executable my-converter-cli in ...\my-converter\.stack-work\install\<some_numbers>\bin
 ```
 
 You can just navigate to this directory, and then copy `my-converter-cli[.exe]` and 
