@@ -39,6 +39,7 @@ import Metamorth.Helpers.List
 import Metamorth.Helpers.Parsing
 import Metamorth.Helpers.Error ( ParserMessage )
 import Metamorth.Helpers.Error.RWS
+import Metamorth.Helpers.RWS
 
 import Metamorth.Interpretation.Output.Parsing.Trie
 import Metamorth.Interpretation.Output.Parsing.Types
@@ -99,6 +100,7 @@ parseOutputFile grps trts asps phones = do
         , opoTraitDictionary  = opsTraitDictionary ops
         , opoGroupDictionary  = opsGroupDictionary ops
         , opoAspectDictionary = opsAspectDictionary ops
+        , opoAddSpaces        = opsAddSpaces ops
         , opoOutputTrie = opsOutputTrie ops
         }
   -- Process the auto-states for the opo.
@@ -158,7 +160,7 @@ parseStateDecSection = do
   -- lift AT.skipSpace
   _ <- lift $ many parseEndComment
   many'_ $ do
-    getImportS_ <|> parseStateDecS -- <|> parseUnspecifiedClassOrState
+    getImportS_ <|> parseStateDecS <|> getPhoneSpacesS -- <|> parseUnspecifiedClassOrState
     lift $ AT.many1 parseEndComment
   _ <- lift $ many  parseEndComment
   _ <- lift ("====" <?> "States: Separator1")
@@ -252,6 +254,21 @@ getImportS = do
 --   that it is a valid import.
 getImportS_ :: OutputParser ()
 getImportS_ = void getImportS
+
+getPhoneSpaces :: AT.Parser Bool
+getPhoneSpaces = do
+  _ <- "add"
+  _ <- (void $ AT.char '_') <|> skipHoriz
+  _ <- "spaces"
+  return True
+
+-- | When this parser succeeds, it
+--   means the outputter should add
+--   spaces at the end of ouput patterns.
+getPhoneSpacesS :: OutputParser ()
+getPhoneSpacesS = do
+  bl <- lift getPhoneSpaces
+  modify' $ \x -> x {opsAddSpaces = bl}
 
 -- | Import a trait/group/aspect from the phoneme file.
 --   Moved to Metamorth.Interpretation.Shared.Types

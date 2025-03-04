@@ -79,6 +79,7 @@ embedOutputParser grps trts asps phons prs
       , opsAspectDictionary' = asps
       , opsPhoneDictionary   = phons
       , opsDefaultCasing     = OCNull
+      , opsAddSpaces         = False
       , opsOutputTrie        = TM.empty
       }
 
@@ -95,6 +96,7 @@ testOutputParser1 prs = AT.parseOnly (runRWST prs "N/A" st)
         , opsAspectDictionary' = M.empty
         , opsPhoneDictionary   = S.empty
         , opsDefaultCasing     = OCNull
+        , opsAddSpaces         = False
         , opsOutputTrie        = TM.empty
         }
 
@@ -134,6 +136,10 @@ data OutputParsingState = OutputParsingState
   --   by the parser.
   , opsPhoneDictionary :: S.Set String
   , opsDefaultCasing   :: OutputCase
+  -- | Whether to add spaces after each output pattern.
+  --   Useful when outputting data that requires spaces
+  --   between phonemes.
+  , opsAddSpaces       :: Bool
   -- | The main trie to be used for determining
   --   output.
   , opsOutputTrie      :: TM.TMap PhonePatternAlt (S.Set PhoneResult)
