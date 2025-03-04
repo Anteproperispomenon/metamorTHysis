@@ -1,6 +1,6 @@
 cabal-version: 2.2
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.1.
 --
 -- see: https://github.com/sol/hpack
 
@@ -54,6 +54,7 @@ library
       Metamorth.Helpers.Q
       Metamorth.Helpers.QP
       Metamorth.Helpers.QS
+      Metamorth.Helpers.State
       Metamorth.Helpers.String
       Metamorth.Helpers.TH
       Metamorth.Helpers.Trie
