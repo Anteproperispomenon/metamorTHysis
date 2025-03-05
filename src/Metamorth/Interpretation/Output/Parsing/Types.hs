@@ -10,7 +10,9 @@ module Metamorth.Interpretation.Output.Parsing.Types
   , runOnPhoneme
   , CharPatternRaw(..)
   , validateCharPattern
+  , validateCharPatternS
   , validateCharPattern2
+  , validateCharPattern2S
   , ImportProperty(..)
   , PhoneName(..)
   , PhonePatternRaw(..)
@@ -338,6 +340,13 @@ validateCharPattern mp cps = do
   sts' <- traverse (validateModifyState mp) sts
   return $ CharPattern (CaseRegular itms) sts'
 
+validateCharPatternS :: M.Map String (Maybe (S.Set String)) -> [CharPatternRaw] -> Either String CharPattern
+validateCharPatternS mp cps = do
+  let (sts, rst) = partitionMaybe getPlainState cps
+      itms       = mapMaybe getPlainChar rst
+  sts' <- traverse (validateModifyState mp) sts
+  return $ CharPattern (CaseRegular (itms ++ [UncasableChar ' '])) sts'
+
 validateCharPattern2 :: M.Map String (Maybe (S.Set String)) -> [CharPatternRaw] -> [CharPatternRaw] -> Either String CharPattern
 validateCharPattern2 mp cps1 cps2 = do
   let (sts1, rst1) = partitionMaybe getPlainState cps1
@@ -347,4 +356,16 @@ validateCharPattern2 mp cps1 cps2 = do
       sts          = nubSort (sts1 ++ sts2)
   sts' <- traverse (validateModifyState mp) sts
   return $ CharPattern (CaseSeparate itms1 itms2) sts'
+
+-- | Like validateCharPattern2, but adds a space 
+--   at the end of each pattern.
+validateCharPattern2S :: M.Map String (Maybe (S.Set String)) -> [CharPatternRaw] -> [CharPatternRaw] -> Either String CharPattern
+validateCharPattern2S mp cps1 cps2 = do
+  let (sts1, rst1) = partitionMaybe getPlainState cps1
+      (sts2, rst2) = partitionMaybe getPlainState cps2
+      itms1        = mapMaybe getFreeChar rst1
+      itms2        = mapMaybe getFreeChar rst2
+      sts          = nubSort (sts1 ++ sts2)
+  sts' <- traverse (validateModifyState mp) sts
+  return $ CharPattern (CaseSeparate (itms1 ++ " ") (itms2 ++ " ")) sts'
 

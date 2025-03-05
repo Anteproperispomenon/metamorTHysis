@@ -962,8 +962,9 @@ parsePhonemePatMulti' = do
         (Left  errs) -> do 
           mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
           return ([], OutputPattern (CharPattern (CaseRegular []) []) OCNull)
-        (Right phonePats) -> -- addPhonemesPattern phones rslt
-          case (validateCharPattern sdict thePats) of
+        (Right phonePats) -> do -- addPhonemesPattern phones rslt
+          vldRslt <- validateCharPatternX sdict thePats
+          case vldRslt of
             (Left  errs) -> do 
               mkErrors $ map (\err -> "Error with output pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
               return ([], OutputPattern (CharPattern (CaseRegular []) []) OCNull)
@@ -977,13 +978,27 @@ parsePhonemePatMulti' = do
         (Left  errs) -> do 
           mkErrors $ map (\err -> "Error with phoneme pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
           return ([], OutputPattern (CharPattern (CaseSeparate [] []) []) OCNull)
-        (Right phonePats) -> -- addPhonemesPattern phones rslt
-          case (validateCharPattern2 sdict pats1 pats2) of
+        (Right phonePats) -> do -- addPhonemesPattern phones rslt
+          vldRslt <- validateCharPattern2X sdict pats1 pats2
+          case vldRslt of
             (Left  errs) -> do 
               mkErrors $ map (\err -> "Error with output pattern for \"" ++ phoneName ++ "\": " ++ err) [errs]
               return ([], OutputPattern (CharPattern (CaseRegular []) []) OCNull)
             (Right cPats) -> return (phonePats, OutputPattern cPats theCase)
 
+validateCharPatternX :: M.Map String (Maybe (S.Set String)) -> [CharPatternRaw] -> OutputParser (Either String CharPattern)
+validateCharPatternX sdict pats = do
+  addSpaces <- gets opsAddSpaces
+  if addSpaces
+    then return (validateCharPatternS sdict pats)
+    else return (validateCharPattern  sdict pats)
+
+validateCharPattern2X :: M.Map String (Maybe (S.Set String)) -> [CharPatternRaw] -> [CharPatternRaw] -> OutputParser (Either String CharPattern)
+validateCharPattern2X sdict p1 p2 = do
+  addSpaces <- gets opsAddSpaces
+  if addSpaces
+    then return (validateCharPattern2S sdict p1 p2)
+    else return (validateCharPattern2  sdict p1 p2)
 
 {-
 data CharPattern = CharPattern

@@ -64,6 +64,12 @@ Boas
   unify-branches : off
   description : "Collection of Boas's orthographies."
 
+MFA
+  output : "examples/output/kwakwala_mfa.thyo"
+  suffix : "_mfa"
+  output-name : "mfaOutput"
+  extension : ".mfa"
+
 |]
 
 {-

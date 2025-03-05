@@ -1,0 +1,79 @@
+name : MFA
+
+default case : /
+
+====
+
+# no states or classes
+
+add_spaces
+
+====
+
+m  : M
+m' : M _ G
+n  : N
+n' : N _ G
+
+l  : L
+l' : L _ G
+lh : L H
+
+j  : Y
+j' : Y _ G
+
+w  : W
+w' : W _ G
+
+p  : P
+p' : P_E
+b  : B
+
+t   : T
+ts  : T S
+ts' : T S _ E
+tl  : T L
+tl' : T L _ E
+
+d   : D
+dl  : D L
+dz  : D Z
+s   : S
+
+k   : K
+k'  : K _ E
+kw  : K W
+kw' : K W _ E
+
+q   : Q
+q'  : Q _ E
+qw  : Q W
+qw' : Q W _ E
+
+g   : G
+gw  : G W
+gh  : G U
+ghw : G U W
+
+x   : X
+xw  : X W
+xh  : X H
+xhw : X H W
+
+h   : H
+glt : GLT
+
+a     : A
+e     : E
+i     : I
+o     : O
+u     : U
+schwa : Ə
+
+# ^ glt a     : a
+# ^ glt e     : e h
+# ^ glt i     : i
+# ^ glt o     : o
+# ^ glt u     : u
+# ^ glt schwa : e
+
