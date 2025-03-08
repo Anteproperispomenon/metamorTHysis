@@ -186,6 +186,12 @@ main = do
     (Left err) -> putStrLn $ "Error: " ++ err
     (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
 
+  putStrLn "Testing MFA Output..."
+  let mfa1 = TLE.decodeUtf8 <$> KwakQ.convertOrthographyBS KwakQ.InGrubb KwakQ.OutMFA mfaTest1
+  case mfa1 of
+    (Left err) -> putStrLn $ "Error: " ++ err
+    (Right tx) -> hPutStrLnUtf8 stdout (toStrict tx)
+
 
 -- | From the Inuktitut Wikipedia page for Inuktitut.
 exampleText :: T.Text
@@ -234,6 +240,9 @@ caseTest1 = "Ehtla eHtlA"
 
 caseTest2 :: T.Text
 caseTest2 = "Iga iga oga"
+
+mfaTest1 :: T.Text
+mfaTest1 = "Kwak'wala"
 
 {-
    b : example=exam1

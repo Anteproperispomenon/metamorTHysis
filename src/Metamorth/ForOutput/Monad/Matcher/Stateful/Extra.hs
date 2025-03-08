@@ -18,7 +18,7 @@ In the future, these modules may be moved
 to a separate package.
 
 This module is an add-on to "Metamorth.ForOutput.Monad.Matcher.Stateful"
-that allows pre-processing of 
+that allows pre-processing of the input stream.
 
 -}
 
@@ -237,7 +237,7 @@ matchesRX prp err f = do
       y <- matchX prp err f
       (y <>) <$> matchesRX prp err f
 
--- | Like `matchesL`, but uses a different function
+-- | Like `matchesRX`, but uses a different function
 --   for the first match.
 matchesRX' :: (MonadPlus m, Monoid v, Monoid r) => (i -> j) -> (String -> m r) -> (j -> MatchResult m j v s r) -> (j -> MatchResult m j v s r) -> MatcherT i v s m r
 matchesRX' prp err f1 f2 = do
@@ -248,7 +248,7 @@ matchesRX' prp err f1 f2 = do
       y <- matchX prp err f1
       (y <>) <$> matchesRX prp err f2
 
--- | Like `matchesL`, but uses `fail` for
+-- | Like `matchesRX`, but uses `fail` for
 --   the first argument.
 matchesRFX :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> j) -> (j -> MatchResult m j v s r) -> MatcherT i v s m r
 matchesRFX prp = matchesRX prp fail

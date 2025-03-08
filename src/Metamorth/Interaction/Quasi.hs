@@ -13,6 +13,7 @@ import Data.Map.Strict qualified as M
 import Metamorth.Helpers.Error
 import Metamorth.Helpers.TH (forMap)
 import Metamorth.Helpers.Q
+import Metamorth.Helpers.State
 
 import Metamorth.ForOutput.Quasi.Types
 
@@ -58,12 +59,15 @@ makeTheDecs str = do
           (errs,wrns,_mmsgs) =  partitionMessages msgs
       mapM_ reportError   errs
       mapM_ reportWarning wrns
-      let ((irslts',orslts'), descMap) = flip State.runState M.empty $ fmap unzip $ forM ods $ \od -> case (odInputFile od, odOutputFile od) of
-            (Nothing, Nothing) -> return (Nothing, Nothing)
+      let ((irslts',orslts' {- , cmdNoms' -}), descMap) = stateRun M.empty $ fmap unzip $ forM ods $ \od -> case (odInputFile od, odOutputFile od) of
+            (Nothing, Nothing) -> return (Nothing, Nothing) -- , Nothing)
             (Just inFile, Just outFile) -> do
+              -- Run a state action to add the description of the orthography
+              -- to the description dictionary (which is the state value).
               case (odCLINames od, odDescription od) of
                 (nom:_, Just desc) -> State.modify' (M.insert nom desc)
                 _ -> return ()
+              -- 
               return
                 ( Just (inFile, ExtraParserDetails 
                    { epdParserName = fromMaybe "whoops" $ odInputName od
@@ -77,10 +81,11 @@ makeTheDecs str = do
                    })
                 , Just (outFile, ExtraOutputDetails
                    { eodOutputName = fromMaybe "whoopsOut" $ odOutputName od
-                   , eodSuffix     = fromMaybe "_xo"       $ odOutSuffix od
-                   , eodExtension  = fromMaybe ".op"       $ odExtension od
+                   , eodSuffix     = fromMaybe "_xo"       $ odOutSuffix  od
+                   , eodExtension  = fromMaybe ".op"       $ odExtension  od
                    , eodOtherNames = odCLINames od
                    })
+                -- , Just (odCLINames od)
                 )
             (Just inFile, Nothing) -> do
               case (odCLINames od, odDescription od) of
@@ -97,6 +102,7 @@ makeTheDecs str = do
                    , epdMainFuncName  = "theActualParser"
                    })
                 , Nothing
+                -- , Just (odCLINames od)
                 )
             (Nothing, Just outFile) -> do 
               case (odCLINames od, odDescription od) of
@@ -110,9 +116,11 @@ makeTheDecs str = do
                    , eodExtension  = fromMaybe ".op"       $ odExtension od
                    , eodOtherNames = odCLINames od
                    })
+                -- , Just (odCLINames od)
                 )
           irslts = catMaybes irslts'
           orslts = catMaybes orslts'
+          -- cmdNoms = catMaybes cmdNoms'
       when (null irslts) $ reportWarning  "No input specification files listed."
       when (null orslts) $ reportWarning "No output specification files listed."
       -- qDebugNotice $ "Phoneme path: \"" ++ pfp ++ "\"."

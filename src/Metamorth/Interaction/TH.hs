@@ -30,6 +30,8 @@ import Data.Set        qualified as S
 
 import Data.ByteString.Lazy qualified as BL
 
+import Data.String (IsString)
+
 import Data.Text              qualified as T
 import Data.Text.Lazy         qualified as TL
 import Data.Text.Lazy.Builder qualified as TB
@@ -90,6 +92,9 @@ import THLego.Helpers
 
 import Metamorth.ForOutput.Functor.Cased
 
+-- CasedWord can be found at
+-- fst $ pdbWordTypeNames pdb
+
 -- | Simple type for the output of the generated
 --   declarations.
 data GeneratedDecs = GeneratedDecs
@@ -103,6 +108,7 @@ data GeneratedDecs = GeneratedDecs
   , gdOutputTypesBS :: M.Map Name Name
   , gdInputMap      :: [Dec]
   , gdOutputMap     :: [Dec]
+  , gdWordType      :: Name
   } deriving (Show, Eq)
 
 -- | Options to go along with each parser file.
@@ -196,7 +202,7 @@ declareParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsers fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec cwdName) <- createParsers fp1 fps2 fps3
   
   -- Create the full function...
   -- funcDecs <- makeFullFunction iNom oNom inMap outMap
@@ -219,10 +225,10 @@ declareFullParsersNew isCas fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsersNew isCas fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec cwdName) <- createParsersNew isCas fp1 fps2 fps3
   
   -- Create the full function...
-  funcDecs <- makeFullFunction iNom oNom inMap outMap outMapBS
+  funcDecs <- makeFullFunction iNom oNom inMap outMap outMapBS cwdName
 
   return (funcDecs ++ ds4 ++ d1 ++ (concat ds2) ++ (concat ds3) ++ inMapDec ++ outMapDec)
 
@@ -344,6 +350,7 @@ createParsersNew canBeCased phonemePath parserPaths outputPaths = do
              outOrthMapBS
              inputOrthNameDecl
              outputOrthNameDecl
+             (fst (pdbWordTypeNames pdb))
 
 readPhonemeFile :: FilePath -> IO (Either String Text)
 readPhonemeFile fp = do
@@ -512,8 +519,11 @@ makeInputOrthType mps = do
 
 -- | Make the full function that can easily
 --   be called by a CLI application.
-makeFullFunction :: forall q. (Quote q, Quasi q) => Name -> Name -> M.Map Name Name -> M.Map Name Name -> M.Map Name Name -> q [Dec]
-makeFullFunction iNom oNom inNames outNames outNamesBS = do 
+--
+--   Also: makes the "Half functions" that
+--   only parse the text or output the text.
+makeFullFunction :: forall q. (Quote q, Quasi q) => Name -> Name -> M.Map Name Name -> M.Map Name Name -> M.Map Name Name -> Name -> q [Dec]
+makeFullFunction iNom oNom inNames outNames outNamesBS cwdName = do 
   funcName <- newName "convertOrthography"
   funcType <- [t| $(pure $ ConT iNom) -> $(pure $ ConT oNom) -> Text -> Either String Text |]
   funcSign <- return $ SigD funcName funcType
@@ -525,7 +535,16 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
   funcNameBS <- newName "convertOrthographyBS"
   funcTypeBS <- [t| $(pure $ ConT iNom) -> $(pure $ ConT oNom) -> Text -> Either String BL.ByteString |]
   funcSignBS <- return $ SigD funcNameBS funcTypeBS
-  
+
+  -- Need to find where "CasedWord" is stored...
+  funcNamePrs <- newName "parseOrthography"
+  funcTypePrs <- [t| $(pure $ ConT iNom) -> AT.Parser [$(pure $ ConT cwdName)] |]
+  funcSignPrs <- return $ SigD funcNamePrs funcTypePrs
+
+  funcNameOut <- newName "emitOrthography"
+  funcTypeOut <- [t| forall str. (Monoid str, IsString str) => $(pure $ ConT oNom) -> (T.Text -> str) -> [$(pure $ ConT cwdName)] -> Either String str |]
+  funcSignOut <- return $ SigD funcNameOut funcTypeOut
+
   -- For the functions that select the input/output
   -- function to use based on the selector type.
   tempNameI <- newName "selectI"
@@ -533,7 +552,11 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
   tempNameL <- newName "selectOL"
   tempNameB <- newName "selectBS"
 
+  tempNameI2 <- newName "selectI2"
+  tempNameO2 <- newName "selectO2"
+
   extraName1 <- newName "abc"
+  extraName2 <- newName "bcd"
 
   -- Too lazy to fill out the type signature...
   tempTypeI <- [t| $(pure $ ConT iNom) -> Text -> Either String _   |]
@@ -550,6 +573,11 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
       tempFuncL = FunD tempNameL tempDefnL
       tempFuncB = FunD tempNameB tempDefnB
 
+      -- These aren't even the temporary definitions; these
+      -- are the definitions themselves.
+      tempDefnI2 = M.elems $ M.mapWithKey makeClauseI2 inNames
+      tempDefnO2 = M.elems $ M.mapWithKey (makeClauseO2 extraName1 extraName2) outNames
+
       tempSignI = SigD tempNameI tempTypeI
       tempSignO = SigD tempNameO tempTypeO
 
@@ -557,6 +585,7 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
       whereDecs  = [tempFuncI, tempFuncO]
       whereDecsL = [tempFuncI, tempFuncL]
       whereDecsB = [tempFuncI, tempFuncB]
+
   
   when (M.null  inNames) $ qReportWarning  "There are no Input Orthography Names"
   when (M.null outNames) $ qReportWarning "There are no Output Orthography Names"
@@ -591,9 +620,22 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
             (NormalB funcExpB)
             whereDecsB
         ]
-
+      
+      halfFuncParse = FunD funcNamePrs tempDefnI2
+      halfFuncEmit  = FunD funcNameOut tempDefnO2
   
-  return [funcSign, mainFuncDefn, funcSignL, mainFuncDefnLazy, funcSignBS, mainFuncDefnBS]
+  return 
+    [ funcSign
+    , mainFuncDefn
+    , funcSignL
+    , mainFuncDefnLazy
+    , funcSignBS
+    , mainFuncDefnBS
+    , funcSignPrs
+    , halfFuncParse
+    , funcSignOut
+    , halfFuncEmit
+    ]
   where
     makeClauseO :: Name -> Name -> Clause
     makeClauseO dNom fNom = Clause [ConP dNom [] []] (NormalB (AppE (VarE fNom) (VarE 'id))) []
@@ -611,8 +653,22 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
       (NormalB $ VarE fNom)
       []
 
+    -- Running `AT.parseOnly` on the selected parser.
     makeClauseI :: Name -> Name -> Clause
     makeClauseI dnom fNom = Clause [ConP dnom [] []] (NormalB (AppE (VarE 'AT.parseOnly) (VarE fNom))) []
+
+    -- Just returning the parser itself.
+    makeClauseI2 :: Name -> Name -> Clause
+    makeClauseI2 dNom fNom = Clause [ConP dNom [] []] (NormalB (VarE fNom)) []
+
+    -- Returning the clause that returns the plain
+    -- "orthOutput" function, depending on the orthography.
+    makeClauseO2 :: Name -> Name -> Name -> Name -> Clause
+    makeClauseO2 cvtNom txtNom dNom fNom 
+      = Clause 
+          [ConP dNom [] [], VarP cvtNom, VarP txtNom] 
+          (NormalB $ multiAppE (VarE fNom) [VarE cvtNom, VarE txtNom]) 
+          []
 
     pve :: Name -> q Exp
     pve = pure . VarE 
