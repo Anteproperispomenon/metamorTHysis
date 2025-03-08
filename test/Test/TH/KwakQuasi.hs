@@ -15,6 +15,8 @@ module Test.TH.KwakQuasi
   , OutOrth(..)
   , inputOrthNameMap
   , outputOrthNameMap
+  , parseOrthography
+  , emitOrthography
   ) where
 
 import Metamorth.Interaction.Quasi
