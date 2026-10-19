@@ -13,6 +13,7 @@ module Test.TH.KwakQuasi
   , convertOrthographyBS
   , InOrth(..)
   , OutOrth(..)
+  , CasedWord(..)
   , inputOrthNameMap
   , outputOrthNameMap
   , parseOrthography

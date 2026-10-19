@@ -57,6 +57,7 @@ makeTheDecs str = do
           mLang = qhLanguage qh
           isCas = qhIsCased  qh
           (errs,wrns,_mmsgs) =  partitionMessages msgs
+          
       mapM_ reportError   errs
       mapM_ reportWarning wrns
       let ((irslts',orslts' {- , cmdNoms' -}), descMap) = stateRun M.empty $ fmap unzip $ forM ods $ \od -> case (odInputFile od, odOutputFile od) of
@@ -68,15 +69,20 @@ makeTheDecs str = do
                 (nom:_, Just desc) -> State.modify' (M.insert nom desc)
                 _ -> return ()
               -- 
+              let lnParseDflt = case (odInputName od) of
+                    Nothing    -> "whoopsLine"
+                    (Just ztr) -> ztr ++ "Line"
               return
                 ( Just (inFile, ExtraParserDetails 
                    { epdParserName = fromMaybe "whoops" $ odInputName od
+                   , epdLineParserName = fromMaybe lnParseDflt $ odInputLnName od
                    , epdOtherNames = odCLINames od
                    , epdUnifyBranches = fromMaybe True $ odUnifyBranches od
                    , epdGroupGuards   = fromMaybe True $ odGroupGuards   od
                    , epdCheckStates   = fromMaybe True $ odCheckStates   od
                    , epdNameSuffix    = fromMaybe "_x" $ odInSuffix      od
                    , epdMainFuncName  = "theActualParser"
+                   , epdLineFuncName  = "theActualLineParser"
   
                    })
                 , Just (outFile, ExtraOutputDetails
@@ -91,15 +97,20 @@ makeTheDecs str = do
               case (odCLINames od, odDescription od) of
                 (nom:_, Just desc) -> State.modify' (M.insert nom desc)
                 _ -> return ()
+              let lnParseDflt = case (odInputName od) of
+                    Nothing    -> "whoopsLine"
+                    (Just ztr) -> ztr ++ "Line"
               return
                 ( Just (inFile, ExtraParserDetails 
                    { epdParserName = fromMaybe "whoops" $ odInputName od
+                   , epdLineParserName = fromMaybe lnParseDflt $ odInputLnName od
                    , epdOtherNames = odCLINames od
                    , epdUnifyBranches = fromMaybe True $ odUnifyBranches od
                    , epdGroupGuards   = fromMaybe True $ odGroupGuards   od
                    , epdCheckStates   = fromMaybe True $ odCheckStates   od
                    , epdNameSuffix    = fromMaybe "_x" $ odInSuffix      od
                    , epdMainFuncName  = "theActualParser"
+                   , epdLineFuncName  = "theActualLineParser"
                    })
                 , Nothing
                 -- , Just (odCLINames od)

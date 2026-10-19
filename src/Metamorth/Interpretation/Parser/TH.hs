@@ -190,7 +190,7 @@ testTheParserE
 testTheParserE spi fp = do
   theFile <- TIO.readFile fp
   let eParseRslt = AT.parseOnly parseOrthographyFile theFile
-  (x,y,z) <- case eParseRslt of
+  (x,y,z,w) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
     (Right (_hdr, pps, errStrings, warnStrings)) -> do
@@ -228,7 +228,7 @@ testTheParser
 testTheParser spi fp = do
   theFile <- TIO.readFile fp
   let eParseRslt = AT.parseOnly parseOrthographyFile theFile
-  (x,y,z) <- case eParseRslt of
+  (x,y,z,w) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input: " ++ err
     -- (HeaderData, ParserParsingState, [String])
     (Right (_hdr, pps, _someStrings, _warnStrings)) -> do
@@ -275,6 +275,9 @@ data ParserOptions = ParserOptions
   -- | A `String` representing what you
   --   want the main function name to be.
   , poMainFuncName  :: String
+  -- | A `String representing the line-based
+  --   version of the parser.
+  , poLineFuncName  :: String
   -- | The suffix appended to names generated
   --   for this parser
   , poNameSuffix    :: String
@@ -286,6 +289,7 @@ defParserOptions' = ParserOptions
   , poGroupGuards   = True
   , poCheckStates   = True
   , poMainFuncName  = "theActualParser"
+  , poLineFuncName  = "theActualLineParser"
   , poNameSuffix    = "_test"
   }
 
@@ -296,6 +300,7 @@ defParserOptions sfx = ParserOptions
   , poGroupGuards   = True
   , poCheckStates   = True
   , poMainFuncName  = "theActualParser"
+  , poLineFuncName  = "theActualLineParser"
   , poNameSuffix    = sfx
   }
 
@@ -313,7 +318,7 @@ makeTheParser
   -> M.Map String Name                -- ^ Functions for checking group membership.
   -> ParserParsingState               -- ^ The data from parsing the specification.
   -> ParserOptions                    -- ^ Parser 
-  -> Q ([Dec], StaticParserInfo, Name)
+  -> Q ([Dec], StaticParserInfo, Name, Name)
 makeTheParser phoneMap aspectMap phoneName mkMaj mkMin canBeCased wordDataNames aspectFuncs traitFuncs groupFuncs pps pops
   = runQS (poNameSuffix pops) $ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin canBeCased wordDataNames aspectFuncs traitFuncs groupFuncs pps pops
 
@@ -331,7 +336,7 @@ makeTheParser'
   -> M.Map String Name                -- ^ Functions for checking group membership.
   -> ParserParsingState               -- ^ The data from parsing the specification.
   -> ParserOptions                    -- ^ Parser 
-  -> QS ([Dec], StaticParserInfo, Name)
+  -> QS ([Dec], StaticParserInfo, Name, Name)
 makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin canBeCased wordDataNames aspectFuncs traitFuncs groupFuncs pps pops = do
   -- The name for the function that resets the auto-off states after
   -- every phoneme. If there are no auto-off states, this function
@@ -396,9 +401,10 @@ makeTheParser' phoneMap aspectMap phoneName mkMaj mkMin canBeCased wordDataNames
       return ([], mkName "funcErr1", mkName "funcErr2")
     (Right (okay, (x1,x2))) -> return  (okay, x1, x2)
 
-  (epDecs, finalName) <- makeEntryPoint spi nm1 nm2 (poMainFuncName pops)
+  (epDecs , finalName ) <- makeEntryPoint     spi nm1 nm2 (poMainFuncName pops)
+  (epDecs2, finalName2) <- makeLineEntryPoint spi nm1 nm2 (poLineFuncName pops)
 
-  return (concat [epDecs, stDecs, autoStateDecs, clDecs, charPredDecs, funcDecs], spi, finalName)
+  return (concat [epDecs, epDecs2, stDecs, autoStateDecs, clDecs, charPredDecs, funcDecs], spi, finalName, finalName2)
 
 {-
   :: StaticParserInfo
@@ -659,6 +665,45 @@ makeEntryPoint spi startWordFunc restWordFunc finalFuncStr = do
   -- If using `AT.takeWhile` instead, it would always succeed without consuming.
   puncExp  <- [| $puncCstrQE <$> AT.takeWhile1 $punctWordQE |]
   altrExp  <- [| ($puncCstrQE . T.singleton) <$> AT.anyChar |]
+
+  -- The final parser...
+  finalExp <- [| AT.many1 ($(pure funcExp4) <|> $(pure puncExp) <|> $(pure altrExp)) |]
+  finalFuncName <- newName finalFuncStr
+
+  -- The declaration...
+  parserType <- [t| AT.Parser [ $wordTypeQT ] |]
+
+  let parserSign = SigD finalFuncName parserType
+      parserDefn = FunD finalFuncName [Clause [] (NormalB finalExp) []]
+
+  return ([parserSign, parserDefn], finalFuncName)
+
+makeLineEntryPoint :: StaticParserInfo -> Name -> Name -> String -> QS ([Dec], Name)
+makeLineEntryPoint spi startWordFunc restWordFunc finalFuncStr = do
+  let defStateVal     = VarE (spiDefStateName spi)
+
+      startWordFuncQE = pure $ VarE startWordFunc
+      restWordFuncQE  = pure $ VarE restWordFunc
+
+      punctWordQE     = pure $ VarE $ spiIsPunctFunc spi
+
+      (wordType, (wordCstr, puncCstr)) = spiWordTypeNames spi
+
+      wordTypeQT = pure $ ConT wordType
+      wordCstrQE = pure $ ConE wordCstr
+      puncCstrQE = pure $ ConE puncCstr
+
+
+  -- Building these up one at a time...
+  funcExp1 <- [| (liftA2 (:)) $startWordFuncQE (AT.many' $restWordFuncQE) |] -- collect a list of phones...
+  funcExp2 <- [| concatMap NE.toList <$> $(pure funcExp1) |] -- concat the results...
+  funcExp3 <- [| State.evalStateT $(pure funcExp2) $(pure defStateVal) |] -- run them with the state...
+  funcExp4 <- [| $wordCstrQE <$>  $(pure funcExp3) |] -- store in the proper type.
+
+  -- Now, the other parsers...
+  -- If using `AT.takeWhile` instead, it would always succeed without consuming.
+  puncExp  <- [| $puncCstrQE <$> AT.takeWhile1 (\c -> (c /= '\n') && $punctWordQE c) |]
+  altrExp  <- [| ($puncCstrQE . T.singleton) <$> (AT.notChar '\n') |]
 
   -- The final parser...
   finalExp <- [| AT.many1 ($(pure funcExp4) <|> $(pure puncExp) <|> $(pure altrExp)) |]

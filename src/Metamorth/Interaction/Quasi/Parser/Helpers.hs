@@ -224,6 +224,7 @@ addsToSetE xs st ppr = do
 extraSuffixes :: [String]
 extraSuffixes = map (\n -> printf "_prs%03d" n) [(1 :: Int)..]
 
+-- | Create an infinite list of alternate possible names.
 extraNames :: String -> [String]
 extraNames nom = nom : map (\n -> printf (nom ++ "%03d") n) [(1 :: Int)..]
 
@@ -255,6 +256,8 @@ verifyOrthographies' ods (od:rst) = do
     "The function name \"" ++ nom ++ "\" is used more than once."
   ods3' <- addToSetWM (odOutputName od) ods3 $ \nom ->
     "The function name \"" ++ nom ++ "\" is used more than once."
+  ods3X <- addToSetWM (odInputLnName od) ods3' $ \nom -> 
+    "The function name \"" ++ nom ++ "\" is used more than once."
   ods4  <- addToSetWM (odInSuffix od) (odsSuffix ods) $ \suf ->
     "The suffix \"" ++ suf ++ "\" is used more than once."
   ods4' <- addToSetWM (odOutSuffix od) ods4 $ \suf ->
@@ -266,7 +269,7 @@ verifyOrthographies' ods (od:rst) = do
   -- Add the name of the orthography as an option,
   -- if it's not already listed. 
   let ods5' = ninsert (toLowerT $ odName od) ods5
-  let ods' = OrthographyDetailsSet ods1 ods2' ods3' ods4' ods5' ods6
+  let ods' = OrthographyDetailsSet ods1 ods2' ods3X ods4' ods5' ods6
   verifyOrthographies' ods' rst
 
 -- | Make an extension start with a @.@.
@@ -287,9 +290,10 @@ fillInOrthographies' _ _ [] = return []
 fillInOrthographies' (sfx1:sfx2:sfxs) ods (od:rst) = do
   let inSfx   = maybe sfx1 (\x -> if isDuplicate x sfxMS then sfx1 else x) (odInSuffix  od)
       outSfx  = maybe sfx2 (\x -> if isDuplicate x sfxMS then sfx2 else x) (odOutSuffix od)
-
-      inName  = maybe defParseName  (\x -> if isDuplicate x fncMS then defParseName  else x) (odInputName  od)
-      outName = maybe defOutputName (\x -> if isDuplicate x fncMS then defOutputName else x) (odOutputName od)
+      
+      inName  = maybe defParseName  (\x -> if isDuplicate x fncMS then defParseName  else x) (odInputName   od)
+      inName2 = maybe defParseName2 (\x -> if isDuplicate x fncMS then defParseName  else x) (odInputLnName od)
+      outName = maybe defOutputName (\x -> if isDuplicate x fncMS then defOutputName else x) (odOutputName  od)
 
       newOd = OrthographyDetails
                 { odName = odName od
@@ -299,6 +303,7 @@ fillInOrthographies' (sfx1:sfx2:sfxs) ods (od:rst) = do
                 , odGroupGuards   = odGroupGuards   od
                 , odCheckStates   = odCheckStates   od
                 , odInputName     = Just inName
+                , odInputLnName   = Just inName2
                 , odOutputName    = Just outName
                 , odInSuffix      = Just inSfx
                 , odOutSuffix     = Just outSfx
@@ -312,6 +317,7 @@ fillInOrthographies' (sfx1:sfx2:sfxs) ods (od:rst) = do
     sfxMS = odsSuffix ods
     fncMS = odsFuncName ods
     defParseName  = head $ filter (`mnotElem` fncMS) (extraNames ("parse"  ++ odName od))
+    defParseName2 = head $ filter (`mnotElem` fncMS) (extraNames ("parse"  ++ odName od ++ "Line"))
     defOutputName = head $ filter (`mnotElem` fncMS) (extraNames ("output" ++ odName od))
 -- Unreachable pattern to quash warnings.
 fillInOrthographies' _ _ _ = return []

@@ -20,8 +20,8 @@ import Metamorth.Interpretation.Parser.TH (ParserOptions(..))
 
 declareFullParsers 
   "examples/phonemes/kwakwala.thym"
-  [ ("examples/parsing/kwakwala_umista.thyp", (defExtraParserDetails "_ums") {epdParserName = "umistaParser", epdOtherNames = ["Umista", "Ums", "U", "U'mista"], epdUnifyBranches = False} )
-  , ("examples/parsing/kwakwala_grubb.thyp" , (defExtraParserDetails "_grb") {epdParserName = "grubbParser" , epdOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]} )
+  [ ("examples/parsing/kwakwala_umista.thyp", (defExtraParserDetails "_ums") {epdParserName = "umistaParser", epdLineParserName = "umistaParseLine", epdOtherNames = ["Umista", "Ums", "U", "U'mista"], epdUnifyBranches = False} )
+  , ("examples/parsing/kwakwala_grubb.thyp" , (defExtraParserDetails "_grb") {epdParserName = "grubbParser" , epdLineParserName = "napaParseLine"  , epdOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]} )
   ]
   [ ("examples/output/kwakwala_umista.thyo", defExtraOutputDetails {eodSuffix = "_umsout", eodOutputName = "umistaOutput", eodOtherNames = ["Umista", "Ums", "U", "U'mista"]})
   , ("examples/output/kwakwala_grubb.thyo" , defExtraOutputDetails {eodSuffix = "_grbout", eodOutputName = "grubbOutput" , eodOtherNames = ["Grubb", "Grubb-ascii", "grb", "g"]})

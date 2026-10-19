@@ -194,6 +194,7 @@ parseIndentedOptions = do
 parseOption :: ParserQQ1 ()
 parseOption = AT.choice
   [ parseInputName  -- must come before "parseInputFile"
+  , parseInputLnName
   , parseInputFile
   , parseOutputName -- must come before "parseOutputFile"
   , parseOutputFile
@@ -261,6 +262,13 @@ parseInputName = do
   parseKeySep' $ T.unpack fld
   str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
   setInputName str
+
+parseInputLnName :: ParserQQ1 ()
+parseInputLnName = do
+  fld <- "parser-line-name" <|> "line-input-name"
+  parseKeySep' $ T.unpack fld
+  str <- liftQQ1 (parseQuoteString <|> parseUnquoteString)
+  setInputLnName str
 
 parseOutputName :: ParserQQ1 ()
 parseOutputName = do
