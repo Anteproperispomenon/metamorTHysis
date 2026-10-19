@@ -119,7 +119,7 @@ newtype MatcherT i j v s m a  = MatcherT' { getMatcherT' :: (i -> v) -> (i -> j)
 --   e.g. `GHC.Exts.oneShot` from "GHC.Exts".
 pattern MatcherT :: ((i -> v) -> (i -> j) -> [i] -> v -> s -> m (a, [i], v, s)) -> MatcherT i j v s m a
 pattern MatcherT {getMatcherT} <- MatcherT' { getMatcherT' = getMatcherT }
-  -- one-shot
+  -- one-shot (doesn't improve it much, but it does improve performance)
   where MatcherT f = MatcherT' $ Exts.oneShot $ \fnc -> Exts.oneShot $ \fnc' -> Exts.oneShot $ \inp -> Exts.oneShot $ \v -> Exts.oneShot $ \st -> f fnc fnc' inp v st
   -- regular
   -- where MatcherT f = MatcherT' f

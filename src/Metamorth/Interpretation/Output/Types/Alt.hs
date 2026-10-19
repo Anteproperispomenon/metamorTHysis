@@ -242,6 +242,10 @@ data OutputParserOutput = OutputParserOutput
   --   are run. The `S.Set` contains the possible
   --   values for the trait.
   , opoAspectDictionary :: M.Map String (S.Set String)
+  -- | Whether to automatically add spaces after each
+  --   letter. This is useful when converting text to
+  --   lists of phonemes.
+     , opoAddSpaces        :: Bool
   -- | The main trie to be used for determining
   --   output.
   , opoOutputTrie       :: TM.TMap PhonePatternAlt (S.Set PhoneResult)

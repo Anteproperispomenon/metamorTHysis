@@ -363,7 +363,7 @@ matchesR err f = do
       y <- match err f
       (y <>) <$> matchesR err f
 
--- | Like `matchesL`, but uses a different function
+-- | Like `matchesR`, but uses a different function
 --   for the first match.
 matchesR' :: (MonadPlus m, Monoid v, Monoid r) => (String -> m r) -> (i -> MatchResult m i v r) -> (i -> MatchResult m i v r) -> MatcherT i v m r
 matchesR' err f1 f2 = do
@@ -374,7 +374,7 @@ matchesR' err f1 f2 = do
       y <- match err f1
       (y <>) <$> matchesR err f2
 
--- | Like `matchesL`, but uses `fail` for
+-- | Like `matchesR`, but uses `fail` for
 --   the first argument.
 matchesRF :: (MonadPlus m, MonadFail m, Monoid v, Monoid r) => (i -> MatchResult m i v r) -> MatcherT i v m r
 matchesRF = matchesR fail

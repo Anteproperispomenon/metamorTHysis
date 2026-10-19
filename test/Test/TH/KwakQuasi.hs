@@ -13,8 +13,11 @@ module Test.TH.KwakQuasi
   , convertOrthographyBS
   , InOrth(..)
   , OutOrth(..)
+  , CasedWord(..)
   , inputOrthNameMap
   , outputOrthNameMap
+  , parseOrthography
+  , emitOrthography
   ) where
 
 import Metamorth.Interaction.Quasi
@@ -63,6 +66,12 @@ Boas
   extension : ".boas"
   unify-branches : off
   description : "Collection of Boas's orthographies."
+
+MFA
+  output : "examples/output/kwakwala_mfa.thyo"
+  suffix : "_mfa"
+  output-name : "mfaOutput"
+  extension : ".mfa"
 
 |]
 

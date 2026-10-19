@@ -28,6 +28,7 @@ module Metamorth.Interaction.Quasi.Parser.Types
   , setGroupGuards
   , setCheckStates
   , setInputName
+  , setInputLnName
   , setOutputName
   , setInSuffix
   , setOutSuffix
@@ -73,6 +74,8 @@ data OrthographyDetails = OrthographyDetails
   , odCheckStates   :: Maybe Bool
   -- | The name of the input parser function.
   , odInputName     :: Maybe String
+  -- | The name of the input line parser function.
+  , odInputLnName   :: Maybe String
   -- | The name of the output function.
   , odOutputName    :: Maybe String
   -- | The suffix used for internal parser functions.
@@ -133,6 +136,7 @@ embedQQ1 nom (ParserQQ1 prs) = runStateT prs emptySt
         Nothing
         Nothing
         Nothing
+        Nothing
         []
         Nothing
         Nothing
@@ -145,6 +149,7 @@ embedQQ1_ nom (ParserQQ1 prs) = execStateT prs emptySt
     emptySt = 
       OrthographyDetails 
         nom 
+        Nothing
         Nothing
         Nothing
         Nothing
@@ -231,6 +236,13 @@ setInputName str = ParserQQ1 $ do
   when (isJust z) $ do
     lift $ tellWarning "Setting Input Function name more than once."
   modify' $ \x -> x {odInputName = Just str}
+
+setInputLnName :: String -> ParserQQ1 ()
+setInputLnName str = ParserQQ1 $ do
+  z <- gets odInputLnName
+  when (isJust z) $ do
+    lift $ tellWarning "Setting Input Line Function name more than once."
+  modify' $ \x -> x {odInputLnName = Just str}
 
 setOutputName :: String -> ParserQQ1 ()
 setOutputName str = ParserQQ1 $ do

@@ -7,7 +7,7 @@ module Metamorth.Interaction.TH
   , declareParsers
   , declareFullParsers
   , declareFullParsersNew
-  , ExtraParserDetails(ExtraParserDetails, epdParserName, epdOtherNames, epdUnifyBranches, epdGroupGuards, epdCheckStates, epdMainFuncName, epdNameSuffix)
+  , ExtraParserDetails(ExtraParserDetails, epdParserName, epdLineParserName, epdOtherNames, epdUnifyBranches, epdGroupGuards, epdCheckStates, epdMainFuncName, epdLineFuncName, epdNameSuffix)
   -- , ParserOptions(..)
   , defExtraParserDetails
   , defExtraParserDetails'
@@ -29,6 +29,8 @@ import Data.Map.Strict qualified as M
 import Data.Set        qualified as S
 
 import Data.ByteString.Lazy qualified as BL
+
+import Data.String (IsString)
 
 import Data.Text              qualified as T
 import Data.Text.Lazy         qualified as TL
@@ -90,6 +92,9 @@ import THLego.Helpers
 
 import Metamorth.ForOutput.Functor.Cased
 
+-- CasedWord can be found at
+-- fst $ pdbWordTypeNames pdb
+
 -- | Simple type for the output of the generated
 --   declarations.
 data GeneratedDecs = GeneratedDecs
@@ -99,49 +104,57 @@ data GeneratedDecs = GeneratedDecs
   , gdTypeDecs      :: [Dec]
   , gdOrthTypeNames :: (Name, Name)
   , gdInputTypes    :: M.Map Name Name
+  , gdInputLnTypes  :: M.Map Name Name
   , gdOutputTypes   :: M.Map Name Name
   , gdOutputTypesBS :: M.Map Name Name
   , gdInputMap      :: [Dec]
   , gdOutputMap     :: [Dec]
+  , gdWordType      :: Name
   } deriving (Show, Eq)
 
 -- | Options to go along with each parser file.
 data ExtraParserDetails = ExtraParserDetails'
-  { epdParserOptions :: ParserOptions
-  , epdParserName'    :: String
-  , epdOtherNames'    :: [String]
+  { epdParserOptions   :: ParserOptions
+  , epdParserName'     :: String
+  , epdLineParserName' :: String
+  , epdOtherNames'     :: [String]
   } deriving (Show, Eq)
 
 {-# COMPLETE ExtraParserDetails #-}
 
 -- | A record pattern synonym that exposes all options at the top level.
-pattern ExtraParserDetails :: String -> [String] -> Bool -> Bool -> Bool -> String -> String -> ExtraParserDetails
+pattern ExtraParserDetails :: String -> String -> [String] -> Bool -> Bool -> Bool -> String -> String -> String -> ExtraParserDetails
 pattern ExtraParserDetails 
   { epdParserName
+  , epdLineParserName
   , epdOtherNames
   , epdUnifyBranches
   , epdGroupGuards
   , epdCheckStates
   , epdMainFuncName
+  , epdLineFuncName
   , epdNameSuffix 
   }
   = ExtraParserDetails' 
-    { epdParserName'   = epdParserName
-    , epdOtherNames'   = epdOtherNames
-    , epdParserOptions = ParserOptions 
+    { epdParserName'     = epdParserName
+    , epdLineParserName' = epdLineParserName
+    , epdOtherNames'     = epdOtherNames
+    , epdParserOptions   = ParserOptions 
        { poUnifyBranches = epdUnifyBranches
        , poGroupGuards   = epdGroupGuards
        , poCheckStates   = epdCheckStates
        , poMainFuncName  = epdMainFuncName
+       , poLineFuncName  = epdLineFuncName
        , poNameSuffix    = epdNameSuffix
        }
     }
 
 defExtraParserDetails' :: ExtraParserDetails
 defExtraParserDetails'  = ExtraParserDetails'
-  { epdParserOptions = defParserOptions'
-  , epdParserName'    = "anotherParser"
-  , epdOtherNames'    = []
+  { epdParserOptions   = defParserOptions'
+  , epdParserName'     = "anotherParser"
+  , epdLineParserName' = "anotherLineParser"
+  , epdOtherNames'     = []
   }
 
 {-
@@ -157,9 +170,10 @@ data ParserOptions = ParserOptions
 
 defExtraParserDetails :: String -> ExtraParserDetails
 defExtraParserDetails str = ExtraParserDetails'
-  { epdParserOptions = defParserOptions str
-  , epdParserName'    = "anotherParser"
-  , epdOtherNames'    = []
+  { epdParserOptions   = defParserOptions str
+  , epdParserName'     = "anotherParser"
+  , epdLineParserName' = "anotherLineParser"
+  , epdOtherNames'     = []
   }
 
 -- editParserOptions :: (ParserOptions -> ParserOptions) -> ExtraParserDetails -> ExtraParserDetails
@@ -190,13 +204,14 @@ addLocalDependentFile' = addLocalDependentFile
 
 -- | Declare input parsers only, not declaring
 --   the output parsers. Only use this if your
---   list of output files is empty.
+--   list of output files is empty. This function
+--   is only used to test issues with parsers. I think.
 declareParsers :: FilePath -> [(FilePath, ExtraParserDetails)] -> [(FilePath, ExtraOutputDetails)] -> Q [Dec]
 declareParsers fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsers fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap inMapLn outMap outMapBS inMapDec outMapDec cwdName) <- createParsers fp1 fps2 fps3
   
   -- Create the full function...
   -- funcDecs <- makeFullFunction iNom oNom inMap outMap
@@ -219,10 +234,10 @@ declareFullParsersNew isCas fp1 fps2 fps3 = do
   -- Maybe this will help?
   let allFps = fp1 : (map fst fps2) ++ (map fst fps3)
   mapM_ addLocalDependentFile' allFps
-  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap outMap outMapBS inMapDec outMapDec) <- createParsersNew isCas fp1 fps2 fps3
+  (GeneratedDecs d1 ds2 ds3 ds4 (iNom, oNom) inMap inMapLn outMap outMapBS inMapDec outMapDec cwdName) <- createParsersNew isCas fp1 fps2 fps3
   
   -- Create the full function...
-  funcDecs <- makeFullFunction iNom oNom inMap outMap outMapBS
+  funcDecs <- makeFullFunction iNom oNom inMap inMapLn outMap outMapBS cwdName
 
   return (funcDecs ++ ds4 ++ d1 ++ (concat ds2) ++ (concat ds3) ++ inMapDec ++ outMapDec)
 
@@ -269,27 +284,39 @@ createParsersNew canBeCased phonemePath parserPaths outputPaths = do
   -- all the text files are read into memory before
   -- being processed. This should change in the future.
   _rslts@(eParseFiles, _) <- runIO $ do
-    eParsers <- mapM readParserFile parserPaths
+    eParsers <- mapM readParserFile parserPaths -- IO (Either String (Text, ExtraParserDetails, FilePath))
     return (eParsers, Nothing)
 
   parserResultsBoth' <- fmap catMaybes $ forM eParseFiles $ \eParseFile -> do
     case eParseFile of
       (Left err)           -> (qReport True err) >> return Nothing
-      (Right (txt,epd,fp)) -> do
+      (Right (txt,epd,fp)) -> do  -- (Text, ExtraParserDetails, FilePath)
         addLocalDependentFile' fp
         Just <$> getParserData fp pdb txt epd
+        -- getParserData :: ... -> ((([Dec], StaticParserInfo), (Name, Name, Name)), [(Exp, Exp)])
+        -- ( ( ([Dec], StaticParserInfo)
+        --   , (Name, Name, Name)
+        --   )
+        -- , [(Exp, Exp)] 
+        -- )
   
-  let parserResultsBoth = map fst parserResultsBoth'
-      parserResults     = map fst parserResultsBoth
-      parserTypes       = map snd parserResultsBoth
-      parserNameExprs   = concatMap snd parserResultsBoth'
+  let parserResultsBoth = map fst parserResultsBoth'  -- [ (([Dec], StaticParserInfo), (Name, Name)) ]
+      parserResults     = map fst parserResultsBoth   -- [ ([Dec], StaticParserInfo) ]
+      parserTypes       = map snd parserResultsBoth   -- [ (Name, Name) ]
+      parserNameExprs   = concatMap snd parserResultsBoth' -- [(Exp, Exp)]
       parserNameExprs'  = map (\(x1,x2) -> TupE [Just x1, Just x2]) parserNameExprs
 
   -- Originally, the name creation was handled here.
   -- Hence the weird usage of forM.
-  inOrthMap <- fmap M.fromList $ forM parserTypes $ \(str, funcNom) -> do
+  inOrthMap <- fmap M.fromList $ forM parserTypes $ \(str, funcNom, _) -> do
     -- Maybe need to create an alternative if name is empty...
     return (str, funcNom)
+
+  -- Simple version for line-only parser.
+  inOrthMapLn <- fmap M.fromList $ forM parserTypes $ \(str, _, funcNom) -> do
+    -- Maybe need to create an alternative if name is empty...
+    return (str, funcNom)
+
 
   _rslts2@(eOutputFiles, _) <- runIO $ do
     eOutputs <- mapM readOutputFile outputPaths
@@ -317,6 +344,8 @@ createParsersNew canBeCased phonemePath parserPaths outputPaths = do
 
 
   -- Make the map of input names.
+  -- i.e. from Command-Line options to
+  -- internal Haskell names.
   inputOrthNameMap  <- [| M.fromList $(pure $ ListE parserNameExprs') |]
   inputOrthNameType <- [t| M.Map String $(pure $ ConT $ fst inOrthTypeDec) |]
   inputOrthNameName <- newName "inputOrthNameMap"
@@ -340,10 +369,12 @@ createParsersNew canBeCased phonemePath parserPaths outputPaths = do
              [snd inOrthTypeDec, snd outOrthTypeDec]
              (fst inOrthTypeDec, fst outOrthTypeDec)
              inOrthMap
+             inOrthMapLn
              outOrthMap
              outOrthMapBS
              inputOrthNameDecl
              outputOrthNameDecl
+             (fst (pdbWordTypeNames pdb))
 
 readPhonemeFile :: FilePath -> IO (Either String Text)
 readPhonemeFile fp = do
@@ -373,7 +404,7 @@ readOutputFile (fp, eod) = do
       return $ Right (txt, eod)
 
 
-getParserData :: FilePath -> PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name)), [(Exp, Exp)])
+getParserData :: FilePath -> PhonemeDatabase -> Text -> ExtraParserDetails -> Q ((([Dec], StaticParserInfo), (Name, Name, Name)), [(Exp, Exp)])
 getParserData fp pdb txt epd = do
   -- New information needed
   let pni = makePhonemeInformation pdb
@@ -388,7 +419,8 @@ getParserData fp pdb txt epd = do
       -- (HeaderData, ParserParsingState, [String], [String])
       eParseRslt = AT.parseOnly (parseOrthographyFileNew (M.keysSet (pdbGroupMemberFuncs pdb)) traitMaps aspectSet phoneSet) txt
       newNameStr = epdParserName epd
-  ((dcs1, spi, funcNom), typeNom) <- case eParseRslt of
+      newLineStr = epdLineParserName epd
+  ((dcs1, spi, funcNom, funcNomLine), typeNom) <- case eParseRslt of
     (Left err) -> fail $ "Couldn't parse input file \"" ++ fp ++ "\": " ++ err
     -- (HeaderData, ParserParsingState, [String])
     (Right (hdr, pps, errStrings, warnStrings)) -> do
@@ -418,15 +450,19 @@ getParserData fp pdb txt epd = do
       return (prs, hdOrthName hdr)
   -- back here now
   let newNameNom = mkName newNameStr
+      newLineNom = mkName newLineStr
   newSig <- SigD newNameNom <$> [t| AT.Parser [$(pure $ ConT $ fst $ pdbWordTypeNames pdb)]  |]
   newDec <- [d| $(pure $ VarP newNameNom) = $(pure $ VarE funcNom) |]
+
+  newSigL <- SigD newLineNom <$> [t| AT.Parser [$(pure $ ConT $ fst $ pdbWordTypeNames pdb)]  |]
+  newDecL <- [d| $(pure $ VarP newLineNom) = $(pure $ VarE funcNomLine) |]
 
   orthName <- newName $ "In" ++ (dataName typeNom)
 
   let otherNames = map strE $ epdOtherNames epd
       otherPairs = map (,ConE orthName) otherNames
 
-  return (((newSig:newDec<>dcs1, spi), (orthName, funcNom)), otherPairs)
+  return (((newSig:newSigL:newDec<>newDecL<>dcs1, spi), (orthName, funcNom, funcNomLine)), otherPairs)
 
 makePhonemeInformation :: PhonemeDatabase -> PhonemeNameInformation
 makePhonemeInformation pdb = PhonemeNameInformation
@@ -512,8 +548,11 @@ makeInputOrthType mps = do
 
 -- | Make the full function that can easily
 --   be called by a CLI application.
-makeFullFunction :: forall q. (Quote q, Quasi q) => Name -> Name -> M.Map Name Name -> M.Map Name Name -> M.Map Name Name -> q [Dec]
-makeFullFunction iNom oNom inNames outNames outNamesBS = do 
+--
+--   Also: makes the "Half functions" that
+--   only parse the text or output the text.
+makeFullFunction :: forall q. (Quote q, Quasi q) => Name -> Name -> M.Map Name Name -> M.Map Name Name -> M.Map Name Name -> M.Map Name Name -> Name -> q [Dec]
+makeFullFunction iNom oNom inNames inNamesLn outNames outNamesBS cwdName = do 
   funcName <- newName "convertOrthography"
   funcType <- [t| $(pure $ ConT iNom) -> $(pure $ ConT oNom) -> Text -> Either String Text |]
   funcSign <- return $ SigD funcName funcType
@@ -525,7 +564,21 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
   funcNameBS <- newName "convertOrthographyBS"
   funcTypeBS <- [t| $(pure $ ConT iNom) -> $(pure $ ConT oNom) -> Text -> Either String BL.ByteString |]
   funcSignBS <- return $ SigD funcNameBS funcTypeBS
-  
+
+  -- Need to find where "CasedWord" is stored...
+  funcNamePrs <- newName "parseOrthography"
+  funcTypePrs <- [t| $(pure $ ConT iNom) -> AT.Parser [$(pure $ ConT cwdName)] |]
+  funcSignPrs <- return $ SigD funcNamePrs funcTypePrs
+
+  funcNameOut <- newName "emitOrthography"
+  funcTypeOut <- [t| forall str. (Monoid str, IsString str) => $(pure $ ConT oNom) -> (T.Text -> str) -> [$(pure $ ConT cwdName)] -> Either String str |]
+  funcSignOut <- return $ SigD funcNameOut funcTypeOut
+
+  -- For parsing a single line of text.
+  funcNamePrsLine <- newName "parseOrthographyLine"
+  funcTypePrsLine <- [t| $(pure $ ConT iNom) -> AT.Parser [$(pure $ ConT cwdName)] |]
+  funcSignPrsLine <- return $ SigD funcNamePrsLine funcTypePrsLine
+
   -- For the functions that select the input/output
   -- function to use based on the selector type.
   tempNameI <- newName "selectI"
@@ -533,7 +586,11 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
   tempNameL <- newName "selectOL"
   tempNameB <- newName "selectBS"
 
+  tempNameI2 <- newName "selectI2"
+  tempNameO2 <- newName "selectO2"
+
   extraName1 <- newName "abc"
+  extraName2 <- newName "bcd"
 
   -- Too lazy to fill out the type signature...
   tempTypeI <- [t| $(pure $ ConT iNom) -> Text -> Either String _   |]
@@ -550,6 +607,12 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
       tempFuncL = FunD tempNameL tempDefnL
       tempFuncB = FunD tempNameB tempDefnB
 
+      -- These aren't even the temporary definitions; these
+      -- are the definitions themselves.
+      tempDefnI2 = M.elems $ M.mapWithKey makeClauseI2 inNames
+      tempDefnI3 = M.elems $ M.mapWithKey makeClauseI3 inNamesLn
+      tempDefnO2 = M.elems $ M.mapWithKey (makeClauseO2 extraName1 extraName2) outNames
+
       tempSignI = SigD tempNameI tempTypeI
       tempSignO = SigD tempNameO tempTypeO
 
@@ -557,6 +620,7 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
       whereDecs  = [tempFuncI, tempFuncO]
       whereDecsL = [tempFuncI, tempFuncL]
       whereDecsB = [tempFuncI, tempFuncB]
+
   
   when (M.null  inNames) $ qReportWarning  "There are no Input Orthography Names"
   when (M.null outNames) $ qReportWarning "There are no Output Orthography Names"
@@ -591,9 +655,25 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
             (NormalB funcExpB)
             whereDecsB
         ]
-
+      
+      halfFuncParse     = FunD funcNamePrs tempDefnI2
+      halfFuncEmit      = FunD funcNameOut tempDefnO2
+      halfFuncParseLine = FunD funcNamePrsLine tempDefnI3
   
-  return [funcSign, mainFuncDefn, funcSignL, mainFuncDefnLazy, funcSignBS, mainFuncDefnBS]
+  return 
+    [ funcSign
+    , mainFuncDefn
+    , funcSignL
+    , mainFuncDefnLazy
+    , funcSignBS
+    , mainFuncDefnBS
+    , funcSignPrs
+    , halfFuncParse
+    , funcSignOut
+    , halfFuncEmit
+    , funcSignPrsLine
+    , halfFuncParseLine
+    ]
   where
     makeClauseO :: Name -> Name -> Clause
     makeClauseO dNom fNom = Clause [ConP dNom [] []] (NormalB (AppE (VarE fNom) (VarE 'id))) []
@@ -611,8 +691,26 @@ makeFullFunction iNom oNom inNames outNames outNamesBS = do
       (NormalB $ VarE fNom)
       []
 
+    -- Running `AT.parseOnly` on the selected parser.
     makeClauseI :: Name -> Name -> Clause
     makeClauseI dnom fNom = Clause [ConP dnom [] []] (NormalB (AppE (VarE 'AT.parseOnly) (VarE fNom))) []
+
+    -- Just returning the parser itself.
+    makeClauseI2 :: Name -> Name -> Clause
+    makeClauseI2 dNom fNom = Clause [ConP dNom [] []] (NormalB (VarE fNom)) []
+
+    -- Same as makeClauseI2, but with the line-only parser.
+    makeClauseI3 :: Name -> Name -> Clause
+    makeClauseI3 dNom fNom = Clause [ConP dNom [] []] (NormalB (VarE fNom)) []
+
+    -- Returning the clause that returns the plain
+    -- "orthOutput" function, depending on the orthography.
+    makeClauseO2 :: Name -> Name -> Name -> Name -> Clause
+    makeClauseO2 cvtNom txtNom dNom fNom 
+      = Clause 
+          [ConP dNom [] [], VarP cvtNom, VarP txtNom] 
+          (NormalB $ multiAppE (VarE fNom) [VarE cvtNom, VarE txtNom]) 
+          []
 
     pve :: Name -> q Exp
     pve = pure . VarE 
