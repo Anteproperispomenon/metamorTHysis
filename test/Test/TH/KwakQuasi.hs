@@ -17,6 +17,7 @@ module Test.TH.KwakQuasi
   , inputOrthNameMap
   , outputOrthNameMap
   , parseOrthography
+  , parseOrthographyLine
   , emitOrthography
   ) where
 

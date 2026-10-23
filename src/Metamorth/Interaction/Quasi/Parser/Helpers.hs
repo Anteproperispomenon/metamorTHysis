@@ -236,6 +236,9 @@ starterFunctions = M.fromAscList
   , ("convertOrthographyLazy",1)
   , ("inputOrthNameMap",1)
   , ("outputOrthNameMap",1)
+  , ("parseOrthography",1)
+  , ("parseOrthographyLine",1)
+  , ("emitOrthography",1)
   , ("languageDetails",1)
   ]
 

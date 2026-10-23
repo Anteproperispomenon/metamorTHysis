@@ -702,8 +702,8 @@ makeLineEntryPoint spi startWordFunc restWordFunc finalFuncStr = do
 
   -- Now, the other parsers...
   -- If using `AT.takeWhile` instead, it would always succeed without consuming.
-  puncExp  <- [| $puncCstrQE <$> AT.takeWhile1 (\c -> (c /= '\n') && $punctWordQE c) |]
-  altrExp  <- [| ($puncCstrQE . T.singleton) <$> (AT.notChar '\n') |]
+  puncExp  <- [| $puncCstrQE <$> AT.takeWhile1 (\c -> (not (AT.isEndOfLine c)) && $punctWordQE c) |]
+  altrExp  <- [| ($puncCstrQE . T.singleton) <$> (AT.satisfy (not . AT.isEndOfLine)) |]
 
   -- The final parser...
   finalExp <- [| AT.many1 ($(pure funcExp4) <|> $(pure puncExp) <|> $(pure altrExp)) |]
